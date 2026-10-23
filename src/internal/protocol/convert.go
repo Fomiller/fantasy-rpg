@@ -2,10 +2,12 @@ package protocol
 
 import (
 	"maps"
+	"math"
 	"slices"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -28,6 +30,7 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 			Seq:     p.Attack.GetSeq(),
 			Target:  sim.EntityID(p.Attack.GetTargetId()),
 			Ability: p.Attack.GetAbilityId(),
+			Aim:     sim.Vec2{X: float64(p.Attack.GetAim().GetX()), Y: float64(p.Attack.GetAim().GetY())},
 		}, true
 	case *gamev1.ClientMessage_Pickup:
 		return sim.PickupCommand{Player: player, Target: sim.EntityID(p.Pickup.GetTargetId())}, true
@@ -43,7 +46,7 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 	return nil, false
 }
 
-func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int) *gamev1.ServerMessage {
+func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, class *gamev1.ClassInfo) *gamev1.ServerMessage {
 	layout := &gamev1.CaveLayout{
 		Name:       cave.Name,
 		Bounds:     rect(cave.Bounds),
@@ -53,8 +56,44 @@ func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int) 
 		layout.Walls = append(layout.Walls, rect(w))
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Joined{
-		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn), TickRate: uint32(tickRate)},
+		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class},
 	}}
+}
+
+// ClassInfo lists the class's abilities in the order the data gives them.
+func ClassInfo(data *classes.Data, id string) *gamev1.ClassInfo {
+	c := data.Classes[id]
+	info := &gamev1.ClassInfo{Id: c.ID, Name: c.Name, Resource: c.Resource.Kind, MaxResource: int32(c.Resource.Max), Basic: c.Basic}
+	for _, aid := range c.Abilities {
+		a := data.Abilities[aid]
+		info.Abilities = append(info.Abilities, &gamev1.AbilityInfo{
+			Id:         a.ID,
+			Name:       a.Name,
+			Cost:       int32(a.Cost),
+			CooldownMs: uint32(a.CooldownMS),
+			WindupMs:   uint32(a.WindupMS),
+			Root:       a.Root,
+		})
+	}
+	return info
+}
+
+func AbilityUsed(ev sim.AbilityEvent) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_AbilityUsed{AbilityUsed: &gamev1.AbilityUsed{
+		SourceId:   uint64(ev.Source),
+		AbilityId:  ev.Ability,
+		Aim:        vec(ev.Aim),
+		WindupMs:   uint32(ev.Windup.Milliseconds()),
+		CooldownMs: uint32(ev.Cooldown.Milliseconds()),
+	}}}
+}
+
+func AbilityRejected(r sim.Rejection) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_AbilityRejected{AbilityRejected: &gamev1.AbilityRejected{
+		Seq:       r.Seq,
+		AbilityId: r.Ability,
+		Reason:    r.Reason,
+	}}}
 }
 
 func Extracted(player sim.EntityID) *gamev1.ServerMessage {
@@ -76,6 +115,10 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 			ExtractProgress: float32(p.ExtractProgress),
 			LastInputSeq:    p.LastInputSeq,
 			MaxSpeed:        float32(w.MaxSpeed(p)),
+			ClassId:         p.Class,
+			// Rounded down, so the bar never shows enough for an ability the server would refuse.
+			Resource:    int32(math.Floor(p.Resource)),
+			MaxResource: int32(p.MaxResource),
 		})
 	}
 	for _, e := range w.Enemies() {

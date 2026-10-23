@@ -19,9 +19,9 @@ into data files. FOM-98 (character progression) builds leveling on top.
   of a player's numbers come from what they carry, and they can lose it.
 - Combat never rolls. Hits and damage are fixed, the same as for enemies.
 
-## What exists today
+## Before FOM-100
 
-From `src/internal/sim` and `src/internal/items`:
+From `src/internal/sim` and `src/internal/items`, before this design was built:
 
 - A player has 100 health (`Config.PlayerHealth`) and top speed 220.
 - One attack. The client sends `AttackRequest` with a `target_id` and
@@ -55,7 +55,7 @@ A class has a base stat block. It uses the same stat names as items, and
 | `armor` | 5 | 0 | 0 |
 | `move_speed` | 0 | 10 | 0 |
 
-- `Config.PlayerHealth` goes away. Health comes from the class.
+- `Config.PlayerHealth` is gone. Health comes from the class.
 - The differences are small on purpose. A Mage in good armor should be as
   tough as a Warrior in rags.
 - Rogue speed counts against the 20% cap. That leaves less room for speed
@@ -206,6 +206,9 @@ with 0 rage, so the opening is weak. No way to close distance fast.
 | `brace` | 25 | 12 s | 0 | self | guard 50% for 2 s, slow 30% for 2 s |
 | `bash` | 20 | 8 s | 150 ms | arc, 56 px, 60° | damage 50, stun 1 s |
 
+Rage is the resource, not an ability. `bash` is not in the data yet. See
+MVP class below.
+
 Against each archetype:
 
 - **Melee.** Trade hits. An iron sword kills one in three slashes. Two
@@ -339,9 +342,11 @@ FOM-98 owns leveling. This design leaves room for it without picking:
 
 ## Data files
 
-Proposed for FOM-100. JSON, embedded like `src/internal/items/data`, so one
-loader style covers the repo. Durations are whole milliseconds. Stat names
-are `items.Stat` values.
+Built in FOM-100. The files are `src/internal/classes/data/classes.json` and
+`abilities.json`, embedded like `src/internal/items/data`, so one loader
+style covers the repo. Durations are whole milliseconds. Stat names are
+`items.Stat` values. Changing a number in these files changes the game with
+no code change. `TestClassComesFromData` in `src/internal/sim` checks that.
 
 `classes.json`:
 
@@ -403,6 +408,13 @@ Load checks, at startup like items:
 - Every `weapons` entry is a known weapon type.
 - Every stat name is a known `items.Stat`.
 - Each target has the fields its shape needs, and no others.
+- A `warrior` class exists, for players who do not pick one.
+- The basic costs 0. No ability costs more than the resource max.
+- Unknown JSON fields are errors, so a typo cannot become a silent zero.
+- Shapes and effects the sim cannot run yet are errors: `projectile`,
+  `area`, `move`, `blink` and `stun`. Damage needs an `arc`. Statuses need
+  `self`. These open up with the Rogue, the Mage and `bash`.
+- `weapon_type` is set on every weapon and on nothing else.
 
 `weapon_type` in `items.json`:
 
@@ -412,24 +424,46 @@ Load checks, at startup like items:
 
 ## Protocol
 
-Proposed additions to `proto/game/v1/game.proto`. No change yet.
+Added to `proto/game/v1/game.proto` in FOM-100.
 
 | Message | Field | For |
 | -- | -- | -- |
-| `JoinRequest` | `string class_id` | Class pick. Empty means `warrior` |
-| `JoinAccepted` | `ClassInfo class` | Own class: id, name, resource kind and max, and an `AbilityInfo` per ability (id, name, cost, cooldown, windup). The client has no data files, the same as items |
+| `JoinRequest` | `string class_id` | Class pick. Empty means `warrior`. An unknown class closes the connection |
+| `JoinAccepted` | `ClassInfo class_info` | Own class: id, name, resource kind and max, basic id, and an `AbilityInfo` per ability (id, name, cost, cooldown, windup, root). The client has no data files, the same as items |
 | `AttackRequest` | `Vec2 aim` | Direction. Zero falls back to `target_id` |
 | `EntityState` | `string class_id` | Players only. Picks the look |
-| `EntityState` | `int32 resource`, `int32 max_resource` | Players only. The resource bar |
-| new `AbilityUsed` event | `source_id`, `ability_id`, `aim`, `windup_ms` | Sent to everyone. Other clients draw the windup and telegraph |
-| new `AbilityRejected` | `seq`, `ability_id`, `reason` | Sent to the caster only: on cooldown, no resource, bad id |
+| `EntityState` | `int32 resource`, `int32 max_resource` | Players only. The resource bar. Rounded down |
+| new `AbilityUsed` event | `source_id`, `ability_id`, `aim`, `windup_ms`, `cooldown_ms` | Sent to everyone. Other clients draw the windup and telegraph |
+| new `AbilityRejected` | `seq`, `ability_id`, `reason` | Sent to the caster only. Reason is `unknown`, `busy`, `cooldown`, `resource` or `aim` |
 
 - Cooldowns are not in the snapshot. The caster gets `AbilityUsed` and
-  counts the cooldown down from the `AbilityInfo` it got on join.
+  counts its `cooldown_ms` down. That is the real cooldown, after
+  `attack_speed`, so it can be shorter than `AbilityInfo` says.
+- `ability_id: "basic"` still works and means the class's basic.
 - `DamageEvent` covers ability hits as it is. Its source is the player.
 - Statuses on a player can wait for a `statuses` field on `EntityState`
   once something needs to draw them. For MVP the client knows brace is up
   from its own `AbilityUsed`.
+
+## Changes made while building it
+
+FOM-100 kept to the design above except for these:
+
+- `JoinAccepted.class_info`, not `class`. Godobuf makes a getter per field,
+  and `get_class()` already exists on every Godot `Object`.
+- `AbilityUsed` has `cooldown_ms`, and `AbilityInfo` has `root`. See above.
+- A press during a windup is rejected with `busy`, not dropped in silence.
+  The client hides rejections of the basic attack, since those are just
+  clicks during a swing.
+- No `aim` and no live `target_id` is rejected with `aim`. A self ability
+  needs neither.
+- Root works like letting go of the keys: the server ignores move input
+  during the windup, so friction stops the player over a few ticks. The
+  client sends no input for the same time, so its prediction matches.
+- Guard applies after armor. 25 damage on a Warrior with 5 armor is 22, and
+  braced it is 11.
+- A saved weapon the class cannot use goes into the bag on join, instead of
+  failing the whole loadout.
 
 ## Decisions for now
 

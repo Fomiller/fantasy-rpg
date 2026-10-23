@@ -1,6 +1,7 @@
 extends Node2D
 
-# Mirror sim.DefaultConfig. They only pick a target; the server decides.
+# Mirror sim.DefaultConfig and the slash data. They only pick a target; the
+# server decides.
 const ATTACK_RANGE := 64.0
 const PICKUP_RANGE := 48.0
 
@@ -9,6 +10,8 @@ const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 const LOOT_SCENE := preload("res://scenes/loot.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/projectile.tscn")
 const EXTRACTED_TEXT := "extracted · press E to go again"
+# Slot 0 is the basic attack.
+const ABILITY_ACTIONS := ["attack", "ability_1", "ability_2", "ability_3"]
 
 @onready var _connection: ServerConnection = $ServerConnection
 @onready var _cave: Cave = $Cave
@@ -18,6 +21,7 @@ const EXTRACTED_TEXT := "extracted · press E to go again"
 @onready var _status: Label = $HUD/Status
 @onready var _equipment: RichTextLabel = $HUD/Equipment
 @onready var _inventory: InventoryPanel = $HUD/Inventory
+@onready var _abilities: AbilityBar = $HUD/Abilities
 
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
@@ -31,6 +35,8 @@ func _ready() -> void:
 	_connection.disconnected.connect(_on_disconnected)
 	_connection.snapshot_received.connect(_on_snapshot)
 	_connection.damage_received.connect(_on_damage)
+	_connection.ability_used.connect(_on_ability_used)
+	_connection.ability_rejected.connect(_on_ability_rejected)
 	_connection.extracted.connect(_on_extracted)
 	_connection.equipment_received.connect(_on_equipment)
 	_connection.equipment_received.connect(_inventory.show_equipment)
@@ -50,16 +56,35 @@ func _physics_process(_delta: float) -> void:
 		_inventory.visible = not _inventory.visible
 	if Input.is_action_just_pressed("interact"):
 		_pickup()
-	# A click on the open panel is for its buttons, not an attack.
-	if Input.is_action_just_pressed("attack") and not _inventory.visible:
-		_attack()
+	for i in ABILITY_ACTIONS.size():
+		# A click on the open panel is for its buttons, not an attack.
+		if Input.is_action_just_pressed(ABILITY_ACTIONS[i]) and not (i == 0 and _inventory.visible):
+			use_ability(i)
 
 
-func _attack() -> void:
+# Sends the ability in a slot, aimed at the mouse. A cooldown the server
+# already reported holds the key back.
+func use_ability(index: int) -> void:
+	var ability := _abilities.slot(index)
+	if ability == null or not _connection.is_joined() or _abilities.cooldown_left(ability.get_id()) > 0.0:
+		return
 	var target := nearest_enemy(_ghost.position)
-	_player.swing(target.position - _player.position if target else Vector2.ZERO)
+	var aim := aim_direction(target)
+	_player.cast(aim, ability.get_windup_ms() / 1000.0, ability.get_root())
+	_connection.send_attack(target.entity_id if target else 0, ability.get_id(), aim)
+
+
+# Toward the mouse. Without one, like in a headless test, toward the nearest
+# enemy, then the way the player is moving.
+func aim_direction(target: EntityView) -> Vector2:
+	if DisplayServer.get_name() != "headless":
+		var to_mouse := get_global_mouse_position() - _player.position
+		if to_mouse.length() > 1.0:
+			return to_mouse.normalized()
 	if target:
-		_connection.send_attack(target.entity_id)
+		return (target.position - _ghost.position).normalized()
+	var move := _player.get_move_input()
+	return move.normalized() if move != Vector2.ZERO else Vector2.RIGHT
 
 
 func _pickup() -> void:
@@ -96,6 +121,8 @@ func _on_joined(player_id: int) -> void:
 	_player.place(_connection.spawn)
 	_player.visible = true
 	_player.revive()
+	if _connection.class_info:
+		_abilities.setup(_connection.class_info)
 	_status.text = "player %d" % player_id
 
 
@@ -106,6 +133,7 @@ func _on_disconnected() -> void:
 	_views.clear()
 	_equipment.text = ""
 	_inventory.clear()
+	_abilities.clear()
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
@@ -126,6 +154,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_health = entity.get_health()
 			_max_health = entity.get_max_health()
 			_extract_progress = entity.get_extract_progress()
+			_abilities.set_resource(entity.get_resource(), entity.get_max_resource())
 			if _health <= 0 and _player.alive:
 				_player.die()
 			continue
@@ -169,6 +198,24 @@ func _on_damage(event: GameV1.DamageEvent) -> void:
 		view.flash()
 	if event.get_killed():
 		print("player %d killed %d" % [event.get_source_id(), event.get_target_id()])
+
+
+# The caster already played its own windup when the key went down.
+func _on_ability_used(event: GameV1.AbilityUsed) -> void:
+	if event.get_source_id() == _connection.player_id:
+		_abilities.started(event.get_ability_id(), event.get_cooldown_ms())
+		return
+	var view: EntityView = _views.get(event.get_source_id())
+	if view is CharacterView:
+		var aim := Vector2(event.get_aim().get_x(), event.get_aim().get_y()) if event.has_aim() else Vector2.ZERO
+		(view as CharacterView).cast(aim, event.get_windup_ms() / 1000.0)
+
+
+# Basic attacks are pressed often, so their rejections would only be noise.
+func _on_ability_rejected(event: GameV1.AbilityRejected) -> void:
+	var basic := _abilities.slot(0)
+	if basic == null or event.get_ability_id() != basic.get_id():
+		_abilities.rejected(event.get_ability_id(), event.get_reason())
 
 
 func _on_extracted(player_id: int) -> void:

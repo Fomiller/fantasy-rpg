@@ -2,8 +2,10 @@ package sim
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
@@ -21,24 +23,36 @@ func (w *World) Equip(id EntityID, inst items.Instance) (items.Instance, bool, e
 	if !inst.Slot.IsGear() {
 		return items.Instance{}, false, errors.New(inst.Name + " cannot be equipped")
 	}
+	if inst.Slot == items.Weapon && !p.class.CanWield(inst.WeaponType) {
+		return items.Instance{}, false, fmt.Errorf("a %s cannot use %s", p.class.Name, inst.Name)
+	}
 	old, had := p.Equipment[inst.Slot]
 	p.Equipment[inst.Slot] = inst
 	w.applyGear(p)
 	return old, had, nil
 }
 
-// applyGear recomputes stats from equipment. A change in max health moves
-// current health by the same amount, so swapping gear never heals.
+// applyGear recomputes stats from the class base and equipment. A change in
+// max health moves current health by the same amount, so swapping gear
+// never heals.
 func (w *World) applyGear(p *Player) {
-	p.stats = map[items.Stat]int{}
+	p.stats = baseStats(p.class)
 	for _, inst := range p.Equipment {
 		for s, v := range inst.Stats() {
 			p.stats[s] += v
 		}
 	}
-	maxHealth := w.cfg.PlayerHealth + p.stats[items.MaxHealth]
+	maxHealth := p.stats[items.MaxHealth]
 	p.Health = max(min(p.Health+maxHealth-p.MaxHealth, maxHealth), 1)
 	p.MaxHealth = maxHealth
+}
+
+func baseStats(c classes.Class) map[items.Stat]int {
+	out := map[items.Stat]int{}
+	for s, v := range c.Base {
+		out[s] = v
+	}
+	return out
 }
 
 func (w *World) attackDamage(p *Player) int {
@@ -46,10 +60,6 @@ func (w *World) attackDamage(p *Player) int {
 		return max(p.stats[items.Damage], 1)
 	}
 	return w.cfg.AttackDamage + p.stats[items.Damage]
-}
-
-func (w *World) attackCooldown(p *Player) time.Duration {
-	return percentFaster(w.cfg.AttackCooldown, p.stats[items.AttackSpeed])
 }
 
 func (w *World) extractTime(p *Player) time.Duration {
@@ -62,12 +72,21 @@ func (w *World) MaxSpeed(p Player) float64 {
 }
 
 func (w *World) maxSpeed(p *Player) float64 {
-	return w.cfg.MaxSpeed * float64(100+min(p.stats[items.MoveSpeed], w.cfg.MoveSpeedCap)) / 100
+	speed := w.cfg.MaxSpeed * float64(100+min(p.stats[items.MoveSpeed], w.cfg.MoveSpeedCap)) / 100
+	if s, ok := p.statuses[classes.Slow]; ok {
+		speed = speed * float64(100-s.amount) / 100
+	}
+	return speed
 }
 
-// damageTaken shrinks a hit by armor. 50 armor halves it. A hit always does at least 1.
+// damageTaken shrinks a hit by armor, then by guard. 50 armor halves it. A
+// hit always does at least 1.
 func (w *World) damageTaken(p *Player, dmg int) int {
-	return max(dmg*w.cfg.ArmorScale/(w.cfg.ArmorScale+p.stats[items.Armor]), 1)
+	dmg = max(dmg*w.cfg.ArmorScale/(w.cfg.ArmorScale+p.stats[items.Armor]), 1)
+	if g, ok := p.statuses[classes.Guard]; ok {
+		dmg = max(dmg*(100-g.amount)/100, 1)
+	}
+	return dmg
 }
 
 func (w *World) detectRadius(a Archetype, p *Player) float64 {

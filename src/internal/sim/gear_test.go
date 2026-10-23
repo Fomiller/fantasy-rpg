@@ -8,7 +8,11 @@ import (
 )
 
 func gear(slot items.Slot, stats map[items.Stat]int) items.Instance {
-	return items.Instance{Name: string(slot), Slot: slot, Base: stats, Quantity: 1}
+	inst := items.Instance{Name: string(slot), Slot: slot, Base: stats, Quantity: 1}
+	if slot == items.Weapon {
+		inst.WeaponType = items.Sword
+	}
+	return inst
 }
 
 func equip(t *testing.T, w *World, id EntityID, inst items.Instance) {
@@ -23,15 +27,13 @@ func TestWeaponSetsAttackDamage(t *testing.T) {
 	player := w.AddPlayer(Vec2{})
 	enemy := w.AddEnemy(Vec2{40, 0}, Melee)
 
-	w.Submit(AttackCommand{Player: player, Seq: 1, Target: enemy})
-	if ev := w.Step(dt).Damage; len(ev) != 1 || ev[0].Amount != DefaultConfig().AttackDamage {
+	if ev := swing(w, AttackCommand{Player: player, Seq: 1, Target: enemy}); len(ev) != 1 || ev[0].Amount != DefaultConfig().AttackDamage {
 		t.Fatalf("unarmed hit = %+v", ev)
 	}
 
 	equip(t, w, player, gear(items.Weapon, map[items.Stat]int{items.Damage: 17}))
 	steps(w, 20)
-	w.Submit(AttackCommand{Player: player, Seq: 2, Target: enemy})
-	if ev := w.Step(dt).Damage; len(ev) != 1 || ev[0].Amount != 17 {
+	if ev := swing(w, AttackCommand{Player: player, Seq: 2, Target: enemy}); len(ev) != 1 || ev[0].Amount != 17 {
 		t.Fatalf("armed hit = %+v", ev)
 	}
 }
@@ -74,12 +76,12 @@ func TestMaxHealthGearNeverHeals(t *testing.T) {
 	w.players[id].Health = 50
 
 	equip(t, w, id, gear(items.Trinket, map[items.Stat]int{items.MaxHealth: 20}))
-	if p, _ := w.Player(id); p.MaxHealth != 120 || p.Health != 70 {
-		t.Fatalf("health %d/%d, want 70/120", p.Health, p.MaxHealth)
+	if p, _ := w.Player(id); p.MaxHealth != 140 || p.Health != 70 {
+		t.Fatalf("health %d/%d, want 70/140", p.Health, p.MaxHealth)
 	}
 	equip(t, w, id, gear(items.Trinket, nil))
-	if p, _ := w.Player(id); p.MaxHealth != 100 || p.Health != 50 {
-		t.Fatalf("health %d/%d, want 50/100", p.Health, p.MaxHealth)
+	if p, _ := w.Player(id); p.MaxHealth != 120 || p.Health != 50 {
+		t.Fatalf("health %d/%d, want 50/120", p.Health, p.MaxHealth)
 	}
 }
 
@@ -87,13 +89,16 @@ func TestGearStats(t *testing.T) {
 	w := NewWorld(DefaultConfig(), nil)
 	id := w.AddPlayer(Vec2{})
 	p := w.players[id]
-	equip(t, w, id, gear(items.Hands, map[items.Stat]int{items.AttackSpeed: 100, items.Armor: 50}))
+	equip(t, w, id, gear(items.Hands, map[items.Stat]int{items.AttackSpeed: 100, items.Armor: 45}))
 	equip(t, w, id, gear(items.Feet, map[items.Stat]int{items.MoveSpeed: 50, items.ExtractSpeed: 100}))
 	equip(t, w, id, gear(items.Trinket, map[items.Stat]int{items.DetectRadius: 50}))
 
-	if got := w.attackCooldown(p); got != 250*time.Millisecond {
-		t.Errorf("cooldown = %v, want 250ms", got)
+	w.Submit(AttackCommand{Player: id, Seq: 1, Ability: BasicAbility, Aim: Vec2{1, 0}})
+	w.Step(dt)
+	if got := p.cooldowns["slash"]; got != 250*time.Millisecond {
+		t.Errorf("basic cooldown = %v, want 250ms", got)
 	}
+	// The Warrior's base 5 armor makes 50.
 	if got := w.damageTaken(p, 10); got != 5 {
 		t.Errorf("damage taken = %d, want 5", got)
 	}

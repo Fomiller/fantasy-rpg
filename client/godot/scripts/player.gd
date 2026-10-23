@@ -30,6 +30,8 @@ var _correction := Vector2.ZERO
 # Inputs sent that the server has not applied yet, as [seq, direction].
 var _pending: Array[Array] = []
 var _no_walls: Array[Rect2] = []
+# Seconds left of a rooting windup. The server ignores movement then.
+var _rooted := 0.0
 
 @onready var _interact_area: Area2D = $InteractArea
 @onready var _sprite: CharacterSprite = $Body
@@ -38,6 +40,7 @@ var _no_walls: Array[Rect2] = []
 # Movement runs in fixed steps of one server tick, the same steps the server
 # takes. The node is drawn between the last two steps so it still moves smoothly.
 func _physics_process(delta: float) -> void:
+	_rooted = maxf(_rooted - delta, 0.0)
 	_accumulator += delta
 	while _accumulator >= tick_seconds:
 		_accumulator -= tick_seconds
@@ -52,7 +55,7 @@ func _physics_process(delta: float) -> void:
 
 
 func get_move_input() -> Vector2:
-	if not alive:
+	if not alive or _rooted > 0.0:
 		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
 
@@ -116,11 +119,13 @@ func revive() -> void:
 	_sprite.modulate = Color.WHITE
 
 
-func swing(toward: Vector2) -> void:
+# Plays the ability right away, before the server answers, to hide latency.
+func cast(aim: Vector2, windup_seconds: float, root: bool) -> void:
 	if not alive:
 		return
-	_sprite.face(toward)
-	_sprite.swing()
+	_sprite.cast(aim, windup_seconds)
+	if root:
+		_rooted = windup_seconds
 
 
 # An empty id means no weapon is equipped.

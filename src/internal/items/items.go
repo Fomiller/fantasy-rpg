@@ -25,6 +25,22 @@ const (
 
 var stats = []Stat{Damage, AttackSpeed, Armor, MaxHealth, MoveSpeed, ExtractSpeed, Heal, DetectRadius}
 
+func (s Stat) Valid() bool { return slices.Contains(stats, s) }
+
+// WeaponType is what a class checks before it lets a player equip a weapon.
+type WeaponType string
+
+const (
+	Sword  WeaponType = "sword"
+	Axe    WeaponType = "axe"
+	Dagger WeaponType = "dagger"
+	Staff  WeaponType = "staff"
+)
+
+var weaponTypes = []WeaponType{Sword, Axe, Dagger, Staff}
+
+func (t WeaponType) Valid() bool { return slices.Contains(weaponTypes, t) }
+
 type Slot string
 
 const (
@@ -61,15 +77,17 @@ func (r Rarity) String() string {
 type Range [2]int
 
 type Def struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Slot     Slot           `json:"slot"`
-	Base     map[Stat]Range `json:"base"`
-	MinLevel int            `json:"min_level"`
-	Stack    int            `json:"stack"`
-	Value    int            `json:"value"`
-	Unique   bool           `json:"unique"`
-	Fixed    []Fixed        `json:"fixed"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slot Slot   `json:"slot"`
+	// WeaponType is set on weapons and only on weapons.
+	WeaponType WeaponType     `json:"weapon_type"`
+	Base       map[Stat]Range `json:"base"`
+	MinLevel   int            `json:"min_level"`
+	Stack      int            `json:"stack"`
+	Value      int            `json:"value"`
+	Unique     bool           `json:"unique"`
+	Fixed      []Fixed        `json:"fixed"`
 }
 
 // Fixed is an affix line a unique always has.
@@ -165,6 +183,9 @@ func (d *Data) validate() error {
 		if !slices.Contains(append(GearSlots, Consumable, Material), def.Slot) {
 			bad("item %q: unknown slot %q", id, def.Slot)
 		}
+		if (def.Slot == Weapon) != def.WeaponType.Valid() || (def.Slot != Weapon && def.WeaponType != "") {
+			bad("item %q: weapon type %q", id, def.WeaponType)
+		}
 		if def.Stack < 1 || (def.Slot.IsGear() && def.Stack != 1) {
 			bad("item %q: stack %d", id, def.Stack)
 		}
@@ -248,7 +269,7 @@ func (d *Data) loops(id string, path []string) bool {
 }
 
 func checkStat(bad func(string, ...any), who string, stat Stat, r Range) {
-	if !slices.Contains(stats, stat) {
+	if !stat.Valid() {
 		bad("%s: unknown stat %q", who, stat)
 	}
 	if r[0] > r[1] || r[0] < 0 {

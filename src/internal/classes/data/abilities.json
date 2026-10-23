@@ -1,0 +1,33 @@
+[
+  {
+    "id": "slash",
+    "name": "Slash",
+    "cost": 0,
+    "cooldown_ms": 500,
+    "windup_ms": 100,
+    "target": { "shape": "arc", "range": 64, "arc_deg": 90 },
+    "effects": [{ "type": "damage", "power": 100 }]
+  },
+  {
+    "id": "cleave",
+    "name": "Cleave",
+    "cost": 30,
+    "cooldown_ms": 4000,
+    "windup_ms": 250,
+    "root": true,
+    "target": { "shape": "arc", "range": 72, "arc_deg": 180 },
+    "effects": [{ "type": "damage", "power": 150 }]
+  },
+  {
+    "id": "brace",
+    "name": "Brace",
+    "cost": 25,
+    "cooldown_ms": 12000,
+    "windup_ms": 0,
+    "target": { "shape": "self" },
+    "effects": [
+      { "type": "status", "status": "guard", "duration_ms": 2000, "amount": 50 },
+      { "type": "status", "status": "slow", "duration_ms": 2000, "amount": 30 }
+    ]
+  }
+]

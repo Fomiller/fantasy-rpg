@@ -16,6 +16,9 @@ extends Node2D
 
 var dead := false
 
+# Counts casts, so a windup cut short by a newer one does not swing.
+var _casts := 0
+
 @onready var _rig: Node2D = $Rig
 @onready var _body: Sprite2D = $Rig/Body
 @onready var _weapon: Sprite2D = $Rig/Weapon
@@ -44,6 +47,23 @@ func face(direction: Vector2) -> void:
 func swing() -> void:
 	if not dead:
 		_anim.play("swing")
+
+
+# Plays the windup for windup_seconds, then the swing.
+func cast(direction: Vector2, windup_seconds: float) -> void:
+	if dead:
+		return
+	if direction.x != 0.0:
+		_rig.scale.x = signf(direction.x)
+	_casts += 1
+	if windup_seconds <= 0.0:
+		swing()
+		return
+	var this_cast := _casts
+	_play("windup")
+	await get_tree().create_timer(windup_seconds).timeout
+	if this_cast == _casts and _anim.current_animation == "windup":
+		swing()
 
 
 func windup(on: bool) -> void:

@@ -36,6 +36,7 @@ func _test_decode_server_snapshot(path: String) -> void:
 	_check(player.get_id() == 7 and player.get_kind() == GameV1.EntityKind.PLAYER, "first entity is player 7")
 	_check(is_equal_approx(player.get_position().get_x(), 1.5) and is_equal_approx(player.get_position().get_y(), -2.0), "player position is (1.5, -2)")
 	_check(player.get_health() == 100, "player health is 100")
+	_check(player.get_class_id() == "warrior" and player.get_resource() == 42 and player.get_max_resource() == 100, "player is a warrior with 42/100 rage")
 
 	var enemy: GameV1.EntityState = entities[1]
 	_check(enemy.get_id() == 9 and enemy.get_kind() == GameV1.EntityKind.ENEMY and enemy.get_health() == 30, "second entity is enemy 9 with 30 health")

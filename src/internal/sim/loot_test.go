@@ -129,7 +129,7 @@ func TestUnequipNeedsRoom(t *testing.T) {
 	if !do(w, UnequipCommand{Player: id, Slot: items.Chest}) {
 		t.Fatal("unequip failed")
 	}
-	if p, _ := w.Player(id); p.MaxHealth != 100 || len(p.Equipment) != 1 {
+	if p, _ := w.Player(id); p.MaxHealth != 120 || len(p.Equipment) != 1 {
 		t.Fatalf("max health %d, equipment %v", p.MaxHealth, p.Equipment)
 	}
 	if do(w, UnequipCommand{Player: id, Slot: items.Head}) {
@@ -158,15 +158,15 @@ func TestUsePotionHealsUpToMax(t *testing.T) {
 	w := NewWorld(passive(), nil)
 	id := w.AddPlayer(Vec2{})
 	w.Restore(id, inventory.Loadout{Items: []items.Instance{potion("p", 2)}})
-	w.players[id].Health = 50
+	w.players[id].Health = 70
 
 	do(w, UseCommand{Player: id, Item: "p"})
 	p, _ := w.Player(id)
-	if p.Health != 80 || p.Inventory.Items[0].Quantity != 1 {
+	if p.Health != 100 || p.Inventory.Items[0].Quantity != 1 {
 		t.Fatalf("health %d, potions %d", p.Health, p.Inventory.Items[0].Quantity)
 	}
 	do(w, UseCommand{Player: id, Item: "p"})
-	if p, _ = w.Player(id); p.Health != 100 || len(p.Inventory.Items) != 0 {
+	if p, _ = w.Player(id); p.Health != 120 || len(p.Inventory.Items) != 0 {
 		t.Fatalf("health %d, bag %v", p.Health, ids(p.Inventory.Items))
 	}
 }
@@ -220,8 +220,7 @@ func TestKilledEnemyDropsLoot(t *testing.T) {
 	enemy := w.AddEnemy(Vec2{X: 40}, Melee)
 	w.enemies[enemy].Health = 1
 
-	w.Submit(AttackCommand{Player: player, Seq: 1, Target: enemy})
-	w.Step(dt)
+	swing(w, AttackCommand{Player: player, Seq: 1, Target: enemy})
 	piles := w.Piles()
 	if len(piles) != 1 || piles[0].Chest || piles[0].Pos != (Vec2{X: 40}) || len(piles[0].Items) == 0 {
 		t.Fatalf("piles = %+v", piles)

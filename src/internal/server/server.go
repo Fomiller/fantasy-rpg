@@ -84,6 +84,12 @@ func (s *Server) Step(dt time.Duration) {
 	events := s.world.Step(dt)
 
 	s.broadcast(protocol.Snapshot(s.world))
+	for _, ev := range events.Abilities {
+		s.broadcast(protocol.AbilityUsed(ev))
+	}
+	for _, r := range events.Rejected {
+		s.sendTo(r.Player, protocol.AbilityRejected(r))
+	}
 	for _, ev := range events.Damage {
 		s.broadcast(protocol.Damage(ev))
 	}
@@ -133,6 +139,16 @@ func (s *Server) nameInUse(name string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) sendTo(id sim.EntityID, msg *gamev1.ServerMessage) {
+	c, ok := s.clients[id]
+	if !ok {
+		return
+	}
+	if b, err := protocol.EncodeServer(msg); err == nil {
+		c.send(b)
+	}
 }
 
 func (s *Server) broadcast(msg *gamev1.ServerMessage) {
@@ -215,47 +231,59 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	name, err := readJoin(ctx, conn)
+	join, err := readJoin(ctx, conn)
 	if err != nil {
 		conn.Close(websocket.StatusPolicyViolation, err.Error())
 		return
 	}
 
+	name := join.GetName()
 	c := &client{name: name, out: make(chan []byte, outboxSize), cancel: cancel}
-	joined := make(chan sim.EntityID, 1)
+	type result struct {
+		id  sim.EntityID
+		err error
+	}
+	joined := make(chan result, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
 		// save the same items.
 		if s.nameInUse(name) {
-			joined <- 0
+			joined <- result{err: errors.New("name already playing")}
 			return
 		}
 		spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
+		id, err := s.world.AddPlayerAs(spawn, join.GetClassId())
+		if err != nil {
+			joined <- result{err: err}
+			return
+		}
 		s.spawns++
-		id := s.world.AddPlayer(spawn)
 		s.clients[id] = c
-		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn, s.TickRate)); err == nil {
+		p, _ := s.world.Player(id)
+		class := protocol.ClassInfo(s.world.Classes(), p.Class)
+		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn, s.TickRate, class)); err == nil {
 			c.send(b)
 		}
 		s.giveLoadout(id, name)
 		s.sendItems(id)
-		joined <- id
+		joined <- result{id: id}
 	})
 	if !ok {
 		conn.Close(websocket.StatusGoingAway, "server shutting down")
 		return
 	}
 
-	var id sim.EntityID
+	var res result
 	select {
-	case id = <-joined:
+	case res = <-joined:
 	case <-ctx.Done():
 		return
 	}
-	if id == 0 {
-		conn.Close(websocket.StatusPolicyViolation, "name already playing")
+	if res.err != nil {
+		conn.Close(websocket.StatusPolicyViolation, res.err.Error())
 		return
 	}
+	id := res.id
 	log := s.log.With("player", id, "name", name)
 	log.Info("player joined")
 	defer func() {
@@ -307,23 +335,23 @@ func (s *Server) writeLoop(ctx context.Context, conn *websocket.Conn, c *client,
 	}
 }
 
-func readJoin(ctx context.Context, conn *websocket.Conn) (string, error) {
+func readJoin(ctx context.Context, conn *websocket.Conn) (*gamev1.JoinRequest, error) {
 	ctx, cancel := context.WithTimeout(ctx, joinTimeout)
 	defer cancel()
 	_, b, err := conn.Read(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	msg, err := protocol.DecodeClient(b)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	join := msg.GetJoin()
 	if join == nil {
-		return "", errors.New("first message must be join")
+		return nil, errors.New("first message must be join")
 	}
 	if join.GetName() == "" {
-		return "", errors.New("join needs a name")
+		return nil, errors.New("join needs a name")
 	}
-	return join.GetName(), nil
+	return join, nil
 }

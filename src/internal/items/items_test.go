@@ -16,7 +16,7 @@ func TestValidateCatchesBadData(t *testing.T) {
 	good := func() *Data {
 		return &Data{
 			Defs: map[string]Def{
-				"sword": {ID: "sword", Slot: Weapon, Stack: 1, Base: map[Stat]Range{Damage: {1, 2}}},
+				"sword": {ID: "sword", Slot: Weapon, WeaponType: Sword, Stack: 1, Base: map[Stat]Range{Damage: {1, 2}}},
 				"ore":   {ID: "ore", Slot: Material, Stack: 10},
 			},
 			Affixes: []AffixDef{{ID: "sharp", Type: "prefix", Group: "damage", Stat: Damage, Slots: []Slot{Weapon}, Weight: 1, Tiers: []Tier{{1, Range{1, 2}}}}},
@@ -36,14 +36,19 @@ func TestValidateCatchesBadData(t *testing.T) {
 		want   string
 	}{
 		{"unknown slot", func(d *Data) { d.Defs["sword"] = Def{ID: "sword", Slot: "neck", Stack: 1} }, "unknown slot"},
+		{"weapon without type", func(d *Data) { d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, Stack: 1} }, "weapon type"},
+		{"unknown weapon type", func(d *Data) { d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, WeaponType: "whip", Stack: 1} }, "weapon type"},
+		{"weapon type on armor", func(d *Data) { d.Defs["ore"] = Def{ID: "ore", Slot: Material, WeaponType: Sword, Stack: 10} }, "weapon type"},
 		{"unknown stat", func(d *Data) {
-			d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, Stack: 1, Base: map[Stat]Range{"luck": {1, 2}}}
+			d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, WeaponType: Sword, Stack: 1, Base: map[Stat]Range{"luck": {1, 2}}}
 		}, "unknown stat"},
 		{"backwards range", func(d *Data) {
-			d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, Stack: 1, Base: map[Stat]Range{Damage: {5, 2}}}
+			d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, WeaponType: Sword, Stack: 1, Base: map[Stat]Range{Damage: {5, 2}}}
 		}, "range"},
-		{"stacking gear", func(d *Data) { d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, Stack: 3} }, "stack"},
-		{"unique without fixed", func(d *Data) { d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, Stack: 1, Unique: true} }, "uniques"},
+		{"stacking gear", func(d *Data) { d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, WeaponType: Sword, Stack: 3} }, "stack"},
+		{"unique without fixed", func(d *Data) {
+			d.Defs["sword"] = Def{ID: "sword", Slot: Weapon, WeaponType: Sword, Stack: 1, Unique: true}
+		}, "uniques"},
 		{"duplicate affix", func(d *Data) { d.Affixes = append(d.Affixes, d.Affixes[0]) }, "twice"},
 		{"affix on consumable", func(d *Data) { d.Affixes[0].Slots = []Slot{Consumable} }, "not gear"},
 		{"tiers go down", func(d *Data) { d.Affixes[0].Tiers = []Tier{{5, Range{1, 2}}, {1, Range{3, 4}}} }, "tier levels"},

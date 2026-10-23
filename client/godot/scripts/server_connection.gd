@@ -8,6 +8,8 @@ signal equipment_received(items: Array[GameV1.Item])
 signal inventory_received(items: Array[GameV1.Item], capacity: int)
 signal snapshot_received(snapshot: GameV1.WorldSnapshot)
 signal damage_received(event: GameV1.DamageEvent)
+signal ability_used(event: GameV1.AbilityUsed)
+signal ability_rejected(event: GameV1.AbilityRejected)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
@@ -16,11 +18,14 @@ const RETRY_SECONDS := 2.0
 # The server keeps items by name, so the same name gets them back on reconnect.
 # Random by default so two local windows do not fight over one name.
 @export var player_name := ""
+# Empty plays the server's default class.
+@export var class_id := ""
 
 var player_id := 0
 var cave: GameV1.CaveLayout
 var spawn := Vector2.ZERO
 var tick_rate := 20
+var class_info: GameV1.ClassInfo
 # Set once this player leaves through the exit. Stops the reconnect loop until rejoin().
 var has_extracted := false
 
@@ -67,16 +72,22 @@ func send_move(direction: Vector2) -> int:
 	return _move_seq
 
 
-func send_attack(target_id: int) -> void:
+# With no aim the server aims at target_id. Returns the seq, or 0 when not joined.
+func send_attack(target_id: int, ability_id := "basic", aim := Vector2.ZERO) -> int:
 	if not is_joined():
-		return
+		return 0
 	_attack_seq += 1
 	var msg := _new_message()
 	var attack := msg.new_attack()
 	attack.set_seq(_attack_seq)
 	attack.set_target_id(target_id)
-	attack.set_ability_id("basic")
+	attack.set_ability_id(ability_id)
+	if aim != Vector2.ZERO:
+		var a := attack.new_aim()
+		a.set_x(aim.x)
+		a.set_y(aim.y)
 	_send(msg)
+	return _attack_seq
 
 
 func send_pickup(target_id: int) -> void:
@@ -151,7 +162,9 @@ func _connect() -> void:
 
 func _send_join() -> void:
 	var msg := _new_message()
-	msg.new_join().set_name(player_name)
+	var join := msg.new_join()
+	join.set_name(player_name)
+	join.set_class_id(class_id)
 	_send(msg)
 
 
@@ -167,12 +180,17 @@ func _handle(bytes: PackedByteArray) -> void:
 		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())
 		if accepted.get_tick_rate() > 0:
 			tick_rate = accepted.get_tick_rate()
+		class_info = accepted.get_class_info()
 		print("joined %s as player %d in %s" % [_url, player_id, cave.get_name()])
 		joined.emit(player_id)
 	elif msg.has_snapshot():
 		snapshot_received.emit(msg.get_snapshot())
 	elif msg.has_damage():
 		damage_received.emit(msg.get_damage())
+	elif msg.has_ability_used():
+		ability_used.emit(msg.get_ability_used())
+	elif msg.has_ability_rejected():
+		ability_rejected.emit(msg.get_ability_rejected())
 	elif msg.has_equipment():
 		equipment_received.emit(msg.get_equipment().get_items())
 	elif msg.has_inventory():

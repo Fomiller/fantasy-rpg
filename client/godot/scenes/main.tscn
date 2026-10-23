@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 [ext_resource type="Script" path="res://scripts/server_connection.gd" id="4_connection"]
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="5_inventory"]
+[ext_resource type="Script" path="res://scripts/ability_bar.gd" id="6_abilities"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -54,3 +55,11 @@ script = ExtResource("5_inventory")
 
 [node name="List" type="VBoxContainer" parent="HUD/Inventory"]
 layout_mode = 2
+
+[node name="Abilities" type="VBoxContainer" parent="HUD"]
+offset_left = 12.0
+offset_top = 560.0
+offset_right = 400.0
+offset_bottom = 712.0
+mouse_filter = 2
+script = ExtResource("6_abilities")

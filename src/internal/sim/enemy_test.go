@@ -156,7 +156,7 @@ func TestMeleeHitsAfterWindup(t *testing.T) {
 	if gap := hits[1] - hits[0]; gap < ticks(melee.Cooldown+melee.Windup) {
 		t.Fatalf("hits %d steps apart, want at least cooldown plus windup", gap)
 	}
-	if p := playerOf(t, w, player); p.Health != 100-2*melee.Damage {
+	if p := playerOf(t, w, player); p.Health != p.MaxHealth-2*w.damageTaken(w.players[player], melee.Damage) {
 		t.Fatalf("player health = %d", p.Health)
 	}
 	touching := DefaultConfig().EnemyHalfSize + DefaultConfig().PlayerHalfSize
@@ -185,8 +185,7 @@ func TestHitWakesEnemyThatCannotSee(t *testing.T) {
 	w := NewWorld(cfg, nil)
 	player := w.AddPlayer(Vec2{})
 	id := w.AddEnemy(Vec2{50, 0}, Melee)
-	w.Submit(AttackCommand{Player: player, Seq: 1, Target: id})
-	w.Step(dt)
+	swing(w, AttackCommand{Player: player, Seq: 1, Target: id})
 	if e := enemyOf(t, w, id); e.State != EnemyChase || e.Target != player {
 		t.Fatalf("enemy = %+v, want chasing its attacker", e)
 	}
@@ -242,10 +241,11 @@ func TestRangedKeepsDistanceAndShoots(t *testing.T) {
 		t.Fatalf("retreated %v, ended %v away, want backed off to between %v and %v", retreated, d, ranged.KeepAway, ranged.AttackRange)
 	}
 	hits := hitsFrom(events, id)
-	if !shot || len(hits) == 0 || hits[0].Amount != ranged.Damage {
-		t.Fatalf("shot %v, hits %+v, want projectiles that hit for %d", shot, hits, ranged.Damage)
+	want := w.damageTaken(w.players[player], ranged.Damage)
+	if !shot || len(hits) == 0 || hits[0].Amount != want {
+		t.Fatalf("shot %v, hits %+v, want projectiles that hit for %d", shot, hits, want)
 	}
-	if p := playerOf(t, w, player); p.Health != 100-len(hits)*ranged.Damage {
+	if p := playerOf(t, w, player); p.Health != p.MaxHealth-len(hits)*want {
 		t.Fatalf("player health = %d after %d hits", p.Health, len(hits))
 	}
 }
@@ -297,7 +297,8 @@ func TestProjectiles(t *testing.T) {
 func TestProjectileArmorAndDodge(t *testing.T) {
 	w := NewWorld(DefaultConfig(), nil)
 	player := w.AddPlayer(Vec2{200, 0})
-	equip(t, w, player, gear(items.Chest, map[items.Stat]int{items.Armor: 50}))
+	// With the Warrior's 5 base armor that makes 50.
+	equip(t, w, player, gear(items.Chest, map[items.Stat]int{items.Armor: 45}))
 	shooter := shoot(w)
 	hits := hitsFrom(steps(w, 20), shooter)
 	if len(hits) != 1 || hits[0].Amount != DefaultConfig().Archetypes[Ranged].Damage/2 {
@@ -352,8 +353,9 @@ func TestEliteCharge(t *testing.T) {
 			hits = append(hits, hitsFrom(w.Step(dt).Damage, id)...)
 		}
 		e := enemyOf(t, w, id)
-		if len(hits) != 1 || hits[0].Amount != elite.ChargeDamage || hits[0].Target != player {
-			t.Fatalf("hits = %+v, want one charge hit for %d", hits, elite.ChargeDamage)
+		want := w.damageTaken(w.players[player], elite.ChargeDamage)
+		if len(hits) != 1 || hits[0].Amount != want || hits[0].Target != player {
+			t.Fatalf("hits = %+v, want one charge hit for %d", hits, want)
 		}
 		if e.State != EnemyChase || e.specialCooldown != elite.ChargeCooldown {
 			t.Fatalf("enemy = %+v, want chase with the charge on cooldown", e)
@@ -419,8 +421,8 @@ func TestLeashSendsEnemyHomeAndHeals(t *testing.T) {
 	// Return ignores players, even ones that hit it.
 	w.Submit(MoveCommand{Player: player, Seq: 2, Direction: Vec2{}})
 	w.players[player].Pos = enemyOf(t, w, id).Pos.Add(Vec2{-20, 0})
-	w.Submit(AttackCommand{Player: player, Seq: 1, Target: id})
-	if hits := hitsFrom(w.Step(dt).Damage, player); len(hits) != 1 {
+	w.players[player].Vel = Vec2{}
+	if hits := hitsFrom(swing(w, AttackCommand{Player: player, Seq: 1, Target: id}), player); len(hits) != 1 {
 		t.Fatalf("hits = %+v, want the player's hit to land", hits)
 	}
 	stepUntil(t, w, 200, func(Events) bool {
@@ -515,7 +517,7 @@ func TestReturnFindsWayAroundWall(t *testing.T) {
 }
 
 func TestEnemyKillsPlayerThenGoesHome(t *testing.T) {
-	cfg := tune(Melee, func(a *Archetype) { a.Damage = 100 })
+	cfg := tune(Melee, func(a *Archetype) { a.Damage = 1000 })
 	w := NewWorld(cfg, nil)
 	player := w.AddPlayer(Vec2{100, 0})
 	id := w.AddEnemy(Vec2{}, Melee)
@@ -568,7 +570,7 @@ func TestDeadEnemyDoesNothing(t *testing.T) {
 	if events := steps(w, ticks(2*time.Second)); len(events) != 0 {
 		t.Fatalf("dead enemy made events: %+v", events)
 	}
-	if p, _ := w.Player(player); p.Health != DefaultConfig().PlayerHealth {
+	if p, _ := w.Player(player); p.Health != p.MaxHealth {
 		t.Fatalf("player health = %d", p.Health)
 	}
 	if e := enemyOf(t, w, id); e.Pos != (Vec2{}) || e.State != EnemyDead {
@@ -606,9 +608,8 @@ func replay(aiSeed, lootSeed uint64) (trace []string, drops []string) {
 	for _, e := range w.Enemies() {
 		w.enemies[e.ID].Health = 1
 		w.players[player].Pos = e.Pos
-		w.players[player].cooldown = 0
-		w.Submit(AttackCommand{Player: player, Target: e.ID})
-		w.Step(dt)
+		clear(w.players[player].cooldowns)
+		swing(w, AttackCommand{Player: player, Target: e.ID})
 	}
 	for _, p := range w.Piles() {
 		for _, inst := range p.Items {

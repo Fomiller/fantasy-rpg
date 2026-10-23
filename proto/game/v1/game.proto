@@ -28,6 +28,8 @@ message ServerMessage {
     InventoryUpdated inventory = 13;
     Extracted extracted = 14;
     EquipmentUpdated equipment = 15;
+    AbilityUsed ability_used = 16;
+    AbilityRejected ability_rejected = 17;
   }
 }
 
@@ -45,6 +47,8 @@ message Rect {
 
 message JoinRequest {
   string name = 1;
+  // Empty means warrior. An unknown class closes the connection.
+  string class_id = 2;
 }
 
 message JoinAccepted {
@@ -53,6 +57,32 @@ message JoinAccepted {
   Vec2 spawn = 3;
   // The client predicts its own movement one step per server tick.
   uint32 tick_rate = 4;
+  // Named class_info because Godobuf would make get_class(), which Godot
+  // already has on every Object.
+  ClassInfo class_info = 5;
+}
+
+// ClassInfo is the player's own class. The client has no class data files,
+// so it builds its ability bar from this.
+message ClassInfo {
+  string id = 1;
+  string name = 2;
+  // What the resource is called, like rage.
+  string resource = 3;
+  int32 max_resource = 4;
+  // The id the basic attack has. AttackRequest can also send "basic".
+  string basic = 5;
+  repeated AbilityInfo abilities = 6;
+}
+
+message AbilityInfo {
+  string id = 1;
+  string name = 2;
+  int32 cost = 3;
+  uint32 cooldown_ms = 4;
+  uint32 windup_ms = 5;
+  // The caster cannot move during the windup.
+  bool root = 6;
 }
 
 // Extracted is sent to everyone in the cave. The extracting player's
@@ -69,10 +99,34 @@ message MoveInput {
 
 // Combat
 
+// AttackRequest asks for any ability, not just the basic attack.
 message AttackRequest {
   uint32 seq = 1;
+  // Only used to aim when aim is zero.
   uint64 target_id = 2;
+  // An ability id, or "basic" for the class's basic attack.
   string ability_id = 3;
+  // Direction to use the ability in, like toward the mouse.
+  Vec2 aim = 4;
+}
+
+// AbilityUsed is sent to everyone when an ability's windup starts. The hits
+// come later as DamageEvents.
+message AbilityUsed {
+  uint64 source_id = 1;
+  string ability_id = 2;
+  Vec2 aim = 3;
+  uint32 windup_ms = 4;
+  // Can be shorter than AbilityInfo says, from attack_speed.
+  uint32 cooldown_ms = 5;
+}
+
+// AbilityRejected is sent to the caster only.
+message AbilityRejected {
+  uint32 seq = 1;
+  string ability_id = 2;
+  // One of unknown, busy, cooldown, resource, aim.
+  string reason = 3;
 }
 
 message DamageEvent {
@@ -131,6 +185,10 @@ message EntityState {
   // Where the enemy faces during detect, attack and charge. The client draws
   // the telegraph from it.
   Vec2 aim = 13;
+  // Players only.
+  string class_id = 14;
+  int32 resource = 15;
+  int32 max_resource = 16;
 }
 
 message WorldSnapshot {
