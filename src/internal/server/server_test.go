@@ -184,3 +184,44 @@ func TestWrongProtocolVersionIsClosed(t *testing.T) {
 		t.Fatalf("got %v, want policy violation close", err)
 	}
 }
+
+func attack(t *testing.T, conn *websocket.Conn, seq uint32, target sim.EntityID) {
+	t.Helper()
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
+		Attack: &gamev1.AttackRequest{Seq: seq, TargetId: uint64(target), AbilityId: "basic"},
+	}})
+}
+
+func TestTwoClientsKillSameEnemy(t *testing.T) {
+	h := start(t)
+	a := dial(t, h.url)
+	b := dial(t, h.url)
+	idA := join(t, a)
+	idB := join(t, b)
+
+	// Both clients must see every hit the same way.
+	hit := func(conn *websocket.Conn, seq uint32, from uint64, health int32) {
+		t.Helper()
+		attack(t, conn, seq, h.enemy)
+		for _, c := range []*websocket.Conn{a, b} {
+			d := waitFor(t, c, func(m *gamev1.ServerMessage) bool { return m.GetDamage() != nil }).GetDamage()
+			if d.GetSourceId() != from || d.GetTargetHealth() != health || d.GetKilled() != (health == 0) {
+				t.Fatalf("damage = %v, want from %d leaving %d", d, from, health)
+			}
+		}
+	}
+
+	// 30 health, 10 per hit. A hits again once its cooldown ends.
+	hit(a, 1, idA, 20)
+	hit(b, 1, idB, 10)
+	time.Sleep(sim.DefaultConfig().AttackCooldown)
+	hit(a, 2, idA, 0)
+
+	for _, conn := range []*websocket.Conn{a, b} {
+		waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+			e := entity(m.GetSnapshot(), uint64(h.enemy))
+			return e != nil && e.GetHealth() == 0
+		})
+	}
+
+}

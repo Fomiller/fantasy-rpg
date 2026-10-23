@@ -19,6 +19,7 @@ var _url := DEFAULT_URL
 var _was_open := false
 var _retry_in := 0.0
 var _move_seq := 0
+var _attack_seq := 0
 var _last_direction := Vector2.INF
 
 
@@ -48,6 +49,18 @@ func send_move(direction: Vector2) -> void:
 	var d := move.new_direction()
 	d.set_x(direction.x)
 	d.set_y(direction.y)
+	_send(msg)
+
+
+func send_attack(target_id: int) -> void:
+	if not is_joined():
+		return
+	_attack_seq += 1
+	var msg := _new_message()
+	var attack := msg.new_attack()
+	attack.set_seq(_attack_seq)
+	attack.set_target_id(target_id)
+	attack.set_ability_id("basic")
 	_send(msg)
 
 

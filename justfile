@@ -88,10 +88,12 @@ client-test:
 net-test: build
     #!/usr/bin/env bash
     set -euo pipefail
+    if curl -sf localhost:8080/healthz >/dev/null; then echo "port 8080 is in use. Stop the other cave-server first." >&2; exit 1; fi
     ./bin/cave-server & pid=$!
     trap 'kill $pid' EXIT
     for i in $(seq 50); do curl -sf localhost:8080/healthz >/dev/null && break; sleep 0.1; done
     {{godot}} --headless --path client/godot --script res://tests/net_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd
 
 proto:
     buf lint
