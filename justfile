@@ -84,6 +84,7 @@ client-test:
     {{godot}} --headless --path client/godot --import
     {{godot}} --headless --path client/godot --script res://tests/player_test.gd
     {{godot}} --headless --path client/godot --script res://tests/proto_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/movement_test.gd
 
 net-test: build
     #!/usr/bin/env bash
@@ -102,4 +103,5 @@ proto:
 
 proto-fixtures:
     go test ./src/internal/protocol -run TestServerSnapshotFixture -update
+    go test ./src/internal/sim -run TestMovementFixture -update
     UPDATE=1 {{godot}} --headless --path client/godot --script res://tests/proto_test.gd

@@ -28,15 +28,17 @@ const (
 )
 
 type Server struct {
-	world   *sim.World
-	cave    caves.Cave
-	spawns  int
-	loot    *items.Roller
-	log     *slog.Logger
-	inbox   chan func()
-	done    chan struct{}
-	stop    sync.Once
-	clients map[sim.EntityID]*client
+	// TickRate is sent to clients on join. It must match the tick loop.
+	TickRate int
+	world    *sim.World
+	cave     caves.Cave
+	spawns   int
+	loot     *items.Roller
+	log      *slog.Logger
+	inbox    chan func()
+	done     chan struct{}
+	stop     sync.Once
+	clients  map[sim.EntityID]*client
 }
 
 type client struct {
@@ -46,13 +48,14 @@ type client struct {
 
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
 	return &Server{
-		world:   world,
-		cave:    cave,
-		loot:    loot,
-		log:     log,
-		inbox:   make(chan func(), 1024),
-		done:    make(chan struct{}),
-		clients: map[sim.EntityID]*client{},
+		TickRate: 20,
+		world:    world,
+		cave:     cave,
+		loot:     loot,
+		log:      log,
+		inbox:    make(chan func(), 1024),
+		done:     make(chan struct{}),
+		clients:  map[sim.EntityID]*client{},
 	}
 }
 
@@ -167,7 +170,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		s.spawns++
 		id := s.world.AddPlayer(spawn)
 		s.clients[id] = c
-		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn)); err == nil {
+		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn, s.TickRate)); err == nil {
 			c.send(b)
 		}
 		s.equipStarterKit(id)

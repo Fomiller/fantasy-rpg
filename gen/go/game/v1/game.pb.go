@@ -539,10 +539,12 @@ func (x *JoinRequest) GetName() string {
 }
 
 type JoinAccepted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      uint64                 `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Cave          *CaveLayout            `protobuf:"bytes,2,opt,name=cave,proto3" json:"cave,omitempty"`
-	Spawn         *Vec2                  `protobuf:"bytes,3,opt,name=spawn,proto3" json:"spawn,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId uint64                 `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Cave     *CaveLayout            `protobuf:"bytes,2,opt,name=cave,proto3" json:"cave,omitempty"`
+	Spawn    *Vec2                  `protobuf:"bytes,3,opt,name=spawn,proto3" json:"spawn,omitempty"`
+	// The client predicts its own movement one step per server tick.
+	TickRate      uint32 `protobuf:"varint,4,opt,name=tick_rate,json=tickRate,proto3" json:"tick_rate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -598,6 +600,13 @@ func (x *JoinAccepted) GetSpawn() *Vec2 {
 	return nil
 }
 
+func (x *JoinAccepted) GetTickRate() uint32 {
+	if x != nil {
+		return x.TickRate
+	}
+	return 0
+}
+
 // Extracted is sent to everyone in the cave. The extracting player's
 // connection closes right after.
 type Extracted struct {
@@ -644,6 +653,7 @@ func (x *Extracted) GetPlayerId() uint64 {
 	return 0
 }
 
+// MoveInput is sent once per tick. The server uses one per tick, in seq order.
 type MoveInput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           uint32                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
@@ -842,8 +852,12 @@ type EntityState struct {
 	// 0 to 1 while a player stands in the extraction zone.
 	ExtractProgress float32 `protobuf:"fixed32,6,opt,name=extract_progress,json=extractProgress,proto3" json:"extract_progress,omitempty"`
 	MaxHealth       int32   `protobuf:"varint,7,opt,name=max_health,json=maxHealth,proto3" json:"max_health,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Players only. The last MoveInput seq the server applied, so the client
+	// knows which of its predicted inputs to replay.
+	LastInputSeq  uint32  `protobuf:"varint,8,opt,name=last_input_seq,json=lastInputSeq,proto3" json:"last_input_seq,omitempty"`
+	MaxSpeed      float32 `protobuf:"fixed32,9,opt,name=max_speed,json=maxSpeed,proto3" json:"max_speed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EntityState) Reset() {
@@ -921,6 +935,20 @@ func (x *EntityState) GetExtractProgress() float32 {
 func (x *EntityState) GetMaxHealth() int32 {
 	if x != nil {
 		return x.MaxHealth
+	}
+	return 0
+}
+
+func (x *EntityState) GetLastInputSeq() uint32 {
+	if x != nil {
+		return x.LastInputSeq
+	}
+	return 0
+}
+
+func (x *EntityState) GetMaxSpeed() float32 {
+	if x != nil {
+		return x.MaxSpeed
 	}
 	return 0
 }
@@ -1396,11 +1424,12 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x03min\x18\x01 \x01(\v2\r.game.v1.Vec2R\x03min\x12\x1f\n" +
 	"\x03max\x18\x02 \x01(\v2\r.game.v1.Vec2R\x03max\"!\n" +
 	"\vJoinRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"y\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x96\x01\n" +
 	"\fJoinAccepted\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\x12'\n" +
 	"\x04cave\x18\x02 \x01(\v2\x13.game.v1.CaveLayoutR\x04cave\x12#\n" +
-	"\x05spawn\x18\x03 \x01(\v2\r.game.v1.Vec2R\x05spawn\"(\n" +
+	"\x05spawn\x18\x03 \x01(\v2\r.game.v1.Vec2R\x05spawn\x12\x1b\n" +
+	"\ttick_rate\x18\x04 \x01(\rR\btickRate\"(\n" +
 	"\tExtracted\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\"J\n" +
 	"\tMoveInput\x12\x10\n" +
@@ -1416,7 +1445,7 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\ttarget_id\x18\x02 \x01(\x04R\btargetId\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\x05R\x06amount\x12#\n" +
 	"\rtarget_health\x18\x04 \x01(\x05R\ftargetHealth\x12\x16\n" +
-	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xfe\x01\n" +
+	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xc1\x02\n" +
 	"\vEntityState\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.game.v1.EntityKindR\x04kind\x12)\n" +
@@ -1425,7 +1454,9 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x06health\x18\x05 \x01(\x05R\x06health\x12)\n" +
 	"\x10extract_progress\x18\x06 \x01(\x02R\x0fextractProgress\x12\x1d\n" +
 	"\n" +
-	"max_health\x18\a \x01(\x05R\tmaxHealth\"U\n" +
+	"max_health\x18\a \x01(\x05R\tmaxHealth\x12$\n" +
+	"\x0elast_input_seq\x18\b \x01(\rR\flastInputSeq\x12\x1b\n" +
+	"\tmax_speed\x18\t \x01(\x02R\bmaxSpeed\"U\n" +
 	"\rWorldSnapshot\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x120\n" +
 	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\x9b\x01\n" +

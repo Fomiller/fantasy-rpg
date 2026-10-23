@@ -46,6 +46,8 @@ message JoinAccepted {
   uint64 player_id = 1;
   CaveLayout cave = 2;
   Vec2 spawn = 3;
+  // The client predicts its own movement one step per server tick.
+  uint32 tick_rate = 4;
 }
 
 // Extracted is sent to everyone in the cave. The extracting player's
@@ -54,6 +56,7 @@ message Extracted {
   uint64 player_id = 1;
 }
 
+// MoveInput is sent once per tick. The server uses one per tick, in seq order.
 message MoveInput {
   uint32 seq = 1;
   Vec2 direction = 2;
@@ -92,6 +95,10 @@ message EntityState {
   // 0 to 1 while a player stands in the extraction zone.
   float extract_progress = 6;
   int32 max_health = 7;
+  // Players only. The last MoveInput seq the server applied, so the client
+  // knows which of its predicted inputs to replay.
+  uint32 last_input_seq = 8;
+  float max_speed = 9;
 }
 
 message WorldSnapshot {

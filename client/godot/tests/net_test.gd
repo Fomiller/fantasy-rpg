@@ -40,6 +40,16 @@ func _run() -> void:
 	var moved := await _until(func() -> bool: return _server_x(latest.snapshot, connection.player_id) > start_x + 40.0)
 	Input.action_release("move_right")
 	_check(moved, "server moved the player after MoveInput")
+
+	# Walk up into the cave wall and slide along it, where drift used to show.
+	Input.action_press("move_up")
+	Input.action_press("move_right")
+	await _until(func() -> bool: return false, 1500)
+	Input.action_release("move_up")
+	Input.action_release("move_right")
+	var server_pos := func() -> Vector2: return _server_pos(latest.snapshot, connection.player_id)
+	var settled := await _until(func() -> bool: return player.velocity.is_zero_approx() and player.position.distance_to(server_pos.call()) < 1.0)
+	_check(settled, "predicted player ends where the server has it (off by %.1f)" % player.position.distance_to(server_pos.call()))
 	_check(latest.snapshot.get_tick() > start_tick, "server tick advances")
 
 	var enemies := 0
@@ -51,6 +61,13 @@ func _run() -> void:
 	_finish()
 
 
+func _server_pos(snapshot: GameV1.WorldSnapshot, player_id: int) -> Vector2:
+	for e: GameV1.EntityState in snapshot.get_entities():
+		if e.get_id() == player_id:
+			return Vector2(e.get_position().get_x(), e.get_position().get_y())
+	return Vector2.INF
+
+
 func _server_x(snapshot: GameV1.WorldSnapshot, player_id: int) -> float:
 	for e: GameV1.EntityState in snapshot.get_entities():
 		if e.get_id() == player_id:
@@ -58,8 +75,8 @@ func _server_x(snapshot: GameV1.WorldSnapshot, player_id: int) -> float:
 	return -INF
 
 
-func _until(condition: Callable) -> bool:
-	var deadline := Time.get_ticks_msec() + TIMEOUT_MSEC
+func _until(condition: Callable, timeout_msec := TIMEOUT_MSEC) -> bool:
+	var deadline := Time.get_ticks_msec() + timeout_msec
 	while Time.get_ticks_msec() < deadline:
 		if condition.call():
 			return true

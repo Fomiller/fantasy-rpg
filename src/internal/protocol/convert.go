@@ -33,7 +33,7 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 	return nil, false
 }
 
-func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2) *gamev1.ServerMessage {
+func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int) *gamev1.ServerMessage {
 	layout := &gamev1.CaveLayout{
 		Name:       cave.Name,
 		Bounds:     rect(cave.Bounds),
@@ -43,7 +43,7 @@ func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2) *gamev1.Server
 		layout.Walls = append(layout.Walls, rect(w))
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Joined{
-		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn)},
+		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn), TickRate: uint32(tickRate)},
 	}}
 }
 
@@ -64,6 +64,8 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 			Health:          int32(p.Health),
 			MaxHealth:       int32(p.MaxHealth),
 			ExtractProgress: float32(p.ExtractProgress),
+			LastInputSeq:    p.LastInputSeq,
+			MaxSpeed:        float32(w.MaxSpeed(p)),
 		})
 	}
 	for _, e := range w.Enemies() {

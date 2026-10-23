@@ -32,7 +32,7 @@ func _run() -> void:
 	await _frames(30)
 	_check(player.velocity.is_zero_approx(), "player stops when input is released")
 
-	player.position = Vector2(-160, 0)
+	player.place(Vector2(-160, 0))
 	await _frames(2)
 	Input.action_press("interact")
 	await _frames(1)

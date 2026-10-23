@@ -6,6 +6,7 @@ const FLOOR_COLOR := Color(0.13, 0.13, 0.16)
 const EXIT_COLOR := Color(0.2, 0.75, 0.4, 0.35)
 
 var extraction := Rect2()
+var walls: Array[Rect2] = []
 
 
 # Rebuilds the cave from the layout the server sent on join.
@@ -23,8 +24,10 @@ func build(layout: GameV1.CaveLayout) -> void:
 	label.position = extraction.get_center() - Vector2(16, 12)
 	add_child(label)
 
+	walls.clear()
 	for r: GameV1.Rect in layout.get_walls():
 		var rect := to_rect(r)
+		walls.append(rect)
 		var wall := WALL_SCENE.instantiate()
 		wall.position = rect.get_center()
 		wall.size = rect.size

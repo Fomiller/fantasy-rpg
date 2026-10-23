@@ -54,6 +54,11 @@ func (w *World) extractTime(p *Player) time.Duration {
 	return percentFaster(w.cfg.ExtractTime, p.stats[items.ExtractSpeed])
 }
 
+// MaxSpeed is sent to the client so its prediction moves at the same speed.
+func (w *World) MaxSpeed(p Player) float64 {
+	return w.maxSpeed(&p)
+}
+
 func (w *World) maxSpeed(p *Player) float64 {
 	return w.cfg.MaxSpeed * float64(100+min(p.stats[items.MoveSpeed], w.cfg.MoveSpeedCap)) / 100
 }

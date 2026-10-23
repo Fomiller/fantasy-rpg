@@ -35,6 +35,7 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 	w := sim.NewWorld(cfg, nil)
 	enemy := w.AddEnemy(sim.Vec2{X: 5, Y: 6}, 30)
 	player := w.AddPlayer(sim.Vec2{X: 1, Y: 2})
+	w.Submit(sim.MoveCommand{Player: player, Seq: 3})
 	w.Step(0)
 
 	snap := Snapshot(w).GetSnapshot()
@@ -44,6 +45,9 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 	p, e := snap.GetEntities()[0], snap.GetEntities()[1]
 	if p.GetId() != uint64(player) || p.GetKind() != gamev1.EntityKind_ENTITY_KIND_PLAYER || p.GetHealth() != 100 || p.GetPosition().GetX() != 1 {
 		t.Fatalf("player entity = %v", p)
+	}
+	if p.GetLastInputSeq() != 3 || p.GetMaxSpeed() != 220 {
+		t.Fatalf("player prediction fields = %v", p)
 	}
 	if e.GetId() != uint64(enemy) || e.GetKind() != gamev1.EntityKind_ENTITY_KIND_ENEMY || e.GetHealth() != 30 {
 		t.Fatalf("enemy entity = %v", e)
@@ -56,8 +60,8 @@ func TestDamageAndJoined(t *testing.T) {
 		t.Fatalf("damage = %v", d)
 	}
 	cave := caves.Loop()
-	j := Joined(5, cave, cave.PlayerSpawns[0]).GetJoined()
-	if j.GetPlayerId() != 5 || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
+	j := Joined(5, cave, cave.PlayerSpawns[0], 30).GetJoined()
+	if j.GetPlayerId() != 5 || j.GetTickRate() != 30 || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
 		t.Fatalf("joined = %v", j)
 	}
 	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetCave().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
