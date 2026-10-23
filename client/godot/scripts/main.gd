@@ -7,6 +7,7 @@ const PICKUP_RANGE := 48.0
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 const LOOT_SCENE := preload("res://scenes/loot.tscn")
+const PROJECTILE_SCENE := preload("res://scenes/projectile.tscn")
 const EXTRACTED_TEXT := "extracted · press E to go again"
 
 @onready var _connection: ServerConnection = $ServerConnection
@@ -151,6 +152,8 @@ func _spawn_view(kind: int) -> EntityView:
 		view.add_to_group("enemies")
 	elif kind == GameV1.EntityKind.CHEST or kind == GameV1.EntityKind.LOOT:
 		view = LOOT_SCENE.instantiate()
+	elif kind == GameV1.EntityKind.PROJECTILE:
+		view = PROJECTILE_SCENE.instantiate()
 	else:
 		view = REMOTE_PLAYER_SCENE.instantiate()
 	_entities.add_child(view)

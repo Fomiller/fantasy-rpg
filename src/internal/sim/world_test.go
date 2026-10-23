@@ -9,11 +9,14 @@ import (
 
 const dt = 50 * time.Millisecond
 
-// passive keeps enemies still and blind, for tests about players.
+// passive keeps enemies still, blind and harmless, for tests about players.
+// A hit still turns them to chase, but they cannot move or reach anyone.
 func passive() Config {
 	c := DefaultConfig()
-	c.DetectRadius = 0
-	c.PatrolSpeed = 0
+	for id, a := range c.Archetypes {
+		a.DetectRadius, a.PatrolSpeed, a.Speed, a.AttackRange, a.Special = 0, 0, 0, 0, SpecialNone
+		c.Archetypes[id] = a
+	}
 	return c
 }
 
@@ -117,7 +120,7 @@ func TestWallSlideKeepsOtherAxis(t *testing.T) {
 func TestAttackDamagesAndKills(t *testing.T) {
 	w := NewWorld(passive(), nil)
 	player := w.AddPlayer(Vec2{})
-	enemy := w.AddEnemy(Vec2{40, 0}, 30)
+	enemy := w.AddEnemy(Vec2{40, 0}, Melee)
 
 	var events []DamageEvent
 	for seq := uint32(1); seq <= 3; seq++ {
@@ -172,7 +175,7 @@ func TestAttackRejected(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			w := NewWorld(passive(), nil)
 			player := w.AddPlayer(Vec2{})
-			enemy := w.AddEnemy(Vec2{40, 0}, 30)
+			enemy := w.AddEnemy(Vec2{40, 0}, Melee)
 			tt.setup(w, player, enemy)
 			before, _ := w.Enemy(enemy)
 
@@ -212,8 +215,8 @@ func TestRemovePlayerAndSortedLists(t *testing.T) {
 	w := NewWorld(DefaultConfig(), nil)
 	a := w.AddPlayer(Vec2{})
 	b := w.AddPlayer(Vec2{})
-	w.AddEnemy(Vec2{}, 30)
-	w.AddEnemy(Vec2{}, 30)
+	w.AddEnemy(Vec2{}, Melee)
+	w.AddEnemy(Vec2{}, Ranged)
 	w.RemovePlayer(a)
 
 	players := w.Players()

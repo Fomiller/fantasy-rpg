@@ -47,11 +47,15 @@ func start(t *testing.T) harness {
 
 func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	t.Helper()
-	// Enemy stays put, so the only damage in these tests comes from players.
-	cfg.DetectRadius, cfg.PatrolSpeed = 0, 0
+	// Enemy stays put and cannot reach anyone, so the only damage in these
+	// tests comes from players.
+	for id, a := range cfg.Archetypes {
+		a.DetectRadius, a.PatrolSpeed, a.Speed, a.AttackRange, a.Special = 0, 0, 0, 0, sim.SpecialNone
+		cfg.Archetypes[id] = a
+	}
 	loot := items.NewRoller(items.Default(), 1)
 	world := cave.NewWorld(cfg, loot)
-	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, 30)
+	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, sim.Melee)
 	srv := New(world, cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())

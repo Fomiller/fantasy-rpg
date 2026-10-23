@@ -198,8 +198,8 @@ FOM-103 built the first version of this.
 - Interact on a chest or ground pile takes everything that fits. The rest
   stays. An empty pile goes away. An empty chest stays, opened.
 - The loop cave has three chests. Each rolls `cave1_chest` when the run
-  starts. A killed enemy rolls `cave1_grunt` and drops a pile if it got
-  anything.
+  starts. A killed enemy rolls its archetype's table, `cave1_grunt` or
+  `cave1_elite`, and drops a pile if it got anything.
 - From the bag a player can equip, drop, or use a consumable. Equipping
   swaps the old item into the bag. Unequip needs a free bag slot. Drop puts
   the whole entry on the ground at the player's feet.

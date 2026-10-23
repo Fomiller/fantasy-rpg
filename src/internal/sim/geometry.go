@@ -45,6 +45,12 @@ func (r Rect) Center() Vec2 {
 
 // Intersects reports whether the segment from a to b passes through r.
 func (r Rect) Intersects(a, b Vec2) bool {
+	_, ok := r.entry(a, b)
+	return ok
+}
+
+// entry is how far along the segment from a to b it first touches r, from 0 to 1.
+func (r Rect) entry(a, b Vec2) (float64, bool) {
 	d := b.Sub(a)
 	t0, t1 := 0.0, 1.0
 	for _, c := range [4][2]float64{
@@ -56,7 +62,7 @@ func (r Rect) Intersects(a, b Vec2) bool {
 		p, q := c[0], c[1]
 		if p == 0 {
 			if q < 0 {
-				return false
+				return 0, false
 			}
 			continue
 		}
@@ -67,8 +73,8 @@ func (r Rect) Intersects(a, b Vec2) bool {
 			t1 = min(t1, t)
 		}
 		if t0 > t1 {
-			return false
+			return 0, false
 		}
 	}
-	return true
+	return t0, true
 }

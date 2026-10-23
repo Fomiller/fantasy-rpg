@@ -14,6 +14,13 @@ func TestLoopParses(t *testing.T) {
 	if len(c.PlayerSpawns) != 2 || len(c.Enemies) != 5 || len(c.Chests) != 3 {
 		t.Fatalf("spawns = %d, enemies = %d, chests = %d", len(c.PlayerSpawns), len(c.Enemies), len(c.Chests))
 	}
+	kinds := map[sim.ArchetypeID]int{}
+	for _, e := range c.Enemies {
+		kinds[e.Archetype]++
+	}
+	if kinds[sim.Melee] != 2 || kinds[sim.Ranged] != 2 || kinds[sim.Elite] != 1 {
+		t.Fatalf("archetypes = %v, want 2 melee, 2 ranged and an elite", kinds)
+	}
 	if c.Bounds.Max != (sim.Vec2{X: 31 * TileSize, Y: 16 * TileSize}) {
 		t.Fatalf("bounds = %v", c.Bounds)
 	}
@@ -87,9 +94,16 @@ func TestParseErrors(t *testing.T) {
 
 func TestNewWorldPlacesEnemiesAndChests(t *testing.T) {
 	c := Loop()
-	w := c.NewWorld(sim.DefaultConfig(), items.NewRoller(items.Default(), 1))
-	if got := len(w.Enemies()); got != len(c.Enemies) {
-		t.Fatalf("world has %d enemies, want %d", got, len(c.Enemies))
+	cfg := sim.DefaultConfig()
+	w := c.NewWorld(cfg, items.NewRoller(items.Default(), 1))
+	enemies := w.Enemies()
+	if len(enemies) != len(c.Enemies) {
+		t.Fatalf("world has %d enemies, want %d", len(enemies), len(c.Enemies))
+	}
+	for i, e := range enemies {
+		if e.Archetype != c.Enemies[i].Archetype || e.Health != cfg.Archetypes[e.Archetype].Health {
+			t.Fatalf("enemy %+v, want a %s at full health", e, c.Enemies[i].Archetype)
+		}
 	}
 	piles := w.Piles()
 	if len(piles) != len(c.Chests) {
@@ -113,7 +127,10 @@ func TestBothRoutesReachExtraction(t *testing.T) {
 	for name, route := range routes {
 		t.Run(name, func(t *testing.T) {
 			cfg := sim.DefaultConfig()
-			cfg.DetectRadius = 0
+			for id, a := range cfg.Archetypes {
+				a.DetectRadius = 0
+				cfg.Archetypes[id] = a
+			}
 			w := Loop().NewWorld(cfg, nil)
 			id := w.AddPlayer(Loop().PlayerSpawns[0])
 
@@ -136,5 +153,55 @@ func TestBothRoutesReachExtraction(t *testing.T) {
 			p, _ := w.Player(id)
 			t.Fatalf("stuck at %v heading for waypoint %d %v", p.Pos, next, route[next])
 		})
+	}
+}
+
+// A player runs a lap past every enemy and leaves. Each enemy must make it
+// back home through the real walls instead of snagging on a corner.
+func TestEnemiesFindTheirWayHome(t *testing.T) {
+	tile := func(x, y float64) sim.Vec2 { return sim.Vec2{X: (x + 0.5) * TileSize, Y: (y + 0.5) * TileSize} }
+	route := []sim.Vec2{tile(3, 13), tile(26, 13), tile(26, 8), tile(21, 8), tile(26, 8), tile(26, 3), tile(3, 3), tile(3, 13)}
+	c := Loop()
+	cfg := sim.DefaultConfig()
+	// Keep the runner alive. This test is about the enemies.
+	cfg.PlayerHealth = 1_000_000
+	w := c.NewWorld(cfg, nil)
+	id := w.AddPlayer(c.PlayerSpawns[0])
+	chased := map[sim.EntityID]bool{}
+
+	next, seq := 0, uint32(0)
+	for range 4000 {
+		p, _ := w.Player(id)
+		if p.Pos.DistanceTo(route[next]) < 8 {
+			if next++; next == len(route) {
+				break
+			}
+		}
+		d := route[next].Sub(p.Pos)
+		seq++
+		w.Submit(sim.MoveCommand{Player: id, Seq: seq, Direction: d.Scale(1 / max(d.Len(), 1))})
+		w.Step(50 * time.Millisecond)
+		for _, e := range w.Enemies() {
+			if e.State == sim.EnemyChase {
+				chased[e.ID] = true
+			}
+		}
+	}
+	if next != len(route) {
+		t.Fatalf("player stuck on waypoint %d", next)
+	}
+	if len(chased) < 3 {
+		t.Fatalf("only %d enemies chased the player, want most of them", len(chased))
+	}
+
+	w.RemovePlayer(id)
+	for range 1200 {
+		w.Step(50 * time.Millisecond)
+	}
+	for i, e := range w.Enemies() {
+		home := c.Enemies[i].Pos
+		if (e.State != sim.EnemyPatrol && e.State != sim.EnemyIdle) || e.Pos.DistanceTo(home) > 100 {
+			t.Errorf("%s enemy %d is %v at %v, %v from home", e.Archetype, e.ID, e.State, e.Pos, e.Pos.DistanceTo(home))
+		}
 	}
 }

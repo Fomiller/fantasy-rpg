@@ -182,18 +182,21 @@ func TestDeadPlayersCannotUseItems(t *testing.T) {
 }
 
 func TestDeathDropsEverythingAsOneBag(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.PatrolSpeed = 0
-	w := NewWorld(cfg, nil)
+	w := NewWorld(DefaultConfig(), nil)
 	id := w.AddPlayer(Vec2{X: 20})
-	w.AddEnemy(Vec2{}, 30)
+	w.AddEnemy(Vec2{}, Melee)
 	w.Restore(id, inventory.Loadout{
 		Equipment: []items.Instance{item("sword", items.Weapon, map[items.Stat]int{items.Damage: 10})},
 		Items:     []items.Instance{potion("p", 2)},
 	})
 	w.players[id].Health = 1
 
-	ev := w.Step(dt)
+	var ev Events
+	for range 40 {
+		if ev = w.Step(dt); len(ev.Damage) > 0 {
+			break
+		}
+	}
 	if len(ev.Damage) != 1 || !ev.Damage[0].Killed || !slices.Contains(ev.Inventory, id) {
 		t.Fatalf("events = %+v", ev)
 	}
@@ -208,11 +211,14 @@ func TestDeathDropsEverythingAsOneBag(t *testing.T) {
 
 func TestKilledEnemyDropsLoot(t *testing.T) {
 	cfg := passive()
-	cfg.EnemyLoot = "cave1_chest"
+	melee := cfg.Archetypes[Melee]
+	melee.Loot = "cave1_chest"
+	cfg.Archetypes[Melee] = melee
 	w := NewWorld(cfg, nil)
 	w.SetLoot(items.NewRoller(items.Default(), 1))
 	player := w.AddPlayer(Vec2{})
-	enemy := w.AddEnemy(Vec2{X: 40}, 1)
+	enemy := w.AddEnemy(Vec2{X: 40}, Melee)
+	w.enemies[enemy].Health = 1
 
 	w.Submit(AttackCommand{Player: player, Seq: 1, Target: enemy})
 	w.Step(dt)

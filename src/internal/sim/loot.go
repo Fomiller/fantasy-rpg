@@ -207,7 +207,7 @@ func (w *World) dropOnKill(ev *Events) {
 			continue
 		}
 		if e, ok := w.enemies[d.Target]; ok && w.loot != nil {
-			if drop := w.loot.Drop(w.cfg.EnemyLoot, w.cfg.LootLevel, 1); len(drop) > 0 {
+			if drop := w.loot.Drop(w.cfg.Archetypes[e.Archetype].Loot, w.cfg.LootLevel, 1); len(drop) > 0 {
 				w.AddPile(e.Pos, drop)
 			}
 		}

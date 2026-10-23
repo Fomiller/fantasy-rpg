@@ -50,6 +50,7 @@ func run() error {
 	cave := caves.Loop()
 	loot := items.NewRoller(items.Default(), seed)
 	world := cave.NewWorld(sim.DefaultConfig(), loot)
+	world.SeedAI(seed)
 	game := server.New(world, cave, loot, slog.Default())
 	game.TickRate = rate
 	defer game.Close()
@@ -109,8 +110,8 @@ func tickRate() (int, error) {
 	return rate, nil
 }
 
-// lootSeed comes from LOOT_SEED to replay a run, or is random. It is logged
-// on start either way.
+// lootSeed comes from LOOT_SEED to replay a run, or is random. It seeds both
+// loot and enemy AI, and is logged on start either way.
 func lootSeed() (uint64, error) {
 	if v := os.Getenv("LOOT_SEED"); v != "" {
 		seed, err := strconv.ParseUint(v, 10, 64)
