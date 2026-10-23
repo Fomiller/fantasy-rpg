@@ -24,16 +24,17 @@ func _run() -> void:
 	var ranged: EnemyView = views.ranged
 	var elite: EnemyView = views.elite
 	_check(melee.is_in_group("enemies") and main.nearest_enemy(melee.position) is EnemyView, "enemies are attack targets")
-	_check(melee._body.color != ranged._body.color and ranged._body.color != elite._body.color, "each archetype has its own color")
-	_check(melee._body.polygon.size() != ranged._body.polygon.size() or melee._body.polygon != ranged._body.polygon, "melee and ranged have different shapes")
-	_check(elite._body.polygon.size() == 6, "elite is a hexagon")
+	_check(melee._sprite.texture != ranged._sprite.texture and ranged._sprite.texture != elite._sprite.texture and melee._sprite.texture != elite._sprite.texture, "each archetype has its own sprite")
+	_check(elite._sprite.scale.x > melee._sprite.scale.x, "elite is drawn bigger")
+	_check(melee._sprite.animation() == "walk", "a moving enemy walks")
 	_check(melee.max_health == 30 and melee._health.text == "", "health bar uses max_health, no number")
 
 	melee.apply(_enemy("melee", GameV1.EnemyState.DETECT, 20, 30, Vector2.RIGHT, Vector2.ZERO))
 	_check(melee._health.text == "!" and not melee.is_telegraphing(), "detect shows an alert")
-	var calm := melee._body.color
+	var calm := melee._body.modulate
 	melee.apply(_enemy("melee", GameV1.EnemyState.ATTACK, 20, 30, Vector2.RIGHT, Vector2.ZERO))
-	_check(melee.is_telegraphing() and melee._body.color != calm, "windup lights up the enemy")
+	_check(melee.is_telegraphing() and melee._body.modulate != calm and melee._sprite.animation() == "windup", "windup lights up the enemy")
+	_check(melee._body.show_behind_parent, "telegraphs draw over the sprite")
 
 	elite.apply(_enemy("elite", GameV1.EnemyState.CHARGE, 90, 90, Vector2.UP, Vector2.ZERO))
 	_check(elite.is_telegraphing() and elite.aim == Vector2.UP, "charge windup telegraphs along the aim")
@@ -41,7 +42,7 @@ func _run() -> void:
 	_check(not elite.is_telegraphing(), "the dash itself is not a telegraph")
 
 	ranged.apply(_enemy("ranged", GameV1.EnemyState.DEAD, 0, 20, Vector2.ZERO, Vector2.ZERO))
-	_check(ranged._health.text == "dead" and ranged._body.color == ranged.dead_color, "dead enemy is gray")
+	_check(ranged._health.text == "dead" and ranged._body.modulate == ranged.dead_color and ranged._sprite.dead, "dead enemy is gray and lying down")
 
 	var shot: ProjectileView = main._spawn_view(GameV1.EntityKind.PROJECTILE)
 	var msg := GameV1.EntityState.new()

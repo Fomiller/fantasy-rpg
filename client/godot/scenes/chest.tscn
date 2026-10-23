@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/chest.gd" id="1_chest"]
+[ext_resource type="Texture2D" path="res://assets/kenney_tiny_dungeon/tile_0089.png" id="2_closed"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_chest"]
 size = Vector2(40, 28)
@@ -8,9 +9,9 @@ size = Vector2(40, 28)
 [node name="Chest" type="StaticBody2D" groups=["interactable"]]
 script = ExtResource("1_chest")
 
-[node name="Body" type="Polygon2D" parent="."]
-color = Color(0.55, 0.35, 0.18, 1)
-polygon = PackedVector2Array(-20, -14, 20, -14, 20, 14, -20, 14)
+[node name="Body" type="Sprite2D" parent="."]
+scale = Vector2(2, 2)
+texture = ExtResource("2_closed")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_chest")

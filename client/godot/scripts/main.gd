@@ -57,6 +57,7 @@ func _physics_process(_delta: float) -> void:
 
 func _attack() -> void:
 	var target := nearest_enemy(_ghost.position)
+	_player.swing(target.position - _player.position if target else Vector2.ZERO)
 	if target:
 		_connection.send_attack(target.entity_id)
 
@@ -185,3 +186,8 @@ func _on_equipment(items: Array[GameV1.Item]) -> void:
 	for item in items:
 		lines.append(ItemText.line(item))
 	_equipment.text = "\n".join(lines)
+	var weapon := ""
+	for item in items:
+		if item.get_slot() == "weapon":
+			weapon = item.get_item_def_id()
+	_player.equip_weapon(weapon)

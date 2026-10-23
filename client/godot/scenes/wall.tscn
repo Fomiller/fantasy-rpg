@@ -1,8 +1,11 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/wall.gd" id="1_wall"]
+[ext_resource type="Texture2D" path="res://assets/kenney_tiny_dungeon/tile_0040.png" id="2_bricks"]
 
 [node name="Wall" type="StaticBody2D"]
+texture_repeat = 2
 script = ExtResource("1_wall")
+texture = ExtResource("2_bricks")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
