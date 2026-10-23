@@ -65,7 +65,8 @@ The client is a 2D Godot 4.7 project in `client/godot`, written in GDScript. It 
 
 ```sh
 just client         # open the editor
-just client-run     # run the game
+just client-run     # run the game against a local server
+just client-online  # run the game against the homelab server
 just client-check   # import and run headless; prints "main scene loaded"
 just client-test    # headless player tests: movement, walls, interact
 just net-test       # start cave-server and check a real client can join and move
@@ -94,6 +95,19 @@ The Godot editor runs a GDScript language server on port 6005 while it is open.
 4. In Neovim, turn on the `gdscript` LSP config from nvim-lspconfig (`vim.lsp.enable("gdscript")`), and install the `gdscript` treesitter parser.
 
 Use Neovim for code. Use the Godot editor for scenes, nodes and the debugger.
+
+## Hosting
+
+The cave-server runs in the homelab cluster and is public at `wss://fantasy-rpg.fomiller.com/ws`.
+
+- `Dockerfile` builds the cave-server. `publish-image.yml` pushes it to ECR on every merge to main.
+- `helm/fantasy-rpg` is the chart. `publish-chart.yml` pushes it to ECR the same way.
+- `infra/` creates both ECR repositories. `deploy-infra.yml` applies it.
+- homelab's services ApplicationSet reads `argocd.yaml` and deploys `argocd/overlays/dev`.
+- Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
+- The Cloudflare tunnel sends the hostname to Traefik, and the chart's IngressRoute sends it to the pod.
+
+There is one replica with the `Recreate` strategy. The cave lives in memory, so a deploy ends every run in progress.
 
 ## Protocol
 

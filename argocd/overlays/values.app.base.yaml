@@ -1,0 +1,23 @@
+# Written once, then it is yours. `nix run .#generate` never touches it again.
+#
+# Shared chart values. Every Application reads this file first and layers the
+# environment's own values.app.yaml on top, so a per-environment file only
+# carries what actually differs.
+
+fullnameOverride: fantasy-rpg
+
+replicas: 1
+
+# The cave-server image. The tag lives in the environment's values.app.yaml,
+# where Kargo writes it.
+image:
+  repository: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
+
+# http-echo takes its port and text as args. The cave-server does not.
+args: []
+
+# That registry is private, so the kubelet needs a credential to pull from it.
+# external-secrets mints this Secret into every namespace labelled for it; the
+# name has to match what that ClusterExternalSecret creates.
+imagePullSecrets:
+  - name: ecr-image-pull

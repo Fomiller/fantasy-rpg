@@ -1,0 +1,32 @@
+# Written once, then it is yours. `nix run .#generate` never touches it again.
+#
+# Kargo rewrites the chart versions below on every promotion, which is the
+# second reason this file is not regenerated: a generate would put the
+# bootstrap versions back and roll the environment backwards.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  # Nothing is published on the first commit, so this version does not exist
+  # yet. Merging to the default branch runs publish-chart.yml, and the
+  # Application syncs once that lands.
+  - name: fantasy-rpg-chart
+    repo: oci://695434033664.dkr.ecr.us-east-1.amazonaws.com
+    version: 0.1.0
+    releaseName: fantasy-rpg
+    # Shared defaults first, this environment's overrides second. On a key both
+    # files set, the later one wins.
+    valuesFile: ../values.app.base.yaml
+    additionalValuesFiles:
+      - values.app.yaml
+  # The promotion pipeline ships beside the workload it promotes, so a service
+  # is one Application rather than two.
+  - name: kargo-project-chart
+    repo: oci://695434033664.dkr.ecr.us-east-1.amazonaws.com
+    version: 0.5.0
+    releaseName: fantasy-rpg
+    # The workload's namespace. Kargo requires a project's name and namespace
+    # to match, so the project is named after the service and lands beside it.
+    namespace: fantasy-rpg
+    valuesFile: values.kargo.yaml

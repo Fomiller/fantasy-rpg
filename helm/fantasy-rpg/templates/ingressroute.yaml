@@ -1,0 +1,18 @@
+{{- /* Traefik's own CRD, like the blog. The Cloudflare tunnel forwards the
+       hostname to Traefik, and Traefik passes the WebSocket upgrade through.
+       Off unless an overlay sets a host. */}}
+{{- if .Values.ingressRoute.host }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "chart.fullname" . }}
+spec:
+  entryPoints:
+    - {{ .Values.ingressRoute.entryPoint }}
+  routes:
+    - match: Host(`{{ .Values.ingressRoute.host }}`)
+      kind: Rule
+      services:
+        - name: {{ include "chart.fullname" . }}
+          port: 8080
+{{- end }}

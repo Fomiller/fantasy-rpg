@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-argocd).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+#
+# What homelab reads to build this repo's Argo CD Application. Its
+# ApplicationSet lists repo URLs and asks each one for this file, so a service
+# declares its own destination instead of homelab holding a copy.
+#
+# Managed, unlike everything under argocd/overlays/: these fields come from
+# repo.nix and change only when the repo is renamed or moved.
+
+name: fantasy-rpg
+env: dev
+namespace: fantasy-rpg
+
+# Where Argo CD sends sync notifications. Empty means none.
+notifications: ""

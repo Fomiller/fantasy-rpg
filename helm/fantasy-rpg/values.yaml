@@ -1,0 +1,39 @@
+# Written once, then it is yours. `nix run .#generate` never touches it again.
+
+replicas: 1
+
+# A hello-world until the repo has an image of its own. http-echo takes the
+# port on the command line, so it serves on whatever port the chart declares.
+image:
+  repository: hashicorp/http-echo
+  tag: "1.0"
+
+args:
+  - -listen=:8080
+  - -text=hello from fantasy-rpg
+
+# Empty here on purpose. The default image is public and needs no credential.
+# An overlay pulling from a private registry names its own Secret — see
+# argocd/overlays/values.app.base.yaml.
+imagePullSecrets: []
+
+# Plain configuration in the container env shape, e.g. TICK_RATE or LOOT_SEED.
+env: []
+
+# No host means no IngressRoute. The overlay that owns the hostname sets it.
+ingressRoute:
+  host: ""
+  entryPoint: web
+
+# Secrets this chart creates from the cluster's secret store. The map key names
+# the Secret, so a key here is what an `envFrom` secretRef points at.
+#
+# Empty by default: rendering the chart should not need a ClusterSecretStore to
+# exist. The overlay that deploys turns them on.
+#
+#   externalSecrets:
+#     fantasy-rpg-application-secret:
+#       secretStore:
+#         name: aws-clustersecretstore
+#       remoteKey: dev/fomiller/homelab/fantasy-rpg-application-secret
+externalSecrets: {}

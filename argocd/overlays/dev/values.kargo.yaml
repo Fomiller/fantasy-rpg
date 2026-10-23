@@ -1,0 +1,61 @@
+# Written once, then it is yours. `nix run .#generate` never touches it again.
+#
+# The dev promotion pipeline, rendered by kargo-project-chart. See that chart's
+# README for every field; what is here is the smallest pipeline that works.
+
+project:
+  name: fantasy-rpg
+  # Promotions commit back into this repo. The chart version and the image tag
+  # both live in argocd/overlays/, so a promotion touches only files a reader
+  # of this repo can find.
+  repoURL: https://github.com/Fomiller/fantasy-rpg.git
+
+services:
+  - name: fantasy-rpg
+    image:
+      repoURL: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
+
+charts:
+  - name: fantasy-rpg-chart
+    chart:
+      repoURL: oci://695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg-chart
+      # A range with no prerelease part never matches a prerelease version, so
+      # the default `>=0.0.0` would hide every rc chart. The `-0` admits them.
+      semverConstraint: '>=0.0.0-0'
+
+warehouses:
+  # Named for the lane, not the service. Every object here already lives in
+  # this service's namespace, so repeating the name spends the whole width of
+  # a Kargo graph node on the one word that says nothing.
+  - name: release
+    interval: 5m0s
+    # One warehouse subscribing to both, so a promotion carries a matched pair
+    # rather than letting the image and the chart drift a release apart.
+    services: [fantasy-rpg]
+    charts: [fantasy-rpg-chart]
+    # Stable versions and release candidates in one lane. dev is where you try a
+    # candidate, so it takes whichever is newest rather than splitting the two
+    # into separate origins and needing a promotion by hand to reach either.
+    #
+    # The dot in `-rc.1` is optional because both spellings exist; gh-actions
+    # publishes `-rc.1`.
+    allowTagsRegex: '^[0-9]+\.[0-9]+\.[0-9]+(-rc\.?[0-9]+)?$'
+    updatePaths:
+      - path: argocd/overlays/dev/values.app.yaml
+        rootRelative: true
+        updates:
+          - { key: image.tag, source: fantasy-rpg }
+      - path: argocd/overlays/dev/kustomization.yaml
+        rootRelative: true
+        updates:
+          - { key: helmCharts.0.version, source: fantasy-rpg-chart }
+
+stages:
+  - name: dev
+    color: green
+    autoPromotion: true
+    warehouses: [release]
+    env: dev
+    git:
+      repoURL: https://github.com/Fomiller/fantasy-rpg.git
+      branch: main

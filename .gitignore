@@ -13,4 +13,12 @@ target/
 node_modules/
 dist/
 .astro/
+.terragrunt-cache/
+.terragrunt-stack/
+.terragrunt-stack-manifest
+terragrunt.values.hcl
+**/_.*.gen.tf
+**/.terraform.lock.hcl
+infra/live/*/*/
+argocd/overlays/*/charts/
 docs/book/

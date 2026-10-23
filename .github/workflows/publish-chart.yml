@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-github).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+
+name: Publish chart
+
+on:
+  pull_request:
+    paths: [helm/**, .github/workflows/publish-chart.yml]
+  push:
+    branches: [main]
+    paths: [helm/**, .github/workflows/publish-chart.yml]
+  # Cuts a release candidate off whatever branch it runs from, so a chart can
+  # be published and deployed before it merges. Run from main and it cuts the
+  # stable release a merge would have cut.
+  workflow_dispatch:
+
+jobs:
+  chart:
+    # No chart list. The workflow walks helm/*/Chart.yaml and publishes each
+    # one to the ECR repository named by its own Chart.yaml.
+    uses: Fomiller/gh-actions/.github/workflows/helm-ecr.yaml@main
+    permissions:
+      id-token: write
+      # The release is tagged in this repo.
+      contents: write
+    with:
+      # A pull request packages the chart and throws it away. A merge to main
+      # and a manual run both publish.
+      push: ${{ github.event_name != 'pull_request' }}
+      # Each chart's version is computed from conventional commits touching its
+      # own directory, tagged <chart>-v<version>, and stamped into Chart.yaml at
+      # build time. The committed version is only the starting point.
+      release-versioning: true
+      release-rc: ${{ github.ref_name != github.event.repository.default_branch }}
+    secrets: inherit
