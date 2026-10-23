@@ -20,6 +20,17 @@ type Config struct {
 	AttackRange    float64
 	AttackDamage   int
 	AttackCooldown time.Duration
+
+	EnemyHalfSize       float64
+	EnemySpeed          float64
+	PatrolSpeed         float64
+	PatrolRadius        float64
+	DetectRadius        float64
+	LoseRadius          float64
+	LeashRadius         float64
+	EnemyAttackRange    float64
+	EnemyDamage         int
+	EnemyAttackCooldown time.Duration
 }
 
 // DefaultConfig matches the movement values on the Godot Player node.
@@ -33,6 +44,18 @@ func DefaultConfig() Config {
 		AttackRange:    64,
 		AttackDamage:   10,
 		AttackCooldown: 500 * time.Millisecond,
+
+		// Slower than players, so a player can always run away.
+		EnemyHalfSize:       16,
+		EnemySpeed:          140,
+		PatrolSpeed:         60,
+		PatrolRadius:        80,
+		DetectRadius:        200,
+		LoseRadius:          320,
+		LeashRadius:         450,
+		EnemyAttackRange:    40,
+		EnemyDamage:         10,
+		EnemyAttackCooldown: time.Second,
 	}
 }
 
@@ -46,9 +69,14 @@ type Player struct {
 }
 
 type Enemy struct {
-	ID     EntityID
-	Pos    Vec2
-	Health int
+	ID         EntityID
+	Pos, Vel   Vec2
+	Health     int
+	State      EnemyState
+	Target     EntityID
+	home       Vec2
+	patrolLeft bool
+	cooldown   time.Duration
 }
 
 type MoveCommand struct {
@@ -98,7 +126,7 @@ func (w *World) AddPlayer(pos Vec2) EntityID {
 
 func (w *World) AddEnemy(pos Vec2, health int) EntityID {
 	w.nextID++
-	w.enemies[w.nextID] = &Enemy{ID: w.nextID, Pos: pos, Health: health}
+	w.enemies[w.nextID] = &Enemy{ID: w.nextID, Pos: pos, Health: health, home: pos}
 	return w.nextID
 }
 
@@ -165,6 +193,7 @@ func (w *World) Step(dt time.Duration) []DamageEvent {
 		w.movePlayer(p, dt)
 		p.cooldown = max(p.cooldown-dt, 0)
 	}
+	events = append(events, w.stepEnemies(dt)...)
 	w.Tick++
 	return events
 }
@@ -207,6 +236,10 @@ func (w *World) applyAttack(c AttackCommand) (DamageEvent, bool) {
 }
 
 func (w *World) movePlayer(p *Player, dt time.Duration) {
+	if p.Health <= 0 {
+		p.Vel = Vec2{}
+		return
+	}
 	secs := dt.Seconds()
 	if p.input != (Vec2{}) {
 		p.Vel = p.Vel.MoveToward(p.input.Scale(w.cfg.MaxSpeed), w.cfg.Acceleration*secs)
@@ -214,28 +247,31 @@ func (w *World) movePlayer(p *Player, dt time.Duration) {
 		p.Vel = p.Vel.MoveToward(Vec2{}, w.cfg.Friction*secs)
 	}
 
-	// One axis at a time, so a player sliding along a wall keeps the other axis.
-	half := w.cfg.PlayerHalfSize
-	p.Pos.X += p.Vel.X * secs
+	w.slide(&p.Pos, &p.Vel, w.cfg.PlayerHalfSize, secs)
+}
+
+// slide moves one axis at a time, so a body sliding along a wall keeps the other axis.
+func (w *World) slide(pos, vel *Vec2, half, secs float64) {
+	pos.X += vel.X * secs
 	for _, wall := range w.walls {
-		if box(p.Pos, half).Overlaps(wall) {
-			if p.Vel.X > 0 {
-				p.Pos.X = wall.Min.X - half
+		if box(*pos, half).Overlaps(wall) {
+			if vel.X > 0 {
+				pos.X = wall.Min.X - half
 			} else {
-				p.Pos.X = wall.Max.X + half
+				pos.X = wall.Max.X + half
 			}
-			p.Vel.X = 0
+			vel.X = 0
 		}
 	}
-	p.Pos.Y += p.Vel.Y * secs
+	pos.Y += vel.Y * secs
 	for _, wall := range w.walls {
-		if box(p.Pos, half).Overlaps(wall) {
-			if p.Vel.Y > 0 {
-				p.Pos.Y = wall.Min.Y - half
+		if box(*pos, half).Overlaps(wall) {
+			if vel.Y > 0 {
+				pos.Y = wall.Min.Y - half
 			} else {
-				p.Pos.Y = wall.Max.Y + half
+				pos.Y = wall.Max.Y + half
 			}
-			p.Vel.Y = 0
+			vel.Y = 0
 		}
 	}
 }

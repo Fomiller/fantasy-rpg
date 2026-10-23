@@ -28,7 +28,9 @@ func TestCommandUsesConnectionPlayer(t *testing.T) {
 }
 
 func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
-	w := sim.NewWorld(sim.DefaultConfig(), nil)
+	cfg := sim.DefaultConfig()
+	cfg.DetectRadius = 0
+	w := sim.NewWorld(cfg, nil)
 	enemy := w.AddEnemy(sim.Vec2{X: 5, Y: 6}, 30)
 	player := w.AddPlayer(sim.Vec2{X: 1, Y: 2})
 	w.Step(0)

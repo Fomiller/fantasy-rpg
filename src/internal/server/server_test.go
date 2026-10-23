@@ -27,7 +27,10 @@ type harness struct {
 
 func start(t *testing.T) harness {
 	t.Helper()
-	world := sim.NewWorld(sim.DefaultConfig(), sim.TestRoomWalls())
+	// Enemy stays put, so the only damage in these tests comes from players.
+	cfg := sim.DefaultConfig()
+	cfg.DetectRadius, cfg.PatrolSpeed = 0, 0
+	world := sim.NewWorld(cfg, sim.TestRoomWalls())
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, 30)
 	srv := New(world, sim.Vec2{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
