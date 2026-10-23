@@ -494,17 +494,17 @@
       },
       "locked": {
         "dir": "golden-service",
-        "lastModified": 1787457973,
-        "narHash": "sha256-6Vk+UP71wkJ7eU/mVjSe96PDcpFXQBzKY9BxjOC18QE=",
+        "lastModified": 1792759910,
+        "narHash": "sha256-A93IfJGckl2oaWIDhSaBarN3ap0OzACks7rNfsVpuww=",
         "owner": "Fomiller",
         "repo": "flake-hub",
-        "rev": "8ad2dcc43f2e659fa2a981b925b086f819178f27",
+        "rev": "87d69fc7b52d69d84b042bcb3bd26611ef69ebee",
         "type": "github"
       },
       "original": {
         "dir": "golden-service",
         "owner": "Fomiller",
-        "ref": "refs/tags/golden-service-0.6.0",
+        "ref": "refs/tags/golden-service-0.7.0",
         "repo": "flake-hub",
         "type": "github"
       }
