@@ -1,6 +1,6 @@
 # The managed root Dockerfile builds only world-server. This one builds any
 # binary under src/cmd until golden-service can emit one image per binary.
-FROM golang:1.23 AS build
+FROM golang:1.27 AS build
 ARG BINARY
 WORKDIR /src
 COPY go.mod go.sum ./

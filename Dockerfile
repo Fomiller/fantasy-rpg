@@ -4,7 +4,7 @@
 # To change it, edit repo.nix, or the template in the pack that owns it.
 # ---------------------------------------------------------------------------
 
-FROM golang:1.23 AS build
+FROM golang:1.27 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

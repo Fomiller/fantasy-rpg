@@ -5,7 +5,7 @@
     golden-engine.url = "github:Fomiller/flake-hub?dir=golden-engine&ref=refs/tags/golden-engine-0.5.0";
     golden-base.url = "github:Fomiller/flake-hub?dir=golden-base&ref=refs/tags/golden-base-0.7.1";
     golden-github.url = "github:Fomiller/flake-hub?dir=golden-github&ref=refs/tags/golden-github-0.11.0";
-    golden-service.url = "github:Fomiller/flake-hub?dir=golden-service&ref=refs/tags/golden-service-0.6.0";
+    golden-service.url = "github:Fomiller/flake-hub?dir=golden-service&ref=refs/tags/golden-service-0.7.0";
     golden-docs.url = "github:Fomiller/flake-hub?dir=golden-docs&ref=refs/tags/golden-docs-0.2.0";
   };
 
@@ -24,7 +24,7 @@
         # Godot is left out: nixpkgs has no cached darwin build, so use the installed Godot.app.
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            go
+            go_1_27
             gopls
             buf
             protobuf
