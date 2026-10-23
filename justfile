@@ -83,9 +83,11 @@ client:
     {{godot}} --path client/godot --editor
 
 client-run:
+    {{godot}} --headless --path client/godot --import
     {{godot}} --path client/godot
 
 client-online:
+    {{godot}} --headless --path client/godot --import
     {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws
 
 client-check:
