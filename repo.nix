@@ -44,5 +44,6 @@
     "client:\n    {{godot}} --path client/godot --editor"
     "client-run:\n    {{godot}} --path client/godot"
     "client-check:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --quit-after 5"
+    "client-test:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --script res://tests/player_test.gd"
   ];
 }

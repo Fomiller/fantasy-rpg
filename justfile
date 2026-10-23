@@ -76,3 +76,7 @@ client-run:
 client-check:
     {{godot}} --headless --path client/godot --import
     {{godot}} --headless --path client/godot --quit-after 5
+
+client-test:
+    {{godot}} --headless --path client/godot --import
+    {{godot}} --headless --path client/godot --script res://tests/player_test.gd
