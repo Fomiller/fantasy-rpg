@@ -5,3 +5,4 @@
 # Design
 
 - [Loot](design/loot.md)
+- [Enemy AI](design/enemy-ai.md)
