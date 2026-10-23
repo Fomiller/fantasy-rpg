@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fantasy-rpg
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: world-server
+  namespace: fantasy-rpg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: world-server
+  template:
+    metadata:
+      labels:
+        app: world-server
+    spec:
+      containers:
+        - name: world-server
+          image: fantasy-rpg/world-server:dev
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: world-server
+  namespace: fantasy-rpg
+spec:
+  selector:
+    app: world-server
+  ports:
+    - port: 8080
+      targetPort: 8080

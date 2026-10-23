@@ -1,0 +1,20 @@
+# CAVE_ID is replaced by `just cave-start <id>`.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cave-CAVE_ID
+  namespace: fantasy-rpg
+  labels:
+    app: cave-server
+    cave-id: "CAVE_ID"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: cave-server
+      image: fantasy-rpg/cave-server:dev
+      ports:
+        - containerPort: 8080
+      readinessProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
