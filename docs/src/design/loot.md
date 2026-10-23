@@ -183,12 +183,12 @@ First tables:
   - tables do not loop
   - every tier range has min at or below max
 
-## Open questions
+## Decisions for now
 
-These need a decision before or during FOM-102 and FOM-103:
+These can change once the game is playable. Until then:
 
-- Gold. Do we want a currency, or only items and materials?
-- Durability. Do items wear out?
-- Stash size. Is there a limit on what a player keeps?
-- Trading between players. Now, later, or never?
-- Gear you bring in. Is all of it at risk on death, or is some of it safe?
+- No gold. The economy is items and materials only.
+- No durability. Items do not wear out.
+- No stash limit yet. Add one when the stash is saved to the database.
+- No trading between players yet. Revisit after the stash exists.
+- All gear a player brings into a cave is at risk. Nothing is safe on death.
