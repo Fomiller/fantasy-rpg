@@ -1,0 +1,56 @@
+name: fantasy-rpg
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: fantasy
+      POSTGRES_PASSWORD: fantasy
+      POSTGRES_DB: fantasy
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "fantasy"]
+      interval: 2s
+      retries: 15
+
+  nats:
+    image: nats:2
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  world-server:
+    profiles: [full]
+    image: fantasy-rpg/world-server:dev
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BINARY: world-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  cave-server:
+    profiles: [full]
+    image: fantasy-rpg/cave-server:dev
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BINARY: cave-server
+    ports:
+      - "8081:8080"
+    depends_on:
+      - world-server
+
+volumes:
+  postgres-data:

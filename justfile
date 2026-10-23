@@ -7,6 +7,8 @@
 import? 'just/base.just'
 
 project := "fantasy-rpg"
+compose := "docker compose -f deploy/compose/compose.yaml"
+kube := "kubectl --context k3d-fantasy-rpg"
 
 fetch:
     curl -sSfL https://raw.githubusercontent.com/Fomiller/justfiles/refs/heads/main/base.just > just/base.just
@@ -26,5 +28,40 @@ lint:
 fmt:
     gofmt -w src
 
-dev:
+deps:
+    {{compose}} up -d --wait postgres nats
+
+dev: deps
     go run ./src/cmd/world-server
+
+up:
+    {{compose}} --profile full up -d --build --wait
+
+down:
+    {{compose}} --profile full down
+
+images:
+    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .
+    docker build -f deploy/docker/Dockerfile --build-arg BINARY=cave-server -t fantasy-rpg/cave-server:dev .
+
+k8s-up:
+    k3d cluster list fantasy-rpg >/dev/null 2>&1 || k3d cluster create fantasy-rpg --wait --kubeconfig-switch-context=false
+
+k8s-down:
+    k3d cluster delete fantasy-rpg
+
+deploy-local: k8s-up images
+    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev fantasy-rpg/cave-server:dev
+    {{kube}} apply -f deploy/kubernetes/world-server.yaml
+    {{kube}} -n fantasy-rpg rollout restart deployment/world-server
+    {{kube}} -n fantasy-rpg rollout status deployment/world-server
+
+cave-start id:
+    sed 's/CAVE_ID/{{id}}/g' deploy/kubernetes/cave-pod.yaml | {{kube}} apply -f -
+    {{kube}} -n fantasy-rpg wait --for=condition=Ready pod/cave-{{id}} --timeout=60s
+
+cave-stop id:
+    {{kube}} -n fantasy-rpg delete pod cave-{{id}}
+
+caves:
+    {{kube}} -n fantasy-rpg get pods -l app=cave-server
