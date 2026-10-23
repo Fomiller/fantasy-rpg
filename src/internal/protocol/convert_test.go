@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
@@ -53,7 +54,15 @@ func TestDamageAndJoined(t *testing.T) {
 	if d.GetSourceId() != 2 || d.GetTargetId() != 1 || d.GetAmount() != 10 || !d.GetKilled() {
 		t.Fatalf("damage = %v", d)
 	}
-	if id := Joined(5).GetJoined().GetPlayerId(); id != 5 {
-		t.Fatalf("joined player = %d, want 5", id)
+	cave := caves.Loop()
+	j := Joined(5, cave, cave.PlayerSpawns[0]).GetJoined()
+	if j.GetPlayerId() != 5 || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
+		t.Fatalf("joined = %v", j)
+	}
+	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetCave().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
+		t.Fatalf("joined spawn or exit wrong: %v", j)
+	}
+	if id := Extracted(5).GetExtracted().GetPlayerId(); id != 5 {
+		t.Fatalf("extracted player = %d, want 5", id)
 	}
 }

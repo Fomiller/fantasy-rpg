@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="PackedScene" path="res://scenes/test_room.tscn" id="2_room"]
+[ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 [ext_resource type="Script" path="res://scripts/server_connection.gd" id="4_connection"]
 
@@ -11,7 +11,8 @@ script = ExtResource("1_main")
 [node name="ServerConnection" type="Node" parent="."]
 script = ExtResource("4_connection")
 
-[node name="TestRoom" parent="." instance=ExtResource("2_room")]
+[node name="Cave" type="Node2D" parent="."]
+script = ExtResource("2_cave")
 
 [node name="Entities" type="Node2D" parent="."]
 

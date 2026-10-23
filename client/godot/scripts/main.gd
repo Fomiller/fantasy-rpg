@@ -5,8 +5,10 @@ const ATTACK_RANGE := 64.0
 
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
+const EXTRACTED_TEXT := "extracted · press E to go again"
 
 @onready var _connection: ServerConnection = $ServerConnection
+@onready var _cave: Cave = $Cave
 @onready var _player: Player = $Player
 @onready var _ghost: Node2D = $ServerGhost
 @onready var _entities: Node2D = $Entities
@@ -14,6 +16,7 @@ const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
+var _extract_progress := 0.0
 
 
 func _ready() -> void:
@@ -22,10 +25,15 @@ func _ready() -> void:
 	_connection.disconnected.connect(_on_disconnected)
 	_connection.snapshot_received.connect(_on_snapshot)
 	_connection.damage_received.connect(_on_damage)
+	_connection.extracted.connect(_on_extracted)
 	_on_disconnected()
 
 
 func _physics_process(_delta: float) -> void:
+	if _connection.has_extracted:
+		if Input.is_action_just_pressed("interact"):
+			_connection.rejoin()
+		return
 	_connection.send_move(_player.get_move_input())
 	if Input.is_action_just_pressed("attack"):
 		_attack()
@@ -52,6 +60,10 @@ func nearest_enemy(from: Vector2) -> EntityView:
 
 
 func _on_joined(player_id: int) -> void:
+	_cave.build(_connection.cave)
+	_player.position = _connection.spawn
+	_player.velocity = Vector2.ZERO
+	_player.visible = true
 	_player.revive()
 	_status.text = "player %d" % player_id
 
@@ -61,7 +73,7 @@ func _on_disconnected() -> void:
 	for view: EntityView in _views.values():
 		view.queue_free()
 	_views.clear()
-	_status.text = "offline"
+	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
 # The ghost marks where the server thinks this player is. Until prediction and
@@ -75,6 +87,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_ghost.position = Vector2(pos.get_x(), pos.get_y())
 			_ghost.visible = true
 			_health = entity.get_health()
+			_extract_progress = entity.get_extract_progress()
 			if _health <= 0 and _player.alive:
 				_player.die()
 			continue
@@ -91,6 +104,8 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_views.erase(id)
 	var hp := "%d hp" % _health if _health > 0 else "dead"
 	_status.text = "player %d · %s · tick %d" % [_connection.player_id, hp, snapshot.get_tick()]
+	if _extract_progress > 0.0:
+		_status.text += " · extracting %d%%" % int(_extract_progress * 100)
 
 
 func _spawn_view(kind: int) -> EntityView:
@@ -112,3 +127,13 @@ func _on_damage(event: GameV1.DamageEvent) -> void:
 		view.flash()
 	if event.get_killed():
 		print("player %d killed %d" % [event.get_source_id(), event.get_target_id()])
+
+
+func _on_extracted(player_id: int) -> void:
+	if player_id != _connection.player_id:
+		print("player %d extracted" % player_id)
+		return
+	_player.alive = false
+	_player.visible = false
+	_ghost.visible = false
+	_status.text = EXTRACTED_TEXT

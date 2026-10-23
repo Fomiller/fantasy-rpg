@@ -3,6 +3,7 @@ extends Node
 
 signal joined(player_id: int)
 signal disconnected
+signal extracted(player_id: int)
 signal snapshot_received(snapshot: GameV1.WorldSnapshot)
 signal damage_received(event: GameV1.DamageEvent)
 
@@ -13,6 +14,10 @@ const RETRY_SECONDS := 2.0
 @export var player_name := "player"
 
 var player_id := 0
+var cave: GameV1.CaveLayout
+var spawn := Vector2.ZERO
+# Set once this player leaves through the exit. Stops the reconnect loop until rejoin().
+var has_extracted := false
 
 var _socket := WebSocketPeer.new()
 var _url := DEFAULT_URL
@@ -34,6 +39,11 @@ func _exit_tree() -> void:
 
 func is_joined() -> bool:
 	return player_id != 0
+
+
+func rejoin() -> void:
+	has_extracted = false
+	_connect()
 
 
 # Only sends when the direction changes. The server keeps applying the last
@@ -80,6 +90,8 @@ func _process(delta: float) -> void:
 				_last_direction = Vector2.INF
 				print("disconnected from %s (%d)" % [_url, _socket.get_close_code()])
 				disconnected.emit()
+			if has_extracted:
+				return
 			_retry_in -= delta
 			if _retry_in <= 0.0:
 				_connect()
@@ -105,13 +117,21 @@ func _handle(bytes: PackedByteArray) -> void:
 		push_warning("dropped a server message that did not decode")
 		return
 	if msg.has_joined():
-		player_id = msg.get_joined().get_player_id()
-		print("joined %s as player %d" % [_url, player_id])
+		var accepted := msg.get_joined()
+		player_id = accepted.get_player_id()
+		cave = accepted.get_cave()
+		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())
+		print("joined %s as player %d in %s" % [_url, player_id, cave.get_name()])
 		joined.emit(player_id)
 	elif msg.has_snapshot():
 		snapshot_received.emit(msg.get_snapshot())
 	elif msg.has_damage():
 		damage_received.emit(msg.get_damage())
+	elif msg.has_extracted():
+		var id := msg.get_extracted().get_player_id()
+		if id == player_id:
+			has_extracted = true
+		extracted.emit(id)
 
 
 func _new_message() -> GameV1.ClientMessage:
