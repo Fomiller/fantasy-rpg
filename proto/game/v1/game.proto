@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+// One file on purpose: Godobuf cannot resolve imports laid out the way buf requires.
+package game.v1;
+
+// Envelopes. Every WebSocket frame carries exactly one of these.
+
+message ClientMessage {
+  uint32 protocol_version = 1;
+  oneof payload {
+    JoinRequest join = 10;
+    MoveInput move = 11;
+    AttackRequest attack = 12;
+  }
+}
+
+message ServerMessage {
+  uint32 protocol_version = 1;
+  oneof payload {
+    JoinAccepted joined = 10;
+    WorldSnapshot snapshot = 11;
+    DamageEvent damage = 12;
+    InventoryUpdated inventory = 13;
+  }
+}
+
+message Vec2 {
+  float x = 1;
+  float y = 2;
+}
+
+// Player
+
+message JoinRequest {
+  string name = 1;
+}
+
+message JoinAccepted {
+  uint64 player_id = 1;
+}
+
+message MoveInput {
+  uint32 seq = 1;
+  Vec2 direction = 2;
+}
+
+// Combat
+
+message AttackRequest {
+  uint32 seq = 1;
+  uint64 target_id = 2;
+  string ability_id = 3;
+}
+
+message DamageEvent {
+  uint64 source_id = 1;
+  uint64 target_id = 2;
+  int32 amount = 3;
+  int32 target_health = 4;
+  bool killed = 5;
+}
+
+// World
+
+enum EntityKind {
+  ENTITY_KIND_UNSPECIFIED = 0;
+  ENTITY_KIND_PLAYER = 1;
+  ENTITY_KIND_ENEMY = 2;
+}
+
+message EntityState {
+  uint64 id = 1;
+  EntityKind kind = 2;
+  Vec2 position = 3;
+  Vec2 velocity = 4;
+  int32 health = 5;
+}
+
+message WorldSnapshot {
+  uint64 tick = 1;
+  repeated EntityState entities = 2;
+}
+
+// Inventory
+
+message Item {
+  string id = 1;
+  string item_def_id = 2;
+  uint32 quantity = 3;
+}
+
+message InventoryUpdated {
+  repeated Item items = 1;
+}
