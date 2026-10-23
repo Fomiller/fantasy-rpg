@@ -80,3 +80,13 @@ client-check:
 client-test:
     {{godot}} --headless --path client/godot --import
     {{godot}} --headless --path client/godot --script res://tests/player_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/proto_test.gd
+
+proto:
+    buf lint
+    buf generate
+    {{godot}} --headless --path client/godot -s res://addons/godobuf/godobuf_cmdln.gd --input={{justfile_directory()}}/proto/game/v1/game.proto --output={{justfile_directory()}}/client/godot/gen/game_v1.gd --class_name=GameV1
+
+proto-fixtures:
+    go test ./src/internal/protocol -run TestServerSnapshotFixture -update
+    UPDATE=1 {{godot}} --headless --path client/godot --script res://tests/proto_test.gd

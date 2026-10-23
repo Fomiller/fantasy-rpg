@@ -91,3 +91,24 @@ The Godot editor runs a GDScript language server on port 6005 while it is open.
 4. In Neovim, turn on the `gdscript` LSP config from nvim-lspconfig (`vim.lsp.enable("gdscript")`), and install the `gdscript` treesitter parser.
 
 Use Neovim for code. Use the Godot editor for scenes, nodes and the debugger.
+
+## Protocol
+
+Client and servers talk in protobuf. The messages live in `proto/game/v1/game.proto`. Every WebSocket frame is one `ClientMessage` or one `ServerMessage`. Client commands (`MoveInput`, `AttackRequest`) and server results (`WorldSnapshot`, `DamageEvent`, `InventoryUpdated`) are kept apart. Never trust IDs or damage values sent by the client.
+
+```sh
+just proto            # lint, then generate Go and GDScript code
+just proto-fixtures   # rewrite the test fixtures after a message change
+```
+
+- Go code goes to `gen/go/game/v1`, made by `buf` and `protoc-gen-go`.
+- GDScript goes to `client/godot/gen/game_v1.gd`, made by [Godobuf](https://github.com/oniksan/godobuf), vendored in `client/godot/addons/godobuf`. Use it as `GameV1.ClientMessage` and so on.
+- Both are committed. Run `just proto` after editing the `.proto` file.
+
+Godobuf limits:
+
+- Keep all messages in one file. Godobuf cannot resolve imports laid out the way buf requires.
+- Enum values lose their prefix in GDScript: `ENTITY_KIND_PLAYER` in Go is `GameV1.EntityKind.PLAYER`.
+- No default values in the `.proto` file.
+
+`proto/testdata` holds bytes written by Go and read by GDScript, and the other way round. `just test` and `just client-test` both use them, so the two sides cannot drift apart without a test failing.
