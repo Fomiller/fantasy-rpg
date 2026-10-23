@@ -1,0 +1,133 @@
+package sim
+
+import (
+	"testing"
+	"time"
+
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
+)
+
+func gear(slot items.Slot, stats map[items.Stat]int) items.Instance {
+	return items.Instance{Name: string(slot), Slot: slot, Base: stats, Quantity: 1}
+}
+
+func equip(t *testing.T, w *World, id EntityID, inst items.Instance) {
+	t.Helper()
+	if _, _, err := w.Equip(id, inst); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWeaponSetsAttackDamage(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	player := w.AddPlayer(Vec2{})
+	enemy := w.AddEnemy(Vec2{40, 0}, 100)
+
+	w.Submit(AttackCommand{Player: player, Seq: 1, Target: enemy})
+	if ev := w.Step(dt).Damage; len(ev) != 1 || ev[0].Amount != DefaultConfig().AttackDamage {
+		t.Fatalf("unarmed hit = %+v", ev)
+	}
+
+	equip(t, w, player, gear(items.Weapon, map[items.Stat]int{items.Damage: 17}))
+	steps(w, 20)
+	w.Submit(AttackCommand{Player: player, Seq: 2, Target: enemy})
+	if ev := w.Step(dt).Damage; len(ev) != 1 || ev[0].Amount != 17 {
+		t.Fatalf("armed hit = %+v", ev)
+	}
+}
+
+func TestEquipReplacesSlot(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	first := gear(items.Head, map[items.Stat]int{items.Armor: 2})
+	first.ID = "first"
+	if _, had, _ := w.Equip(id, first); had {
+		t.Fatal("empty slot reported an old item")
+	}
+	old, had, err := w.Equip(id, gear(items.Head, map[items.Stat]int{items.Armor: 5}))
+	if err != nil || !had || old.ID != "first" {
+		t.Fatalf("old = %+v, %v, %v", old, had, err)
+	}
+	if p, _ := w.Player(id); p.Equipment[items.Head].Base[items.Armor] != 5 {
+		t.Fatalf("head = %+v", p.Equipment[items.Head])
+	}
+}
+
+func TestEquipRejects(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	if _, _, err := w.Equip(id, gear(items.Consumable, nil)); err == nil {
+		t.Fatal("equipped a potion")
+	}
+	if _, _, err := w.Equip(999, gear(items.Head, nil)); err == nil {
+		t.Fatal("equipped on a missing player")
+	}
+	w.players[id].Health = 0
+	if _, _, err := w.Equip(id, gear(items.Head, nil)); err == nil {
+		t.Fatal("dead player equipped")
+	}
+}
+
+func TestMaxHealthGearNeverHeals(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	w.players[id].Health = 50
+
+	equip(t, w, id, gear(items.Trinket, map[items.Stat]int{items.MaxHealth: 20}))
+	if p, _ := w.Player(id); p.MaxHealth != 120 || p.Health != 70 {
+		t.Fatalf("health %d/%d, want 70/120", p.Health, p.MaxHealth)
+	}
+	equip(t, w, id, gear(items.Trinket, nil))
+	if p, _ := w.Player(id); p.MaxHealth != 100 || p.Health != 50 {
+		t.Fatalf("health %d/%d, want 50/100", p.Health, p.MaxHealth)
+	}
+}
+
+func TestGearStats(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	id := w.AddPlayer(Vec2{})
+	p := w.players[id]
+	equip(t, w, id, gear(items.Hands, map[items.Stat]int{items.AttackSpeed: 100, items.Armor: 50}))
+	equip(t, w, id, gear(items.Feet, map[items.Stat]int{items.MoveSpeed: 50, items.ExtractSpeed: 100}))
+	equip(t, w, id, gear(items.Trinket, map[items.Stat]int{items.DetectRadius: 50}))
+
+	if got := w.attackCooldown(p); got != 250*time.Millisecond {
+		t.Errorf("cooldown = %v, want 250ms", got)
+	}
+	if got := w.damageTaken(p, 10); got != 5 {
+		t.Errorf("damage taken = %d, want 5", got)
+	}
+	if got := w.maxSpeed(p); got != 264 {
+		t.Errorf("max speed = %v, want 264 (capped at +20%%)", got)
+	}
+	if got := w.extractTime(p); got != 1500*time.Millisecond {
+		t.Errorf("extract time = %v, want 1.5s", got)
+	}
+	if got := w.detectRadius(p); got != 300 {
+		t.Errorf("detect radius = %v, want 300", got)
+	}
+}
+
+func TestArmorNeverBlocksAllDamage(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	id := w.AddPlayer(Vec2{})
+	equip(t, w, id, gear(items.Chest, map[items.Stat]int{items.Armor: 10000}))
+	if got := w.damageTaken(w.players[id], 10); got != 1 {
+		t.Fatalf("damage taken = %d, want 1", got)
+	}
+}
+
+func TestLoudGearIsSpottedFarther(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	id := w.AddPlayer(Vec2{250, 0})
+	enemy := w.AddEnemy(Vec2{}, 30)
+	w.Step(dt)
+	if e, _ := w.Enemy(enemy); e.State != EnemyPatrol {
+		t.Fatal("enemy saw a player outside its radius")
+	}
+	equip(t, w, id, gear(items.Trinket, map[items.Stat]int{items.DetectRadius: 50}))
+	w.Step(dt)
+	if e, _ := w.Enemy(enemy); e.State != EnemyChase {
+		t.Fatal("enemy missed a player wearing a beacon")
+	}
+}

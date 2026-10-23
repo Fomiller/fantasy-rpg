@@ -1,0 +1,14 @@
+[
+  { "id": "sharp", "name": "Sharp", "type": "prefix", "group": "damage", "stat": "damage", "slots": ["weapon"], "weight": 100,
+    "tiers": [{ "level": 1, "range": [1, 2] }, { "level": 5, "range": [3, 4] }, { "level": 10, "range": [5, 7] }] },
+  { "id": "quick", "name": "Quick", "type": "prefix", "group": "attack_speed", "stat": "attack_speed", "slots": ["weapon", "hands"], "weight": 80,
+    "tiers": [{ "level": 1, "range": [3, 5] }, { "level": 5, "range": [6, 9] }, { "level": 10, "range": [10, 14] }] },
+  { "id": "sturdy", "name": "Sturdy", "type": "prefix", "group": "armor", "stat": "armor", "slots": ["head", "chest", "hands", "feet"], "weight": 100,
+    "tiers": [{ "level": 1, "range": [2, 4] }, { "level": 5, "range": [5, 8] }, { "level": 10, "range": [9, 14] }] },
+  { "id": "of_vigor", "name": "of Vigor", "type": "suffix", "group": "max_health", "stat": "max_health", "slots": ["weapon", "head", "chest", "hands", "feet", "trinket"], "weight": 100,
+    "tiers": [{ "level": 1, "range": [5, 10] }, { "level": 5, "range": [11, 20] }, { "level": 10, "range": [21, 35] }] },
+  { "id": "of_haste", "name": "of Haste", "type": "suffix", "group": "move_speed", "stat": "move_speed", "slots": ["feet"], "weight": 60,
+    "tiers": [{ "level": 1, "range": [2, 4] }, { "level": 5, "range": [5, 7] }, { "level": 10, "range": [8, 10] }] },
+  { "id": "of_escape", "name": "of Escape", "type": "suffix", "group": "extract_speed", "stat": "extract_speed", "slots": ["trinket", "feet"], "weight": 60,
+    "tiers": [{ "level": 1, "range": [5, 10] }, { "level": 5, "range": [11, 20] }, { "level": 10, "range": [21, 30] }] }
+]

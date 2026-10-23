@@ -1,0 +1,30 @@
+[
+  { "id": "cave1_grunt", "rolls": [1, 1], "entries": [
+    { "weight": 60, "nothing": true },
+    { "weight": 25, "item": "health_potion" },
+    { "weight": 10, "table": "cave1_gear" },
+    { "weight": 5, "item": "iron_ore", "quantity": [1, 3] }
+  ] },
+  { "id": "cave1_elite", "rolls": [2, 2], "entries": [
+    { "weight": 10, "nothing": true },
+    { "weight": 30, "item": "health_potion" },
+    { "weight": 50, "table": "cave1_gear" },
+    { "weight": 10, "item": "iron_ore", "quantity": [2, 5] }
+  ] },
+  { "id": "cave1_chest", "rolls": [2, 3], "entries": [
+    { "weight": 30, "item": "health_potion" },
+    { "weight": 50, "table": "cave1_gear" },
+    { "weight": 20, "item": "iron_ore", "quantity": [3, 6] }
+  ] },
+  { "id": "cave1_gear", "rolls": [1, 1], "entries": [
+    { "weight": 20, "item": "iron_sword" },
+    { "weight": 10, "item": "war_axe" },
+    { "weight": 15, "item": "leather_cap" },
+    { "weight": 8, "item": "iron_helm" },
+    { "weight": 15, "item": "leather_vest" },
+    { "weight": 12, "item": "leather_gloves" },
+    { "weight": 12, "item": "leather_boots" },
+    { "weight": 8, "item": "bone_charm" },
+    { "weight": 1, "item": "lantern_of_the_deep" }
+  ] }
+]

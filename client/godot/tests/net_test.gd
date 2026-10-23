@@ -21,6 +21,9 @@ func _run() -> void:
 		_finish()
 		return
 
+	var hud: RichTextLabel = main.get_node("HUD/Equipment")
+	_check(await _until(func() -> bool: return "Rusty Sword" in hud.text), "HUD shows the starter kit")
+
 	var latest := {"snapshot": null}
 	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
 	_check(await _until(func() -> bool: return latest.snapshot != null), "receives world snapshots")

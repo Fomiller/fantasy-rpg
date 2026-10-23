@@ -2,6 +2,7 @@ package sim
 
 import (
 	"maps"
+	"math"
 	"slices"
 	"time"
 )
@@ -97,12 +98,13 @@ func (w *World) chase(e *Enemy, p *Player, secs float64) (DamageEvent, bool) {
 	if dist > w.cfg.EnemyAttackRange || e.cooldown > 0 {
 		return DamageEvent{}, false
 	}
-	p.Health = max(p.Health-w.cfg.EnemyDamage, 0)
+	dmg := w.damageTaken(p, w.cfg.EnemyDamage)
+	p.Health = max(p.Health-dmg, 0)
 	e.cooldown = w.cfg.EnemyAttackCooldown
 	return DamageEvent{
 		Source:       e.ID,
 		Target:       p.ID,
-		Amount:       w.cfg.EnemyDamage,
+		Amount:       dmg,
 		TargetHealth: p.Health,
 		Killed:       p.Health == 0,
 	}, true
@@ -111,13 +113,13 @@ func (w *World) chase(e *Enemy, p *Player, secs float64) (DamageEvent, bool) {
 // spot returns the nearest live player the enemy can see, or nil.
 func (w *World) spot(e *Enemy) *Player {
 	var best *Player
-	bestDist := w.cfg.DetectRadius
+	bestDist := math.Inf(1)
 	for _, p := range w.players {
-		if p.Health <= 0 || !w.canSee(e.Pos, p.Pos) {
+		d := e.Pos.DistanceTo(p.Pos)
+		if p.Health <= 0 || d > w.detectRadius(p) || !w.canSee(e.Pos, p.Pos) {
 			continue
 		}
-		d := e.Pos.DistanceTo(p.Pos)
-		if d < bestDist || (d == bestDist && best != nil && p.ID < best.ID) {
+		if d < bestDist || (d == bestDist && p.ID < best.ID) {
 			best, bestDist = p, d
 		}
 	}
