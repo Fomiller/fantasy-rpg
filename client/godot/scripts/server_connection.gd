@@ -4,6 +4,7 @@ extends Node
 signal joined(player_id: int)
 signal disconnected
 signal extracted(player_id: int)
+signal equipment_received(items: Array[GameV1.Item])
 signal snapshot_received(snapshot: GameV1.WorldSnapshot)
 signal damage_received(event: GameV1.DamageEvent)
 
@@ -127,6 +128,8 @@ func _handle(bytes: PackedByteArray) -> void:
 		snapshot_received.emit(msg.get_snapshot())
 	elif msg.has_damage():
 		damage_received.emit(msg.get_damage())
+	elif msg.has_equipment():
+		equipment_received.emit(msg.get_equipment().get_items())
 	elif msg.has_extracted():
 		var id := msg.get_extracted().get_player_id()
 		if id == player_id:

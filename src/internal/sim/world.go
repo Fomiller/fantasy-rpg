@@ -8,6 +8,8 @@ import (
 	"math"
 	"slices"
 	"time"
+
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
 type EntityID uint64
@@ -34,6 +36,9 @@ type Config struct {
 	EnemyAttackCooldown time.Duration
 
 	ExtractTime time.Duration
+
+	ArmorScale   int
+	MoveSpeedCap int
 }
 
 // DefaultConfig matches the movement values on the Godot Player node.
@@ -61,6 +66,9 @@ func DefaultConfig() Config {
 		EnemyAttackCooldown: time.Second,
 
 		ExtractTime: 3 * time.Second,
+
+		ArmorScale:   50,
+		MoveSpeedCap: 20,
 	}
 }
 
@@ -68,12 +76,15 @@ type Player struct {
 	ID           EntityID
 	Pos, Vel     Vec2
 	Health       int
+	MaxHealth    int
+	Equipment    map[items.Slot]items.Instance
 	LastInputSeq uint32
 	input        Vec2
 	cooldown     time.Duration
 	// ExtractProgress runs from 0 to 1 while the player stands in the extraction zone.
 	ExtractProgress float64
 	extracting      time.Duration
+	stats           map[items.Stat]int
 }
 
 type Enemy struct {
@@ -140,7 +151,14 @@ func (w *World) SetExtraction(r Rect) {
 
 func (w *World) AddPlayer(pos Vec2) EntityID {
 	w.nextID++
-	w.players[w.nextID] = &Player{ID: w.nextID, Pos: pos, Health: w.cfg.PlayerHealth}
+	w.players[w.nextID] = &Player{
+		ID:        w.nextID,
+		Pos:       pos,
+		Health:    w.cfg.PlayerHealth,
+		MaxHealth: w.cfg.PlayerHealth,
+		Equipment: map[items.Slot]items.Instance{},
+		stats:     map[items.Stat]int{},
+	}
 	return w.nextID
 }
 
@@ -233,8 +251,9 @@ func (w *World) stepExtraction(dt time.Duration) []EntityID {
 			continue
 		}
 		p.extracting += dt
-		p.ExtractProgress = min(p.extracting.Seconds()/w.cfg.ExtractTime.Seconds(), 1)
-		if p.extracting >= w.cfg.ExtractTime {
+		need := w.extractTime(p)
+		p.ExtractProgress = min(p.extracting.Seconds()/need.Seconds(), 1)
+		if p.extracting >= need {
 			delete(w.players, id)
 			out = append(out, id)
 		}
@@ -268,12 +287,13 @@ func (w *World) applyAttack(c AttackCommand) (DamageEvent, bool) {
 	if !ok || e.Health <= 0 || p.Pos.DistanceTo(e.Pos) > w.cfg.AttackRange {
 		return DamageEvent{}, false
 	}
-	e.Health = max(e.Health-w.cfg.AttackDamage, 0)
-	p.cooldown = w.cfg.AttackCooldown
+	dmg := w.attackDamage(p)
+	e.Health = max(e.Health-dmg, 0)
+	p.cooldown = w.attackCooldown(p)
 	return DamageEvent{
 		Source:       p.ID,
 		Target:       e.ID,
-		Amount:       w.cfg.AttackDamage,
+		Amount:       dmg,
 		TargetHealth: e.Health,
 		Killed:       e.Health == 0,
 	}, true
@@ -286,7 +306,7 @@ func (w *World) movePlayer(p *Player, dt time.Duration) {
 	}
 	secs := dt.Seconds()
 	if p.input != (Vec2{}) {
-		p.Vel = p.Vel.MoveToward(p.input.Scale(w.cfg.MaxSpeed), w.cfg.Acceleration*secs)
+		p.Vel = p.Vel.MoveToward(p.input.Scale(w.maxSpeed(p)), w.cfg.Acceleration*secs)
 	} else {
 		p.Vel = p.Vel.MoveToward(Vec2{}, w.cfg.Friction*secs)
 	}

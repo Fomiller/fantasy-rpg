@@ -1,0 +1,22 @@
+[
+  { "id": "rusty_sword", "name": "Rusty Sword", "slot": "weapon", "base": { "damage": [9, 11] }, "min_level": 1, "stack": 1, "value": 5 },
+  { "id": "iron_sword", "name": "Iron Sword", "slot": "weapon", "base": { "damage": [11, 15] }, "min_level": 1, "stack": 1, "value": 20 },
+  { "id": "war_axe", "name": "War Axe", "slot": "weapon", "base": { "damage": [15, 20] }, "min_level": 3, "stack": 1, "value": 35 },
+  { "id": "leather_cap", "name": "Leather Cap", "slot": "head", "base": { "armor": [2, 3] }, "min_level": 1, "stack": 1, "value": 8 },
+  { "id": "iron_helm", "name": "Iron Helm", "slot": "head", "base": { "armor": [4, 6] }, "min_level": 3, "stack": 1, "value": 25 },
+  { "id": "leather_vest", "name": "Leather Vest", "slot": "chest", "base": { "armor": [4, 6] }, "min_level": 1, "stack": 1, "value": 12 },
+  { "id": "leather_gloves", "name": "Leather Gloves", "slot": "hands", "base": { "armor": [1, 2] }, "min_level": 1, "stack": 1, "value": 6 },
+  { "id": "leather_boots", "name": "Leather Boots", "slot": "feet", "base": { "armor": [1, 3] }, "min_level": 1, "stack": 1, "value": 6 },
+  { "id": "bone_charm", "name": "Bone Charm", "slot": "trinket", "base": { "max_health": [5, 10] }, "min_level": 1, "stack": 1, "value": 15 },
+  { "id": "health_potion", "name": "Health Potion", "slot": "consumable", "base": { "heal": [30, 30] }, "min_level": 1, "stack": 5, "value": 10 },
+  { "id": "iron_ore", "name": "Iron Ore", "slot": "material", "min_level": 1, "stack": 20, "value": 3 },
+  {
+    "id": "lantern_of_the_deep", "name": "Lantern of the Deep", "slot": "trinket", "min_level": 1, "stack": 1, "value": 150,
+    "unique": true,
+    "fixed": [
+      { "name": "Guiding Light", "stat": "extract_speed", "range": [25, 25] },
+      { "name": "Warmth", "stat": "max_health", "range": [10, 20] },
+      { "name": "Beacon", "stat": "detect_radius", "range": [20, 20] }
+    ]
+  }
+]

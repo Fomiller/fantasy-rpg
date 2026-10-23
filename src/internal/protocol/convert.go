@@ -1,8 +1,12 @@
 package protocol
 
 import (
+	"maps"
+	"slices"
+
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
@@ -58,6 +62,7 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 			Position:        vec(p.Pos),
 			Velocity:        vec(p.Vel),
 			Health:          int32(p.Health),
+			MaxHealth:       int32(p.MaxHealth),
 			ExtractProgress: float32(p.ExtractProgress),
 		})
 	}
@@ -81,6 +86,37 @@ func Damage(ev sim.DamageEvent) *gamev1.ServerMessage {
 		TargetHealth: int32(ev.TargetHealth),
 		Killed:       ev.Killed,
 	}}}
+}
+
+// Equipment lists a player's gear in slot order, so the client can show it
+// the same way every time.
+func Equipment(p sim.Player) *gamev1.ServerMessage {
+	msg := &gamev1.EquipmentUpdated{}
+	for _, slot := range items.GearSlots {
+		if inst, ok := p.Equipment[slot]; ok {
+			msg.Items = append(msg.Items, Item(inst))
+		}
+	}
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Equipment{Equipment: msg}}
+}
+
+func Item(inst items.Instance) *gamev1.Item {
+	out := &gamev1.Item{
+		Id:        inst.ID,
+		ItemDefId: inst.DefID,
+		Quantity:  uint32(inst.Quantity),
+		Name:      inst.Name,
+		Slot:      string(inst.Slot),
+		Rarity:    gamev1.Rarity(inst.Rarity + 1),
+		Level:     uint32(inst.Level),
+	}
+	for _, s := range slices.Sorted(maps.Keys(inst.Base)) {
+		out.Base = append(out.Base, &gamev1.ItemStat{Stat: string(s), Value: int32(inst.Base[s])})
+	}
+	for _, a := range inst.Affixes {
+		out.Affixes = append(out.Affixes, &gamev1.ItemAffix{Name: a.Name, Stat: string(a.Stat), Value: int32(a.Value), Tier: uint32(a.Tier)})
+	}
+	return out
 }
 
 func rect(r sim.Rect) *gamev1.Rect {

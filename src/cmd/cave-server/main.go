@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
@@ -43,7 +45,11 @@ func run() error {
 
 	cave := caves.Loop()
 	world := cave.NewWorld(sim.DefaultConfig())
-	game := server.New(world, cave, slog.Default())
+	seed, err := lootSeed()
+	if err != nil {
+		return err
+	}
+	game := server.New(world, cave, items.NewRoller(items.Default(), seed), slog.Default())
 	defer game.Close()
 
 	loop := &tick.Loop{
@@ -73,7 +79,7 @@ func run() error {
 		}
 	}()
 
-	slog.Info("cave-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name)
+	slog.Info("cave-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed)
 	go func() { errc <- loop.Run(ctx) }()
 
 	select {
@@ -99,4 +105,17 @@ func tickRate() (int, error) {
 		return 0, errors.New("TICK_RATE must be a positive integer")
 	}
 	return rate, nil
+}
+
+// lootSeed comes from LOOT_SEED to replay a run, or is random. It is logged
+// on start either way.
+func lootSeed() (uint64, error) {
+	if v := os.Getenv("LOOT_SEED"); v != "" {
+		seed, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return 0, errors.New("LOOT_SEED must be a whole number")
+		}
+		return seed, nil
+	}
+	return rand.Uint64(), nil
 }

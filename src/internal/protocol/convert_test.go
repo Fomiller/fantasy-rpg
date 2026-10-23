@@ -5,6 +5,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
@@ -64,5 +65,35 @@ func TestDamageAndJoined(t *testing.T) {
 	}
 	if id := Extracted(5).GetExtracted().GetPlayerId(); id != 5 {
 		t.Fatalf("extracted player = %d, want 5", id)
+	}
+}
+
+func TestItemAndEquipment(t *testing.T) {
+	r := items.NewRoller(items.Default(), 1)
+	sword, err := r.Make("iron_sword", 3, items.Rare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vest, _ := r.Make("leather_vest", 1, items.Common)
+
+	w := sim.NewWorld(sim.DefaultConfig(), nil)
+	id := w.AddPlayer(sim.Vec2{})
+	// Equip the vest first to show the message follows slot order, not equip order.
+	for _, inst := range []items.Instance{vest, sword} {
+		if _, _, err := w.Equip(id, inst); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, _ := w.Player(id)
+	got := Equipment(p).GetEquipment().GetItems()
+	if len(got) != 2 || got[0].GetSlot() != "weapon" || got[1].GetSlot() != "chest" {
+		t.Fatalf("equipment = %v", got)
+	}
+	it := got[0]
+	if it.GetId() != sword.ID || it.GetName() != "Iron Sword" || it.GetRarity() != gamev1.Rarity_RARITY_RARE || it.GetLevel() != 3 {
+		t.Fatalf("item = %v", it)
+	}
+	if len(it.GetAffixes()) != len(sword.Affixes) || it.GetBase()[0].GetStat() != "damage" || it.GetBase()[0].GetValue() != int32(sword.Base[items.Damage]) {
+		t.Fatalf("item stats = %v", it)
 	}
 }

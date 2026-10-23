@@ -46,7 +46,7 @@ and FOM-103 (inventory) build on it.
 | Common | 0 | 700 | grey |
 | Uncommon | 1 | 220 | green |
 | Rare | 2 to 3 | 70 | blue |
-| Epic | 4 | 10 | purple |
+| Epic | 4, or as many as the slot allows | 10 | purple |
 | Unique | fixed | own table | orange |
 
 Weights are out of 1000. A drop source can scale them. For example, an elite
@@ -89,6 +89,24 @@ First affix pool:
 Move speed has a hard cap of +20% total, so enemies can still catch up with
 a player.
 
+## What stats do
+
+Stats from all equipped items add up. The sim applies them like this:
+
+| Stat | Effect |
+| -- | -- |
+| `damage` | With a weapon, attack damage is the damage stat. Without one, it is 10 plus the stat |
+| `attack_speed` | +N% attacks per second. +100% halves the cooldown |
+| `armor` | Each hit is scaled by 50 / (50 + armor), so 50 armor halves it. A hit always does at least 1 |
+| `max_health` | Adds to the base 100. Swapping gear moves current health by the same amount, so it never heals |
+| `move_speed` | +N% top speed, capped at +20% |
+| `extract_speed` | +N% extraction speed. +100% halves the time in the exit zone |
+| `detect_radius` | Enemies notice the player N% farther away. A downside stat for uniques |
+| `heal` | Health a consumable gives back. Used by FOM-103 |
+
+Every player gets a Common Rusty Sword and Leather Vest on join. This is a
+stand-in until the stash can carry gear into a run.
+
 ## How one item is rolled
 
 1. Pick an entry from the drop table (see below). If it is an item, go on.
@@ -97,6 +115,7 @@ a player.
 3. Roll each base stat once in its range.
 4. Roll rarity with the source's weights. Skip for consumables and materials.
 5. Roll the affix count for that rarity. Rare picks 2 or 3, half and half.
+   If the pool for the slot runs out first, the item keeps what it has.
 6. Pick affixes one at a time by weight. Skip any affix whose group is
    taken, whose type is full, or that cannot roll on this slot.
 7. For each affix, use the highest tier the item level allows. Roll a whole

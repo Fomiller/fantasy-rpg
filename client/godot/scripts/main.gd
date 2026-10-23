@@ -13,9 +13,11 @@ const EXTRACTED_TEXT := "extracted · press E to go again"
 @onready var _ghost: Node2D = $ServerGhost
 @onready var _entities: Node2D = $Entities
 @onready var _status: Label = $HUD/Status
+@onready var _equipment: RichTextLabel = $HUD/Equipment
 
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
+var _max_health := 0
 var _extract_progress := 0.0
 
 
@@ -26,6 +28,7 @@ func _ready() -> void:
 	_connection.snapshot_received.connect(_on_snapshot)
 	_connection.damage_received.connect(_on_damage)
 	_connection.extracted.connect(_on_extracted)
+	_connection.equipment_received.connect(_on_equipment)
 	_on_disconnected()
 
 
@@ -73,6 +76,7 @@ func _on_disconnected() -> void:
 	for view: EntityView in _views.values():
 		view.queue_free()
 	_views.clear()
+	_equipment.text = ""
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
@@ -87,6 +91,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_ghost.position = Vector2(pos.get_x(), pos.get_y())
 			_ghost.visible = true
 			_health = entity.get_health()
+			_max_health = entity.get_max_health()
 			_extract_progress = entity.get_extract_progress()
 			if _health <= 0 and _player.alive:
 				_player.die()
@@ -102,7 +107,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 		if not seen.has(id):
 			_views[id].queue_free()
 			_views.erase(id)
-	var hp := "%d hp" % _health if _health > 0 else "dead"
+	var hp := "%d/%d hp" % [_health, _max_health] if _health > 0 else "dead"
 	_status.text = "player %d · %s · tick %d" % [_connection.player_id, hp, snapshot.get_tick()]
 	if _extract_progress > 0.0:
 		_status.text += " · extracting %d%%" % int(_extract_progress * 100)
@@ -137,3 +142,10 @@ func _on_extracted(player_id: int) -> void:
 	_player.visible = false
 	_ghost.visible = false
 	_status.text = EXTRACTED_TEXT
+
+
+func _on_equipment(items: Array[GameV1.Item]) -> void:
+	var lines: Array[String] = []
+	for item in items:
+		lines.append(ItemText.line(item))
+	_equipment.text = "\n".join(lines)

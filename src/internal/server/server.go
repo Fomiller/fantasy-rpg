@@ -17,6 +17,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -30,6 +31,7 @@ type Server struct {
 	world   *sim.World
 	cave    caves.Cave
 	spawns  int
+	loot    *items.Roller
 	log     *slog.Logger
 	inbox   chan func()
 	done    chan struct{}
@@ -42,10 +44,11 @@ type client struct {
 	cancel context.CancelFunc
 }
 
-func New(world *sim.World, cave caves.Cave, log *slog.Logger) *Server {
+func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
 	return &Server{
 		world:   world,
 		cave:    cave,
+		loot:    loot,
 		log:     log,
 		inbox:   make(chan func(), 1024),
 		done:    make(chan struct{}),
@@ -110,6 +113,18 @@ func (c *client) send(b []byte) {
 	}
 }
 
+func (s *Server) equipStarterKit(id sim.EntityID) {
+	for _, def := range items.StarterKit {
+		inst, err := s.loot.Make(def, 1, items.Common)
+		if err == nil {
+			_, _, err = s.world.Equip(id, inst)
+		}
+		if err != nil {
+			s.log.Error("starter kit", "item", def, "err", err)
+		}
+	}
+}
+
 // finish closes the connection once everything already queued is written.
 func (c *client) finish() {
 	select {
@@ -154,6 +169,12 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		s.clients[id] = c
 		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn)); err == nil {
 			c.send(b)
+		}
+		s.equipStarterKit(id)
+		if p, ok := s.world.Player(id); ok {
+			if b, err := protocol.EncodeServer(protocol.Equipment(p)); err == nil {
+				c.send(b)
+			}
 		}
 		joined <- id
 	})

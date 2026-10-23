@@ -16,6 +16,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
@@ -48,7 +49,7 @@ func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	cfg.DetectRadius, cfg.PatrolSpeed = 0, 0
 	world := cave.NewWorld(cfg)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, 30)
-	srv := New(world, cave, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(world, cave, items.NewRoller(items.Default(), 1), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	loop := &tick.Loop{
@@ -156,8 +157,8 @@ func TestAttackBroadcastsDamage(t *testing.T) {
 		Attack: &gamev1.AttackRequest{Seq: 1, TargetId: uint64(h.enemy), AbilityId: "basic"},
 	}})
 	msg := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetDamage() != nil })
-	if d := msg.GetDamage(); d.GetSourceId() != id || d.GetTargetHealth() != 20 {
-		t.Fatalf("damage = %v, want from player %d leaving 20 health", d, id)
+	if d := msg.GetDamage(); d.GetSourceId() != id || d.GetAmount() <= 0 || d.GetTargetHealth() != 30-d.GetAmount() {
+		t.Fatalf("damage = %v, want a hit from player %d", d, id)
 	}
 }
 
@@ -223,23 +224,33 @@ func TestTwoClientsKillSameEnemy(t *testing.T) {
 	idA := join(t, a)
 	idB := join(t, b)
 
-	// Both clients must see every hit the same way.
-	hit := func(conn *websocket.Conn, seq uint32, from uint64, health int32) {
+	// Both clients must see every hit the same way. Starter weapon damage
+	// rolls, so track health from each hit instead of assuming a number.
+	health := int32(30)
+	hit := func(conn *websocket.Conn, seq uint32, from uint64) {
 		t.Helper()
 		attack(t, conn, seq, h.enemy)
+		var seen *gamev1.DamageEvent
 		for _, c := range []*websocket.Conn{a, b} {
 			d := waitFor(t, c, func(m *gamev1.ServerMessage) bool { return m.GetDamage() != nil }).GetDamage()
-			if d.GetSourceId() != from || d.GetTargetHealth() != health || d.GetKilled() != (health == 0) {
-				t.Fatalf("damage = %v, want from %d leaving %d", d, from, health)
+			if seen != nil && !proto.Equal(d, seen) {
+				t.Fatalf("clients disagree: %v vs %v", seen, d)
 			}
+			seen = d
+		}
+		health = max(health-seen.GetAmount(), 0)
+		if seen.GetSourceId() != from || seen.GetTargetHealth() != health || seen.GetKilled() != (health == 0) {
+			t.Fatalf("damage = %v, want from %d leaving %d", seen, from, health)
 		}
 	}
 
-	// 30 health, 10 per hit. A hits again once its cooldown ends.
-	hit(a, 1, idA, 20)
-	hit(b, 1, idB, 10)
-	time.Sleep(sim.DefaultConfig().AttackCooldown)
-	hit(a, 2, idA, 0)
+	for seq := uint32(1); health > 0; seq++ {
+		hit(a, seq, idA)
+		if health > 0 {
+			hit(b, seq, idB)
+		}
+		time.Sleep(sim.DefaultConfig().AttackCooldown)
+	}
 
 	for _, conn := range []*websocket.Conn{a, b} {
 		waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
@@ -284,5 +295,20 @@ func TestExtractionClosesConnection(t *testing.T) {
 	_, _, err := leaver.Read(context.Background())
 	if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
 		t.Fatalf("got %v, want normal close after extraction", err)
+	}
+}
+
+func TestJoinEquipsStarterKit(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	id := join(t, conn)
+
+	eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment()
+	if len(eq.GetItems()) != len(items.StarterKit) || eq.GetItems()[0].GetItemDefId() != "rusty_sword" {
+		t.Fatalf("equipment = %v", eq)
+	}
+	snap := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), id) != nil }).GetSnapshot()
+	if p := entity(snap, id); p.GetMaxHealth() != 100 || p.GetHealth() != 100 {
+		t.Fatalf("player = %v", p)
 	}
 }

@@ -22,6 +22,7 @@ message ServerMessage {
     DamageEvent damage = 12;
     InventoryUpdated inventory = 13;
     Extracted extracted = 14;
+    EquipmentUpdated equipment = 15;
   }
 }
 
@@ -90,6 +91,7 @@ message EntityState {
   int32 health = 5;
   // 0 to 1 while a player stands in the extraction zone.
   float extract_progress = 6;
+  int32 max_health = 7;
 }
 
 message WorldSnapshot {
@@ -110,10 +112,45 @@ message CaveLayout {
 
 // Inventory
 
+enum Rarity {
+  RARITY_UNSPECIFIED = 0;
+  RARITY_COMMON = 1;
+  RARITY_UNCOMMON = 2;
+  RARITY_RARE = 3;
+  RARITY_EPIC = 4;
+  RARITY_UNIQUE = 5;
+}
+
+// Item carries everything the client shows. The client has no item data
+// files, so names and stats always come from the server.
 message Item {
   string id = 1;
   string item_def_id = 2;
   uint32 quantity = 3;
+  string name = 4;
+  string slot = 5;
+  Rarity rarity = 6;
+  uint32 level = 7;
+  repeated ItemStat base = 8;
+  repeated ItemAffix affixes = 9;
+}
+
+message ItemStat {
+  string stat = 1;
+  int32 value = 2;
+}
+
+message ItemAffix {
+  string name = 1;
+  string stat = 2;
+  int32 value = 3;
+  uint32 tier = 4;
+}
+
+// EquipmentUpdated is the full set of equipped items, sent to that player
+// whenever it changes.
+message EquipmentUpdated {
+  repeated Item items = 1;
 }
 
 message InventoryUpdated {
