@@ -157,6 +157,12 @@ func cast(aim: Vector2, windup_seconds: float, root: bool) -> void:
 		_rooted = windup_seconds
 
 
+# The server said no, so the windup played early never happened.
+func cancel_cast() -> void:
+	_rooted = 0.0
+	_sprite.windup(false)
+
+
 # An empty id means no weapon is equipped.
 func equip_weapon(item_def_id: String) -> void:
 	_sprite.weapon = WEAPONS.get(item_def_id, DEFAULT_WEAPON) if item_def_id != "" else null

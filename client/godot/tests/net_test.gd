@@ -79,10 +79,9 @@ func _test_abilities(main: Node, connection: ServerConnection) -> void:
 	if seen.rejected:
 		_check(seen.rejected.get_ability_id() == "cleave" and seen.rejected.get_reason() == "resource", "rejected for want of rage")
 		_check("not enough rage" in bar.rejection(), "HUD says there is not enough rage")
-
-	# The client roots for cleave's windup even though the server said no.
 	var player: Player = main.get_node("Player")
-	await _until(func() -> bool: return player._rooted == 0.0)
+	_check(player._rooted == 0.0 and player._sprite.animation() != "windup", "a rejected cleave releases the root")
+
 	var motion := InputEventMouseMotion.new()
 	motion.position = player.get_global_transform_with_canvas().origin + Vector2(-60, 80)
 	motion.relative = Vector2(10, 0)

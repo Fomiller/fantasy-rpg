@@ -212,6 +212,9 @@ func _on_ability_used(event: GameV1.AbilityUsed) -> void:
 
 # Basic attacks are pressed often, so their rejections would only be noise.
 func _on_ability_rejected(event: GameV1.AbilityRejected) -> void:
+	# Busy means the server is still winding up an earlier cast.
+	if event.get_reason() != "busy":
+		_player.cancel_cast()
 	var basic := _abilities.slot(0)
 	if basic == null or event.get_ability_id() != basic.get_id():
 		_abilities.rejected(event.get_ability_id(), event.get_reason())
