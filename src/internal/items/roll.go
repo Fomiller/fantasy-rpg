@@ -16,15 +16,17 @@ const (
 )
 
 type Instance struct {
-	ID       string
-	DefID    string
-	Name     string
-	Slot     Slot
-	Rarity   Rarity
-	Level    int
-	Base     map[Stat]int
-	Affixes  []Affix
-	Quantity int
+	ID    string
+	DefID string
+	Name  string
+	Slot  Slot
+	// WeaponType is empty for anything but a weapon.
+	WeaponType WeaponType
+	Rarity     Rarity
+	Level      int
+	Base       map[Stat]int
+	Affixes    []Affix
+	Quantity   int
 	// Stack is the most of this item one inventory slot holds.
 	Stack int
 }
@@ -132,7 +134,7 @@ func (r *Roller) rarity(def Def, boost int) Rarity {
 }
 
 func (r *Roller) roll(def Def, level int, rarity Rarity) Instance {
-	inst := Instance{ID: newID(), DefID: def.ID, Name: def.Name, Slot: def.Slot, Rarity: rarity, Level: level, Base: map[Stat]int{}, Quantity: 1, Stack: def.Stack}
+	inst := Instance{ID: newID(), DefID: def.ID, Name: def.Name, Slot: def.Slot, WeaponType: def.WeaponType, Rarity: rarity, Level: level, Base: map[Stat]int{}, Quantity: 1, Stack: def.Stack}
 	// Sorted so the same seed rolls stats in the same order.
 	for _, s := range sortedStats(def.Base) {
 		inst.Base[s] = r.between(def.Base[s])

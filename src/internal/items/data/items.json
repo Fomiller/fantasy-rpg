@@ -1,7 +1,7 @@
 [
-  { "id": "rusty_sword", "name": "Rusty Sword", "slot": "weapon", "base": { "damage": [9, 11] }, "min_level": 1, "stack": 1, "value": 5 },
-  { "id": "iron_sword", "name": "Iron Sword", "slot": "weapon", "base": { "damage": [11, 15] }, "min_level": 1, "stack": 1, "value": 20 },
-  { "id": "war_axe", "name": "War Axe", "slot": "weapon", "base": { "damage": [15, 20] }, "min_level": 3, "stack": 1, "value": 35 },
+  { "id": "rusty_sword", "name": "Rusty Sword", "slot": "weapon", "weapon_type": "sword", "base": { "damage": [9, 11] }, "min_level": 1, "stack": 1, "value": 5 },
+  { "id": "iron_sword", "name": "Iron Sword", "slot": "weapon", "weapon_type": "sword", "base": { "damage": [11, 15] }, "min_level": 1, "stack": 1, "value": 20 },
+  { "id": "war_axe", "name": "War Axe", "slot": "weapon", "weapon_type": "axe", "base": { "damage": [15, 20] }, "min_level": 3, "stack": 1, "value": 35 },
   { "id": "leather_cap", "name": "Leather Cap", "slot": "head", "base": { "armor": [2, 3] }, "min_level": 1, "stack": 1, "value": 8 },
   { "id": "iron_helm", "name": "Iron Helm", "slot": "head", "base": { "armor": [4, 6] }, "min_level": 3, "stack": 1, "value": 25 },
   { "id": "leather_vest", "name": "Leather Vest", "slot": "chest", "base": { "armor": [4, 6] }, "min_level": 1, "stack": 1, "value": 12 },

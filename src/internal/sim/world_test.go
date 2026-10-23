@@ -139,57 +139,6 @@ func TestAttackDamagesAndKills(t *testing.T) {
 	}
 }
 
-func TestAttackRejected(t *testing.T) {
-	tests := []struct {
-		name   string
-		setup  func(w *World, player, enemy EntityID)
-		target func(enemy EntityID) EntityID
-	}{
-		{
-			name:   "out of range",
-			setup:  func(w *World, player, _ EntityID) { w.players[player].Pos = Vec2{-200, 0} },
-			target: func(e EntityID) EntityID { return e },
-		},
-		{
-			name:   "on cooldown",
-			setup:  func(w *World, player, _ EntityID) { w.players[player].cooldown = time.Second },
-			target: func(e EntityID) EntityID { return e },
-		},
-		{
-			name:   "target already dead",
-			setup:  func(w *World, _, enemy EntityID) { w.enemies[enemy].Health = 0 },
-			target: func(e EntityID) EntityID { return e },
-		},
-		{
-			name:   "unknown target",
-			setup:  func(*World, EntityID, EntityID) {},
-			target: func(EntityID) EntityID { return 999 },
-		},
-		{
-			name:   "dead attacker",
-			setup:  func(w *World, player, _ EntityID) { w.players[player].Health = 0 },
-			target: func(e EntityID) EntityID { return e },
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := NewWorld(passive(), nil)
-			player := w.AddPlayer(Vec2{})
-			enemy := w.AddEnemy(Vec2{40, 0}, Melee)
-			tt.setup(w, player, enemy)
-			before, _ := w.Enemy(enemy)
-
-			w.Submit(AttackCommand{Player: player, Seq: 1, Target: tt.target(enemy), Ability: "basic"})
-			if events := w.Step(dt).Damage; len(events) != 0 {
-				t.Fatalf("got %+v, want attack rejected", events)
-			}
-			if after, _ := w.Enemy(enemy); after.Health != before.Health {
-				t.Fatalf("enemy health changed from %d to %d", before.Health, after.Health)
-			}
-		})
-	}
-}
-
 func TestStepAdvancesTick(t *testing.T) {
 	w := NewWorld(DefaultConfig(), nil)
 	steps(w, 3)

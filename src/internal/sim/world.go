@@ -4,12 +4,14 @@ package sim
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"math"
 	"math/rand/v2"
 	"slices"
 	"time"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
@@ -21,10 +23,9 @@ type Config struct {
 	Acceleration   float64
 	Friction       float64
 	PlayerHalfSize float64
-	PlayerHealth   int
-	AttackRange    float64
-	AttackDamage   int
-	AttackCooldown time.Duration
+	// AttackDamage is weapon damage with no weapon equipped.
+	AttackDamage int
+	Classes      *classes.Data
 
 	EnemyHalfSize float64
 	Archetypes    map[ArchetypeID]Archetype
@@ -47,10 +48,8 @@ func DefaultConfig() Config {
 		Acceleration:   1600,
 		Friction:       2000,
 		PlayerHalfSize: 16,
-		PlayerHealth:   100,
-		AttackRange:    64,
 		AttackDamage:   10,
-		AttackCooldown: 500 * time.Millisecond,
+		Classes:        classes.Default(),
 
 		EnemyHalfSize: 16,
 		Archetypes:    defaultArchetypes(),
@@ -68,7 +67,11 @@ func DefaultConfig() Config {
 }
 
 type Player struct {
-	ID           EntityID
+	ID EntityID
+	// Class is the class id. It is set on join and never changes.
+	Class        string
+	Resource     float64
+	MaxResource  int
 	Pos, Vel     Vec2
 	Health       int
 	MaxHealth    int
@@ -78,7 +81,12 @@ type Player struct {
 	input        Vec2
 	inputs       []MoveCommand
 	queuedSeq    uint32
-	cooldown     time.Duration
+	class        classes.Class
+	cast         *cast
+	cooldowns    map[string]time.Duration
+	statuses     map[classes.StatusKind]status
+	// sinceHit is how long since the player last dealt or took a hit.
+	sinceHit time.Duration
 	// ExtractProgress runs from 0 to 1 while the player stands in the extraction zone.
 	ExtractProgress float64
 	extracting      time.Duration
@@ -118,11 +126,14 @@ type MoveCommand struct {
 	Direction Vec2
 }
 
+// AttackCommand asks for an ability. Aim is a direction. With no aim the
+// ability aims at Target.
 type AttackCommand struct {
 	Player  EntityID
 	Seq     uint32
 	Target  EntityID
 	Ability string
+	Aim     Vec2
 }
 
 type DamageEvent struct {
@@ -135,6 +146,8 @@ type DamageEvent struct {
 // Events is what happened during one Step.
 type Events struct {
 	Damage    []DamageEvent
+	Abilities []AbilityEvent
+	Rejected  []Rejection
 	Extracted []EntityID
 	// Inventory lists players whose bag or equipment changed.
 	Inventory []EntityID
@@ -185,18 +198,40 @@ func (w *World) SetExtraction(r Rect) {
 	w.exit = &r
 }
 
+// AddPlayer adds a player of the starter class.
 func (w *World) AddPlayer(pos Vec2) EntityID {
-	w.nextID++
-	w.players[w.nextID] = &Player{
-		ID:        w.nextID,
-		Pos:       pos,
-		Health:    w.cfg.PlayerHealth,
-		MaxHealth: w.cfg.PlayerHealth,
-		Equipment: map[items.Slot]items.Instance{},
-		Inventory: inventory.Bag{Size: w.cfg.InventorySize},
-		stats:     map[items.Stat]int{},
+	return w.addPlayer(pos, w.cfg.Classes.Classes[classes.Starter])
+}
+
+// AddPlayerAs adds a player of a class. An empty class is the starter.
+func (w *World) AddPlayerAs(pos Vec2, class string) (EntityID, error) {
+	if class == "" {
+		class = classes.Starter
 	}
-	return w.nextID
+	c, ok := w.cfg.Classes.Classes[class]
+	if !ok {
+		return 0, fmt.Errorf("unknown class %q", class)
+	}
+	return w.addPlayer(pos, c), nil
+}
+
+func (w *World) addPlayer(pos Vec2, c classes.Class) EntityID {
+	w.nextID++
+	p := &Player{
+		ID:          w.nextID,
+		Class:       c.ID,
+		Resource:    float64(c.Resource.Start),
+		MaxResource: c.Resource.Max,
+		Pos:         pos,
+		Equipment:   map[items.Slot]items.Instance{},
+		Inventory:   inventory.Bag{Size: w.cfg.InventorySize},
+		class:       c,
+		cooldowns:   map[string]time.Duration{},
+		statuses:    map[classes.StatusKind]status{},
+	}
+	w.applyGear(p)
+	w.players[p.ID] = p
+	return p.ID
 }
 
 func (w *World) AddEnemy(pos Vec2, archetype ArchetypeID) EntityID {
@@ -253,14 +288,13 @@ func (w *World) Submit(cmd any) {
 
 func (w *World) Step(dt time.Duration) Events {
 	var ev Events
+	w.stepAbilities(dt, &ev)
 	for _, cmd := range w.pending {
 		switch c := cmd.(type) {
 		case MoveCommand:
 			w.applyMove(c)
 		case AttackCommand:
-			if d, ok := w.applyAttack(c); ok {
-				ev.Damage = append(ev.Damage, d)
-			}
+			w.applyAttack(c, &ev)
 		case ItemCommand:
 			if w.applyItem(c) {
 				ev.changed(c.player())
@@ -271,7 +305,6 @@ func (w *World) Step(dt time.Duration) Events {
 
 	for _, p := range w.players {
 		w.movePlayer(p, dt)
-		p.cooldown = max(p.cooldown-dt, 0)
 	}
 	ev.Damage = append(ev.Damage, w.stepEnemies(dt)...)
 	ev.Damage = append(ev.Damage, w.stepProjectiles(dt)...)
@@ -341,28 +374,6 @@ func (p *Player) nextInput() {
 	p.inputs = p.inputs[1:]
 }
 
-func (w *World) applyAttack(c AttackCommand) (DamageEvent, bool) {
-	p, ok := w.players[c.Player]
-	if !ok || p.Health <= 0 || p.cooldown > 0 {
-		return DamageEvent{}, false
-	}
-	e, ok := w.enemies[c.Target]
-	if !ok || e.Health <= 0 || p.Pos.DistanceTo(e.Pos) > w.cfg.AttackRange {
-		return DamageEvent{}, false
-	}
-	dmg := w.attackDamage(p)
-	e.Health = max(e.Health-dmg, 0)
-	e.hitBy = p.ID
-	p.cooldown = w.attackCooldown(p)
-	return DamageEvent{
-		Source:       p.ID,
-		Target:       e.ID,
-		Amount:       dmg,
-		TargetHealth: e.Health,
-		Killed:       e.Health == 0,
-	}, true
-}
-
 func (w *World) movePlayer(p *Player, dt time.Duration) {
 	p.nextInput()
 	if p.Health <= 0 {
@@ -370,8 +381,9 @@ func (w *World) movePlayer(p *Player, dt time.Duration) {
 		return
 	}
 	secs := dt.Seconds()
-	if p.input != (Vec2{}) {
-		p.Vel = p.Vel.MoveToward(p.input.Scale(w.maxSpeed(p)), w.cfg.Acceleration*secs)
+	// A root acts like letting go of the keys, so the client can predict it.
+	if input := p.input; input != (Vec2{}) && !p.rooted() {
+		p.Vel = p.Vel.MoveToward(input.Scale(w.maxSpeed(p)), w.cfg.Acceleration*secs)
 	} else {
 		p.Vel = p.Vel.MoveToward(Vec2{}, w.cfg.Friction*secs)
 	}

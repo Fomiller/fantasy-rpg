@@ -328,6 +328,7 @@ func (w *World) chargeHits(e *Enemy, a Archetype) []DamageEvent {
 func (w *World) hurt(source EntityID, p *Player, dmg int) DamageEvent {
 	dmg = w.damageTaken(p, dmg)
 	p.Health = max(p.Health-dmg, 0)
+	w.gain(p, p.class.Resource.OnHitTaken)
 	return DamageEvent{
 		Source:       source,
 		Target:       p.ID,

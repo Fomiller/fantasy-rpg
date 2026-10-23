@@ -23,7 +23,7 @@ func TestServerSnapshotFixture(t *testing.T) {
 		Payload: &gamev1.ServerMessage_Snapshot{Snapshot: &gamev1.WorldSnapshot{
 			Tick: 42,
 			Entities: []*gamev1.EntityState{
-				{Id: 7, Kind: gamev1.EntityKind_ENTITY_KIND_PLAYER, Position: &gamev1.Vec2{X: 1.5, Y: -2}, Health: 100},
+				{Id: 7, Kind: gamev1.EntityKind_ENTITY_KIND_PLAYER, Position: &gamev1.Vec2{X: 1.5, Y: -2}, Health: 100, ClassId: "warrior", Resource: 42, MaxResource: 100},
 				{
 					Id: 9, Kind: gamev1.EntityKind_ENTITY_KIND_ENEMY, Position: &gamev1.Vec2{X: 10, Y: 4}, Health: 30, MaxHealth: 90,
 					Archetype: "elite", EnemyState: gamev1.EnemyState_ENEMY_STATE_CHARGE, Aim: &gamev1.Vec2{X: 0, Y: -1},

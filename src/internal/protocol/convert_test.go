@@ -6,6 +6,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
@@ -20,9 +21,9 @@ func TestCommandUsesConnectionPlayer(t *testing.T) {
 	}
 
 	attack, ok := Command(&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Attack{
-		Attack: &gamev1.AttackRequest{Seq: 2, TargetId: 9, AbilityId: "basic"},
+		Attack: &gamev1.AttackRequest{Seq: 2, TargetId: 9, AbilityId: "cleave", Aim: &gamev1.Vec2{X: 0.5, Y: -1}},
 	}}, 7)
-	if !ok || attack != (sim.AttackCommand{Player: 7, Seq: 2, Target: 9, Ability: "basic"}) {
+	if !ok || attack != (sim.AttackCommand{Player: 7, Seq: 2, Target: 9, Ability: "cleave", Aim: sim.Vec2{X: 0.5, Y: -1}}) {
 		t.Fatalf("attack = %+v, %v", attack, ok)
 	}
 
@@ -43,11 +44,14 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 		t.Fatalf("snapshot = %v", snap)
 	}
 	p, e := snap.GetEntities()[0], snap.GetEntities()[1]
-	if p.GetId() != uint64(player) || p.GetKind() != gamev1.EntityKind_ENTITY_KIND_PLAYER || p.GetHealth() != 100 || p.GetPosition().GetX() != 1 {
+	if p.GetId() != uint64(player) || p.GetKind() != gamev1.EntityKind_ENTITY_KIND_PLAYER || p.GetHealth() != 120 || p.GetPosition().GetX() != 1 {
 		t.Fatalf("player entity = %v", p)
 	}
 	if p.GetLastInputSeq() != 3 || p.GetMaxSpeed() != 220 {
 		t.Fatalf("player prediction fields = %v", p)
+	}
+	if p.GetClassId() != "warrior" || p.GetResource() != 0 || p.GetMaxResource() != 100 {
+		t.Fatalf("player class fields = %v", p)
 	}
 	if e.GetId() != uint64(enemy) || e.GetKind() != gamev1.EntityKind_ENTITY_KIND_ENEMY || e.GetHealth() != 20 || e.GetMaxHealth() != 20 {
 		t.Fatalf("enemy entity = %v", e)
@@ -81,12 +85,19 @@ func TestDamageAndJoined(t *testing.T) {
 		t.Fatalf("damage = %v", d)
 	}
 	cave := caves.Loop()
-	j := Joined(5, cave, cave.PlayerSpawns[0], 30).GetJoined()
+	j := Joined(5, cave, cave.PlayerSpawns[0], 30, ClassInfo(classes.Default(), classes.Starter)).GetJoined()
 	if j.GetPlayerId() != 5 || j.GetTickRate() != 30 || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
 		t.Fatalf("joined = %v", j)
 	}
 	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetCave().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
 		t.Fatalf("joined spawn or exit wrong: %v", j)
+	}
+	c := j.GetClassInfo()
+	if c.GetId() != "warrior" || c.GetResource() != "rage" || c.GetMaxResource() != 100 || c.GetBasic() != "slash" || len(c.GetAbilities()) != 3 {
+		t.Fatalf("class = %v", c)
+	}
+	if cleave := c.GetAbilities()[1]; cleave.GetId() != "cleave" || cleave.GetCost() != 30 || cleave.GetCooldownMs() != 4000 || cleave.GetWindupMs() != 250 || !cleave.GetRoot() {
+		t.Fatalf("cleave = %v", cleave)
 	}
 	if id := Extracted(5).GetExtracted().GetPlayerId(); id != 5 {
 		t.Fatalf("extracted player = %d, want 5", id)
@@ -166,5 +177,16 @@ func TestInventoryAndPilesInSnapshot(t *testing.T) {
 	}
 	if kinds[uint64(chest)] != gamev1.EntityKind_ENTITY_KIND_CHEST || kinds[uint64(loot)] != gamev1.EntityKind_ENTITY_KIND_LOOT {
 		t.Fatalf("kinds = %v", kinds)
+	}
+}
+
+func TestAbilityMessages(t *testing.T) {
+	used := AbilityUsed(sim.AbilityEvent{Source: 3, Ability: "cleave", Aim: sim.Vec2{X: 0, Y: 1}, Windup: 250 * time.Millisecond, Cooldown: 4 * time.Second}).GetAbilityUsed()
+	if used.GetSourceId() != 3 || used.GetAbilityId() != "cleave" || used.GetAim().GetY() != 1 || used.GetWindupMs() != 250 || used.GetCooldownMs() != 4000 {
+		t.Fatalf("used = %v", used)
+	}
+	rejected := AbilityRejected(sim.Rejection{Player: 3, Seq: 9, Ability: "brace", Reason: sim.RejectResource}).GetAbilityRejected()
+	if rejected.GetSeq() != 9 || rejected.GetAbilityId() != "brace" || rejected.GetReason() != "resource" {
+		t.Fatalf("rejected = %v", rejected)
 	}
 }

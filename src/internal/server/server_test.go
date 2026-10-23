@@ -263,7 +263,7 @@ func TestTwoClientsKillSameEnemy(t *testing.T) {
 		if health > 0 {
 			hit(b, seq, idB)
 		}
-		time.Sleep(sim.DefaultConfig().AttackCooldown)
+		time.Sleep(sim.DefaultConfig().Classes.Abilities["slash"].Cooldown())
 	}
 
 	for _, conn := range []*websocket.Conn{a, b} {
@@ -322,7 +322,7 @@ func TestJoinEquipsStarterKit(t *testing.T) {
 		t.Fatalf("equipment = %v", eq)
 	}
 	snap := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), id) != nil }).GetSnapshot()
-	if p := entity(snap, id); p.GetMaxHealth() != 100 || p.GetHealth() != 100 {
+	if p := entity(snap, id); p.GetMaxHealth() != 120 || p.GetHealth() != 120 {
 		t.Fatalf("player = %v", p)
 	}
 }
@@ -425,6 +425,52 @@ func TestNameInUseIsRejected(t *testing.T) {
 	second := dial(t, h.url)
 	send(t, second, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
 	_, _, err := second.Read(context.Background())
+	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("got %v, want policy violation close", err)
+	}
+}
+
+func TestAbilitiesOverTheWire(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	joined := joinAccepted(t, conn)
+	if c := joined.GetClassInfo(); c.GetId() != "warrior" || c.GetBasic() != "slash" || len(c.GetAbilities()) != 3 {
+		t.Fatalf("class = %v", c)
+	}
+
+	// A run starts with no rage.
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
+		Attack: &gamev1.AttackRequest{Seq: 1, AbilityId: "cleave", Aim: &gamev1.Vec2{X: 1}},
+	}})
+	r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetAbilityRejected() != nil }).GetAbilityRejected()
+	if r.GetSeq() != 1 || r.GetAbilityId() != "cleave" || r.GetReason() != sim.RejectResource {
+		t.Fatalf("rejected = %v", r)
+	}
+
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
+		Attack: &gamev1.AttackRequest{Seq: 2, AbilityId: "basic", Aim: &gamev1.Vec2{X: 1}},
+	}})
+	used := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetAbilityUsed() != nil }).GetAbilityUsed()
+	if used.GetSourceId() != joined.GetPlayerId() || used.GetAbilityId() != "slash" || used.GetWindupMs() != 100 || used.GetAim().GetX() != 1 {
+		t.Fatalf("used = %v", used)
+	}
+	d := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetDamage() != nil }).GetDamage()
+	if d.GetSourceId() != joined.GetPlayerId() || d.GetTargetId() != uint64(h.enemy) {
+		t.Fatalf("damage = %v", d)
+	}
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		p := entity(m.GetSnapshot(), joined.GetPlayerId())
+		return p != nil && p.GetClassId() == "warrior" && p.GetResource() == 8 && p.GetMaxResource() == 100
+	})
+}
+
+func TestUnknownClassIsRejected(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
+		Join: &gamev1.JoinRequest{Name: "ann", ClassId: "necromancer"},
+	}})
+	_, _, err := conn.Read(context.Background())
 	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
 		t.Fatalf("got %v, want policy violation close", err)
 	}

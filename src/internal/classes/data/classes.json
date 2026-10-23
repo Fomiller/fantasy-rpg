@@ -1,0 +1,20 @@
+[
+  {
+    "id": "warrior",
+    "name": "Warrior",
+    "base": { "max_health": 120, "armor": 5 },
+    "resource": {
+      "kind": "rage",
+      "max": 100,
+      "start": 0,
+      "regen": 0,
+      "on_hit_dealt": 8,
+      "on_hit_taken": 6,
+      "decay": 10,
+      "decay_delay_ms": 4000
+    },
+    "weapons": ["sword", "axe"],
+    "basic": "slash",
+    "abilities": ["slash", "cleave", "brace"]
+  }
+]

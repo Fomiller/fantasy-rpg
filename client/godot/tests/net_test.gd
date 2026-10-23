@@ -27,6 +27,7 @@ func _run() -> void:
 	var latest := {"snapshot": null}
 	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
 	_check(await _until(func() -> bool: return latest.snapshot != null), "receives world snapshots")
+	await _test_abilities(main, connection)
 
 	var cave: Cave = main.get_node("Cave")
 	var player: Player = main.get_node("Player")
@@ -60,6 +61,37 @@ func _run() -> void:
 
 	await _test_loot_then_equip(main, hud)
 	_finish()
+
+
+# Cleave needs rage, and a run starts with none, so the server says no. The
+# basic attack costs nothing, so the server starts it and tells everyone.
+func _test_abilities(main: Node, connection: ServerConnection) -> void:
+	var bar: AbilityBar = main.get_node("HUD/Abilities")
+	_check(bar.visible and bar.slot(0) != null and bar.slot(0).get_id() == "slash", "ability bar is built from the class the server sent")
+	var seen := {"used": null, "rejected": null}
+	connection.ability_used.connect(func(e: GameV1.AbilityUsed) -> void:
+		if e.get_source_id() == connection.player_id:
+			seen.used = e)
+	connection.ability_rejected.connect(func(e: GameV1.AbilityRejected) -> void: seen.rejected = e)
+
+	await _press("ability_1")
+	_check(await _until(func() -> bool: return seen.rejected != null), "server rejects cleave with no rage")
+	if seen.rejected:
+		_check(seen.rejected.get_ability_id() == "cleave" and seen.rejected.get_reason() == "resource", "rejected for want of rage")
+		_check("not enough rage" in bar.rejection(), "HUD says there is not enough rage")
+
+	await _press("attack")
+	_check(await _until(func() -> bool: return seen.used != null), "server starts the basic attack")
+	if seen.used:
+		_check(seen.used.get_ability_id() == "slash" and seen.used.get_windup_ms() == 100, "basic attack is slash with its windup")
+		_check(bar.cooldown_left("slash") > 0.0, "slash shows its cooldown")
+
+
+func _press(action: String) -> void:
+	Input.action_press(action)
+	await physics_frame
+	await physics_frame
+	Input.action_release(action)
 
 
 # Unequip the sword, drop it, loot it back with interact, and equip it again,

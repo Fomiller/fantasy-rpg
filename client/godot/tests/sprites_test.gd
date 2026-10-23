@@ -28,7 +28,7 @@ func _run() -> void:
 	_check(sprite.animation() == "walk" and sprite._rig.scale.x < 0, "walking left plays walk and faces left")
 	sprite.move(Vector2.ZERO)
 	_check(sprite.animation() == "idle" and sprite._rig.scale.x < 0, "standing still idles and keeps facing")
-	player.swing(Vector2.RIGHT * 10)
+	player.cast(Vector2.RIGHT, 0.0, false)
 	_check(sprite.animation() == "swing" and sprite._rig.scale.x > 0, "attacking swings toward the target")
 	player.die()
 	_check(sprite.dead and sprite.animation() != "walk", "dead player lies still")

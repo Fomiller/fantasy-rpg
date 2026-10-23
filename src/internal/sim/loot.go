@@ -100,9 +100,10 @@ func (w *World) Restore(id EntityID, l inventory.Loadout) error {
 	if !ok {
 		return errNoPlayer
 	}
+	// Gear the player cannot wear, like a staff saved by another class, goes in the bag.
 	for _, inst := range l.Equipment {
 		if _, _, err := w.Equip(id, inst); err != nil {
-			return err
+			p.Inventory.Add(inst)
 		}
 	}
 	for _, inst := range l.Items {
@@ -141,11 +142,15 @@ func (w *World) applyItem(c ItemCommand) bool {
 		return w.pickup(p, c.Target)
 	case EquipCommand:
 		inst, ok := p.Inventory.Get(c.Item)
-		if !ok || !inst.Slot.IsGear() {
+		if !ok {
+			return false
+		}
+		old, had, err := w.Equip(p.ID, inst)
+		if err != nil {
 			return false
 		}
 		p.Inventory.Take(c.Item)
-		if old, had, _ := w.Equip(p.ID, inst); had {
+		if had {
 			p.Inventory.Add(old)
 		}
 		return true
@@ -218,8 +223,8 @@ func (w *World) dropOnKill(ev *Events) {
 			}
 			p.Equipment = map[items.Slot]items.Instance{}
 			p.Inventory.Items = nil
-			p.stats = map[items.Stat]int{}
-			p.MaxHealth = w.cfg.PlayerHealth
+			p.stats = baseStats(p.class)
+			p.MaxHealth = p.stats[items.MaxHealth]
 			ev.changed(p.ID)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -164,7 +165,7 @@ func TestEnemiesFindTheirWayHome(t *testing.T) {
 	c := Loop()
 	cfg := sim.DefaultConfig()
 	// Keep the runner alive. This test is about the enemies.
-	cfg.PlayerHealth = 1_000_000
+	cfg.Classes.Classes[classes.Starter].Base[items.MaxHealth] = 1_000_000
 	w := c.NewWorld(cfg, nil)
 	id := w.AddPlayer(c.PlayerSpawns[0])
 	chased := map[sim.EntityID]bool{}

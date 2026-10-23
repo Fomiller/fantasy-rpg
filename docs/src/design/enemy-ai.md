@@ -249,7 +249,8 @@ The Loop cave has two of each common archetype and one elite. Map tiles:
 
 ## Tunables
 
-Starting numbers. Player top speed is 220 and a player has 100 health.
+Starting numbers. Player top speed is 220. A Warrior has 120 health and 5
+armor. See [Classes](classes.md).
 
 | Tunable | Melee | Ranged | Elite |
 | -- | -- | -- | -- |
