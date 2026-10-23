@@ -3,8 +3,10 @@
 # dev overrides, layered on ../values.app.base.yaml. Only keys that differ
 # from the base belong here.
 #
-# Kargo writes image.tag here on every promotion. Until the first image is
-# published and promoted there is no tag, and the pod cannot pull.
+# Kargo rewrites image.tag on every promotion. It only replaces the key, so
+# the key has to exist. 0.1.0 is the first published image.
+image:
+  tag: 0.1.0
 
 # The Cloudflare tunnel forwards this hostname to Traefik because homelab lists
 # it in public_hostnames. Clients connect to wss://fantasy-rpg.fomiller.com/ws.
