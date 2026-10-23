@@ -63,8 +63,10 @@
     "cave-stop id:\n    {{kube}} -n fantasy-rpg delete pod cave-{{id}}"
     "caves:\n    {{kube}} -n fantasy-rpg get pods -l app=cave-server"
     "client:\n    {{godot}} --path client/godot --editor"
-    "client-run:\n    {{godot}} --path client/godot"
-    "client-online:\n    {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws"
+    # Import first. A fresh checkout has no .godot/ class cache, and without it
+    # every class_name in the scripts fails to resolve.
+    "client-run:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --path client/godot"
+    "client-online:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws"
     "client-check:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --quit-after 5"
     "client-test:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --script res://tests/player_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/proto_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/movement_test.gd"
     "net-test: build\n    #!/usr/bin/env bash\n    set -euo pipefail\n    if curl -sf localhost:8080/healthz >/dev/null; then echo \"port 8080 is in use. Stop the other cave-server first.\" >&2; exit 1; fi\n    ./bin/cave-server & pid=$!\n    trap 'kill $pid' EXIT\n    for i in $(seq 50); do curl -sf localhost:8080/healthz >/dev/null && break; sleep 0.1; done\n    {{godot}} --headless --path client/godot --script res://tests/net_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd"
