@@ -104,6 +104,12 @@ func (s *Server) Step(dt time.Duration) {
 	for _, id := range events.Inventory {
 		s.sendItems(id)
 	}
+	for _, r := range events.PickupRejected {
+		s.sendTo(r.Player, protocol.PickupRejected(r))
+	}
+	for _, ev := range events.Loot {
+		s.sendTo(ev.Player, protocol.Loot(ev))
+	}
 }
 
 // sendItems tells the player what they carry and saves it. Saving on every

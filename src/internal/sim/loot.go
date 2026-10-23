@@ -2,6 +2,7 @@ package sim
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
@@ -15,14 +16,52 @@ type Pile struct {
 	Pos   Vec2
 	Chest bool
 	Items []items.Instance
+	// version goes up whenever Items changes, so open loot windows know to update.
+	version uint64
+}
+
+// Why a pickup took nothing.
+const (
+	PickupRange   = "range"
+	PickupGone    = "gone"
+	PickupBagFull = "bag_full"
+)
+
+type PickupRejection struct {
+	Player, Pile EntityID
+	Item         string
+	Reason       string
+}
+
+// LootEvent is what one player's loot window shows now. Closed means the
+// window is shut and Items is empty.
+type LootEvent struct {
+	Player, Pile EntityID
+	Items        []items.Instance
+	Closed       bool
+}
+
+// OpenLootCommand opens a loot window. The world sends the pile's contents
+// on the next Step, and again whenever they change.
+type OpenLootCommand struct {
+	Player EntityID
+	Target EntityID
+}
+
+type CloseLootCommand struct {
+	Player EntityID
+	Target EntityID
 }
 
 // ItemCommand is any command that changes what a player carries.
 type ItemCommand interface{ player() EntityID }
 
+// PickupCommand takes Item from the pile, or everything that fits when Item
+// is empty.
 type PickupCommand struct {
 	Player EntityID
 	Target EntityID
+	Item   string
 }
 
 type EquipCommand struct {
@@ -73,7 +112,7 @@ func (w *World) AddPile(pos Vec2, contents []items.Instance) EntityID {
 
 func (w *World) addPile(pos Vec2, chest bool, contents []items.Instance) EntityID {
 	w.nextID++
-	w.piles[w.nextID] = &Pile{ID: w.nextID, Pos: pos, Chest: chest, Items: contents}
+	w.piles[w.nextID] = &Pile{ID: w.nextID, Pos: pos, Chest: chest, Items: contents, version: 1}
 	return w.nextID
 }
 
@@ -132,14 +171,18 @@ func (ev *Events) changed(id EntityID) {
 
 // applyItem reports whether the player's items changed. A command that
 // cannot apply, like picking up from too far away, does nothing.
-func (w *World) applyItem(c ItemCommand) bool {
+func (w *World) applyItem(c ItemCommand, ev *Events) bool {
 	p, ok := w.players[c.player()]
 	if !ok || p.Health <= 0 {
 		return false
 	}
 	switch c := c.(type) {
 	case PickupCommand:
-		return w.pickup(p, c.Target)
+		reason := w.pickup(p, c)
+		if reason != "" {
+			ev.PickupRejected = append(ev.PickupRejected, PickupRejection{Player: p.ID, Pile: c.Target, Item: c.Item, Reason: reason})
+		}
+		return reason == ""
 	case EquipCommand:
 		inst, ok := p.Inventory.Get(c.Item)
 		if !ok {
@@ -181,27 +224,75 @@ func (w *World) applyItem(c ItemCommand) bool {
 	return false
 }
 
-// pickup takes everything that fits. The rest stays on the ground.
-func (w *World) pickup(p *Player, target EntityID) bool {
-	pile, ok := w.piles[target]
-	if !ok || len(pile.Items) == 0 || p.Pos.DistanceTo(pile.Pos) > w.cfg.PickupRange {
-		return false
+// pickup takes one item, or everything that fits. Whatever does not fit
+// stays. It returns why it took nothing, or "" when it took something.
+func (w *World) pickup(p *Player, c PickupCommand) string {
+	pile, ok := w.piles[c.Target]
+	if !ok || len(pile.Items) == 0 {
+		return PickupGone
+	}
+	if p.Pos.DistanceTo(pile.Pos) > w.cfg.PickupRange {
+		return PickupRange
+	}
+	if c.Item != "" && !slices.ContainsFunc(pile.Items, func(inst items.Instance) bool { return inst.ID == c.Item }) {
+		return PickupGone
 	}
 	var rest []items.Instance
 	took := false
 	for _, inst := range pile.Items {
-		left := p.Inventory.Add(inst)
-		took = took || left < inst.Quantity
-		if left > 0 {
+		if c.Item == "" || inst.ID == c.Item {
+			left := p.Inventory.Add(inst)
+			took = took || left < inst.Quantity
 			inst.Quantity = left
+		}
+		if inst.Quantity > 0 {
 			rest = append(rest, inst)
 		}
 	}
-	pile.Items = rest
-	if len(rest) == 0 && !pile.Chest {
-		delete(w.piles, target)
+	if !took {
+		return PickupBagFull
 	}
-	return took
+	pile.Items = rest
+	pile.version++
+	if len(rest) == 0 && !pile.Chest {
+		delete(w.piles, c.Target)
+	}
+	return ""
+}
+
+func (w *World) applyLoot(cmd any) {
+	switch c := cmd.(type) {
+	case OpenLootCommand:
+		if p, ok := w.players[c.Player]; ok {
+			// Zero is never a pile's version, so the next Step sends the contents.
+			p.looting, p.lootSeen = c.Target, 0
+		}
+	case CloseLootCommand:
+		if p, ok := w.players[c.Player]; ok && p.looting == c.Target {
+			p.looting = 0
+		}
+	}
+}
+
+// stepLoot sends each open loot window its pile's contents when they have
+// changed, and closes it once the pile is empty, gone or out of range.
+func (w *World) stepLoot(ev *Events) {
+	for _, id := range slices.Sorted(maps.Keys(w.players)) {
+		p := w.players[id]
+		if p.looting == 0 {
+			continue
+		}
+		pile, ok := w.piles[p.looting]
+		if !ok || len(pile.Items) == 0 || p.Health <= 0 || p.Pos.DistanceTo(pile.Pos) > w.cfg.PickupRange {
+			ev.Loot = append(ev.Loot, LootEvent{Player: id, Pile: p.looting, Closed: true})
+			p.looting = 0
+			continue
+		}
+		if p.lootSeen != pile.version {
+			p.lootSeen = pile.version
+			ev.Loot = append(ev.Loot, LootEvent{Player: id, Pile: pile.ID, Items: slices.Clone(pile.Items)})
+		}
+	}
 }
 
 // dropOnKill drops loot where enemies die, and drops everything a dead

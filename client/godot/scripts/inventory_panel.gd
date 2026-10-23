@@ -61,20 +61,4 @@ func _heading(text: String) -> void:
 
 
 func _row(item: GameV1.Item, actions: Dictionary) -> void:
-	var row := HBoxContainer.new()
-	var label := RichTextLabel.new()
-	label.bbcode_enabled = true
-	label.fit_content = true
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.text = ItemText.line(item)
-	if item.get_quantity() > 1:
-		label.text += "  x%d" % item.get_quantity()
-	row.add_child(label)
-	for text: String in actions:
-		var button := Button.new()
-		button.text = text
-		# Space is attack. A focused button would take it too.
-		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(actions[text])
-		row.add_child(button)
-	_list.add_child(row)
+	_list.add_child(ItemRow.make(item, actions))

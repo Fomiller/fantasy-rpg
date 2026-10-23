@@ -243,3 +243,164 @@ func TestLoadoutRoundTrip(t *testing.T) {
 		t.Fatalf("loadout = %+v", got)
 	}
 }
+
+// lootFor returns the player's loot window event from one step.
+func lootFor(ev Events, player EntityID) (LootEvent, bool) {
+	for _, l := range ev.Loot {
+		if l.Player == player {
+			return l, true
+		}
+	}
+	return LootEvent{}, false
+}
+
+func TestOpenLootOutOfRangeCloses(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	pile := w.AddPile(Vec2{X: 60}, []items.Instance{item("a", items.Head, nil)})
+
+	w.Submit(OpenLootCommand{Player: id, Target: pile})
+	l, ok := lootFor(w.Step(dt), id)
+	if !ok || !l.Closed || len(l.Items) != 0 {
+		t.Fatalf("loot = %+v, %v, want a closed window with nothing in it", l, ok)
+	}
+	if _, ok := lootFor(w.Step(dt), id); ok {
+		t.Fatal("closed window still gets updates")
+	}
+}
+
+func TestTakeOneItem(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	pile := w.AddPile(Vec2{X: 10}, []items.Instance{item("a", items.Head, nil), potion("p", 3)})
+
+	w.Submit(OpenLootCommand{Player: id, Target: pile})
+	if l, _ := lootFor(w.Step(dt), id); !slices.Equal(ids(l.Items), []string{"a", "p"}) {
+		t.Fatalf("window = %+v", l)
+	}
+	if _, ok := lootFor(w.Step(dt), id); ok {
+		t.Fatal("window got contents that did not change")
+	}
+
+	w.Submit(PickupCommand{Player: id, Target: pile, Item: "p"})
+	ev := w.Step(dt)
+	if !slices.Contains(ev.Inventory, id) {
+		t.Fatal("take did not change the bag")
+	}
+	if p, _ := w.Player(id); !slices.Equal(ids(p.Inventory.Items), []string{"p"}) || p.Inventory.Items[0].Quantity != 3 {
+		t.Fatalf("bag = %+v", p.Inventory.Items)
+	}
+	if l, _ := lootFor(ev, id); !slices.Equal(ids(l.Items), []string{"a"}) || l.Closed {
+		t.Fatalf("window = %+v, want only a left", l)
+	}
+}
+
+func TestTakeAllEmptiesPileAndClosesWindow(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	pile := w.AddPile(Vec2{X: 10}, []items.Instance{item("a", items.Head, nil), item("b", items.Feet, nil)})
+	w.Submit(OpenLootCommand{Player: id, Target: pile})
+	w.Step(dt)
+
+	w.Submit(PickupCommand{Player: id, Target: pile})
+	ev := w.Step(dt)
+	if p, _ := w.Player(id); !slices.Equal(ids(p.Inventory.Items), []string{"a", "b"}) {
+		t.Fatalf("bag = %v", ids(p.Inventory.Items))
+	}
+	if l, ok := lootFor(ev, id); !ok || !l.Closed {
+		t.Fatalf("window = %+v, %v, want it closed once the pile is gone", l, ok)
+	}
+}
+
+func TestTakeIntoFullBagLeavesItem(t *testing.T) {
+	cfg := passive()
+	cfg.InventorySize = 1
+	w := NewWorld(cfg, nil)
+	id := w.AddPlayer(Vec2{})
+	w.Restore(id, inventory.Loadout{Items: []items.Instance{item("mine", items.Hands, nil)}})
+	pile := w.AddPile(Vec2{X: 10}, []items.Instance{item("a", items.Head, nil)})
+	w.Submit(OpenLootCommand{Player: id, Target: pile})
+	w.Step(dt)
+
+	for _, take := range []string{"a", ""} {
+		w.Submit(PickupCommand{Player: id, Target: pile, Item: take})
+		ev := w.Step(dt)
+		if slices.Contains(ev.Inventory, id) {
+			t.Fatalf("take %q into a full bag changed it", take)
+		}
+		if len(ev.PickupRejected) != 1 || ev.PickupRejected[0] != (PickupRejection{Player: id, Pile: pile, Item: take, Reason: PickupBagFull}) {
+			t.Fatalf("rejected = %+v", ev.PickupRejected)
+		}
+	}
+	if left, _ := w.Pile(pile); !slices.Equal(ids(left.Items), []string{"a"}) {
+		t.Fatalf("pile = %v", ids(left.Items))
+	}
+}
+
+func TestTakeNeedsRange(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	pile := w.AddPile(Vec2{X: 60}, []items.Instance{item("a", items.Head, nil)})
+
+	w.Submit(PickupCommand{Player: id, Target: pile, Item: "a"})
+	if ev := w.Step(dt); len(ev.PickupRejected) != 1 || ev.PickupRejected[0].Reason != PickupRange {
+		t.Fatalf("rejected = %+v", ev.PickupRejected)
+	}
+}
+
+func TestTwoPlayersRaceForOneItem(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	ann := w.AddPlayer(Vec2{})
+	bob := w.AddPlayer(Vec2{X: 20})
+	pile := w.AddPile(Vec2{X: 10}, []items.Instance{item("a", items.Head, nil), item("b", items.Feet, nil)})
+	w.Submit(OpenLootCommand{Player: ann, Target: pile})
+	w.Submit(OpenLootCommand{Player: bob, Target: pile})
+	w.Step(dt)
+
+	w.Submit(PickupCommand{Player: ann, Target: pile, Item: "a"})
+	w.Submit(PickupCommand{Player: bob, Target: pile, Item: "a"})
+	ev := w.Step(dt)
+
+	if !slices.Equal(ev.Inventory, []EntityID{ann}) {
+		t.Fatalf("changed = %v, want only ann", ev.Inventory)
+	}
+	if len(ev.PickupRejected) != 1 || ev.PickupRejected[0] != (PickupRejection{Player: bob, Pile: pile, Item: "a", Reason: PickupGone}) {
+		t.Fatalf("rejected = %+v", ev.PickupRejected)
+	}
+	if p, _ := w.Player(bob); len(p.Inventory.Items) != 0 {
+		t.Fatalf("bob's bag = %v", ids(p.Inventory.Items))
+	}
+	for _, id := range []EntityID{ann, bob} {
+		if l, _ := lootFor(ev, id); !slices.Equal(ids(l.Items), []string{"b"}) {
+			t.Fatalf("player %d window = %+v, want only b", id, l)
+		}
+	}
+}
+
+func TestLootWindowClosesWhenPlayerWalksAway(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	chest := w.AddPile(Vec2{X: 10}, []items.Instance{item("a", items.Head, nil)})
+	w.Submit(OpenLootCommand{Player: id, Target: chest})
+	w.Step(dt)
+
+	w.players[id].Pos = Vec2{X: -60}
+	if l, ok := lootFor(w.Step(dt), id); !ok || !l.Closed {
+		t.Fatalf("window = %+v, %v, want it closed", l, ok)
+	}
+}
+
+func TestCloseLootStopsUpdates(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	ann := w.AddPlayer(Vec2{})
+	bob := w.AddPlayer(Vec2{})
+	pile := w.AddPile(Vec2{X: 10}, []items.Instance{item("a", items.Head, nil), item("b", items.Feet, nil)})
+	w.Submit(OpenLootCommand{Player: ann, Target: pile})
+	w.Step(dt)
+
+	w.Submit(CloseLootCommand{Player: ann, Target: pile})
+	w.Submit(PickupCommand{Player: bob, Target: pile, Item: "a"})
+	if _, ok := lootFor(w.Step(dt), ann); ok {
+		t.Fatal("closed window got an update")
+	}
+}

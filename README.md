@@ -72,7 +72,7 @@ just client-test    # headless player tests: movement, walls, interact
 just net-test       # start cave-server and check a real client can join and move
 ```
 
-Controls: WASD or arrow keys to move, Space or left click to attack in the direction the character faces, E to loot a chest or pile, I or Tab for the inventory, Escape to close an open window. The last mouse motion or move key sets the facing.
+Controls: WASD or arrow keys to move, Space or left click to attack in the direction the character faces, E to open the loot window on a chest or pile, then Take an item or Take all, I or Tab for the inventory, Escape to close an open window. The last mouse motion or move key sets the facing.
 
 The server keeps your items by player name. Reconnect with the same name to get them back. Set one with `-- --name=ann`; without it the client picks a random name each launch.
 

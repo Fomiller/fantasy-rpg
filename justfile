@@ -104,6 +104,7 @@ client-test:
     {{godot}} --headless --path client/godot --script res://tests/abilities_test.gd
     {{godot}} --headless --path client/godot --script res://tests/facing_test.gd
     {{godot}} --headless --path client/godot --script res://tests/windows_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/loot_window_test.gd
 
 net-test: build
     #!/usr/bin/env bash
