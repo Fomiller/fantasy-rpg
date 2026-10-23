@@ -12,6 +12,10 @@ var _capacity := 0
 @onready var _list: VBoxContainer = $List
 
 
+func _ready() -> void:
+	add_to_group("windows")
+
+
 func show_equipment(items: Array[GameV1.Item]) -> void:
 	_equipment = items
 	_rebuild()
