@@ -32,10 +32,15 @@ func _ready() -> void:
 	_play("idle")
 
 
-func move(velocity: Vector2) -> void:
+# A facing, when given, wins over velocity, so a player can back away while
+# facing an enemy.
+func move(velocity: Vector2, facing := Vector2.ZERO) -> void:
 	if dead or _anim.current_animation in ["swing", "windup"]:
 		return
-	face(velocity)
+	if facing.x != 0.0:
+		_rig.scale.x = signf(facing.x)
+	else:
+		face(velocity)
 	_play("walk" if velocity.length() > 1.0 else "idle")
 
 

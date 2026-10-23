@@ -80,10 +80,19 @@ func _test_abilities(main: Node, connection: ServerConnection) -> void:
 		_check(seen.rejected.get_ability_id() == "cleave" and seen.rejected.get_reason() == "resource", "rejected for want of rage")
 		_check("not enough rage" in bar.rejection(), "HUD says there is not enough rage")
 
+	# The client roots for cleave's windup even though the server said no.
+	var player: Player = main.get_node("Player")
+	await _until(func() -> bool: return player._rooted == 0.0)
+	var motion := InputEventMouseMotion.new()
+	motion.position = player.get_global_transform_with_canvas().origin + Vector2(-60, 80)
+	motion.relative = Vector2(10, 0)
+	root.push_input(motion, true)
 	await _press("attack")
 	_check(await _until(func() -> bool: return seen.used != null), "server starts the basic attack")
 	if seen.used:
 		_check(seen.used.get_ability_id() == "slash" and seen.used.get_windup_ms() == 100, "basic attack is slash with its windup")
+		var aim := Vector2(seen.used.get_aim().get_x(), seen.used.get_aim().get_y())
+		_check(aim.is_equal_approx(Vector2(-60, 80).normalized()) and aim.is_equal_approx(player.facing), "basic attack aims where the player faces")
 		_check(bar.cooldown_left("slash") > 0.0, "slash shows its cooldown")
 
 

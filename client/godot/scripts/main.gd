@@ -1,8 +1,6 @@
 extends Node2D
 
-# Mirror sim.DefaultConfig and the slash data. They only pick a target; the
-# server decides.
-const ATTACK_RANGE := 64.0
+# Mirrors sim.DefaultConfig. It only picks a target; the server decides.
 const PICKUP_RANGE := 48.0
 
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
@@ -81,29 +79,15 @@ func _top_window() -> Control:
 	return top
 
 
-# Sends the ability in a slot, aimed at the mouse. A cooldown the server
-# already reported holds the key back.
+# Sends the ability in a slot, aimed where the player faces. A cooldown the
+# server already reported holds the key back.
 func use_ability(index: int) -> void:
 	var ability := _abilities.slot(index)
 	if ability == null or not _connection.is_joined() or _abilities.cooldown_left(ability.get_id()) > 0.0:
 		return
-	var target := nearest_enemy(_ghost.position)
-	var aim := aim_direction(target)
+	var aim := _player.facing
 	_player.cast(aim, ability.get_windup_ms() / 1000.0, ability.get_root())
-	_connection.send_attack(target.entity_id if target else 0, ability.get_id(), aim)
-
-
-# Toward the mouse. Without one, like in a headless test, toward the nearest
-# enemy, then the way the player is moving.
-func aim_direction(target: EntityView) -> Vector2:
-	if DisplayServer.get_name() != "headless":
-		var to_mouse := get_global_mouse_position() - _player.position
-		if to_mouse.length() > 1.0:
-			return to_mouse.normalized()
-	if target:
-		return (target.position - _ghost.position).normalized()
-	var move := _player.get_move_input()
-	return move.normalized() if move != Vector2.ZERO else Vector2.RIGHT
+	_connection.send_attack(0, ability.get_id(), aim)
 
 
 func _pickup() -> void:
@@ -112,11 +96,7 @@ func _pickup() -> void:
 		_connection.send_pickup(target.entity_id)
 
 
-# Both use the server position, since that is where the server measures range from.
-func nearest_enemy(from: Vector2) -> EntityView:
-	return _nearest(from, ATTACK_RANGE, func(view: EntityView) -> bool: return view.is_in_group("enemies") and view.is_alive())
-
-
+# Uses the server position, since that is where the server measures range from.
 func nearest_loot(from: Vector2) -> EntityView:
 	return _nearest(from, PICKUP_RANGE, func(view: EntityView) -> bool: return view is LootView and (view as LootView).item_count > 0)
 
