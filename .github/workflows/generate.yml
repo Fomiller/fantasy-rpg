@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-github).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+
+name: Generate
+
+# No path filter: Drift Check also has to catch a hand-edit to a generated file.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden:
+    uses: Fomiller/gh-actions/.github/workflows/golden-generate.yaml@main
+    permissions:
+      contents: read
+    secrets: inherit

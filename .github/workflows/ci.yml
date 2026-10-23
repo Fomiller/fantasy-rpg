@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-github).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: build
+        run: go build -o bin/ ./src/...
+      - name: test
+        run: go test ./src/... -race -cover
+      - name: lint
+        run: go vet ./src/...

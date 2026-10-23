@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-docs).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+
+# Pages takes one deployment at a time, and a cancelled deploy leaves the site
+# on the previous build.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    uses: Fomiller/gh-actions/.github/workflows/mdbook.yaml@main
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      book-path: docs

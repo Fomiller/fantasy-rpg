@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-docs).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+
+[book]
+authors = ["Forrest Miller"]
+language = "en"
+src = "src"
+title = "fantasy-rpg"
+
+[output.html]
+additional-css = ["./theme/catppuccin.css"]
+# Both, so the book looks the same whatever the reader's OS is set to.
+default-theme = "frappe"
+preferred-dark-theme = "frappe"
+git-repository-url = "https://github.com/Fomiller/fantasy-rpg"
+edit-url-template = "https://github.com/Fomiller/fantasy-rpg/edit/main/docs/{path}"
+
+[output.html.fold]
+enable = true
+level = 1
