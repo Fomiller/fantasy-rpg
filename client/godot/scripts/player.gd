@@ -14,11 +14,16 @@ const WEAPONS := {
 }
 # For weapons without their own art yet.
 const DEFAULT_WEAPON := preload("res://assets/kenney_tiny_dungeon/tile_0104.png")
+# Mouse motion smaller than this, in pixels, is a resting hand, not aiming.
+const MOUSE_JITTER := 3.0
+const MARKER_DISTANCE := 22.0
 
 # The server sends both. These are its defaults, used until it does.
 var max_speed := 220.0
 var tick_seconds := 1.0 / 20.0
 var alive := true
+# Where attacks and abilities go. The last mouse motion or move key sets it.
+var facing := Vector2.RIGHT
 var cave: Cave
 # Sends one input to the server and returns its seq, or 0 when offline.
 var send_move: Callable
@@ -32,15 +37,28 @@ var _pending: Array[Array] = []
 var _no_walls: Array[Rect2] = []
 # Seconds left of a rooting windup. The server ignores movement then.
 var _rooted := 0.0
+var _last_move := Vector2.ZERO
 
 @onready var _interact_area: Area2D = $InteractArea
 @onready var _sprite: CharacterSprite = $Body
+@onready var _marker: Node2D = $FacingMarker
+
+
+func _input(event: InputEvent) -> void:
+	var motion := event as InputEventMouseMotion
+	if motion and motion.relative.length() >= MOUSE_JITTER:
+		face((make_input_local(motion) as InputEventMouseMotion).position)
 
 
 # Movement runs in fixed steps of one server tick, the same steps the server
 # takes. The node is drawn between the last two steps so it still moves smoothly.
 func _physics_process(delta: float) -> void:
 	_rooted = maxf(_rooted - delta, 0.0)
+	# Only a change counts, so a held key does not undo a later mouse motion.
+	var move := get_move_input()
+	if move != _last_move:
+		_last_move = move
+		face(move)
 	_accumulator += delta
 	while _accumulator >= tick_seconds:
 		_accumulator -= tick_seconds
@@ -48,7 +66,10 @@ func _physics_process(delta: float) -> void:
 	_correction = _correction.lerp(Vector2.ZERO, minf(1.0, CORRECTION_SMOOTHING * delta))
 	position = _previous.lerp(_body.position, _accumulator / tick_seconds) + _correction
 	velocity = _body.velocity
-	_sprite.move(velocity)
+	_sprite.move(velocity, facing)
+	_marker.position = facing * MARKER_DISTANCE
+	_marker.rotation = facing.angle()
+	_marker.visible = alive
 
 	if Input.is_action_just_pressed("interact"):
 		interact()
@@ -58,6 +79,13 @@ func get_move_input() -> Vector2:
 	if not alive or _rooted > 0.0:
 		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
+
+
+# A rooting windup holds facing on its aim until it lands.
+func face(direction: Vector2) -> void:
+	if _rooted > 0.0 or direction.length() < 1e-3:
+		return
+	facing = direction.normalized()
 
 
 func place(at: Vector2) -> void:
@@ -123,9 +151,16 @@ func revive() -> void:
 func cast(aim: Vector2, windup_seconds: float, root: bool) -> void:
 	if not alive:
 		return
-	_sprite.cast(aim, windup_seconds)
+	face(aim)
+	_sprite.cast(facing, windup_seconds)
 	if root:
 		_rooted = windup_seconds
+
+
+# The server said no, so the windup played early never happened.
+func cancel_cast() -> void:
+	_rooted = 0.0
+	_sprite.windup(false)
 
 
 # An empty id means no weapon is equipped.

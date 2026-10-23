@@ -140,8 +140,16 @@ Rules:
 ### Aim
 
 Arcs, projectiles, dashes and blinks need a direction, not a target. So
-`AttackRequest` gets an `aim` vector. The client sends where the mouse is,
-or the move direction when there is no mouse.
+`AttackRequest` gets an `aim` vector. The client sends the way the player
+faces.
+
+- The player has one facing. The latest mouse motion or move key sets it.
+  Mouse motion turns the player toward the cursor. A move key turns the
+  player along the new move direction.
+- Small mouse jitter is ignored. Holding a key does not undo a later mouse
+  motion, so a player can back away while facing an enemy.
+- During a rooting windup, facing stays on the windup's aim.
+- The sprite and a small marker show the facing.
 
 - The server uses `aim` when it is set.
 - When `aim` is zero, the server aims at `target_id`. That keeps the

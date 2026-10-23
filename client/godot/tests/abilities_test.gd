@@ -43,8 +43,29 @@ func _run() -> void:
 	_check(player.get_move_input() != Vector2.ZERO, "the player can move once the windup ends")
 	Input.action_release("move_right")
 
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var caster: Player = main.get_node("Player")
+	caster.cast(Vector2.DOWN, 0.5, true)
+	main._on_ability_rejected(_rejection("busy"))
+	_check(caster._rooted > 0.0, "a busy rejection keeps the earlier windup")
+	main._on_ability_rejected(_rejection("resource"))
+	caster.face(Vector2.LEFT)
+	_check(caster._rooted == 0.0 and caster.facing == Vector2.LEFT, "a rejected cast frees movement and facing")
+	_check(caster._sprite.animation() != "windup", "a rejected cast stops the windup")
+	await create_timer(0.6).timeout
+	_check(caster._sprite.animation() != "swing", "a rejected cast never swings")
+
 	print("abilities_test: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
 	quit(1 if _failures > 0 else 0)
+
+
+func _rejection(reason: String) -> GameV1.AbilityRejected:
+	var event := GameV1.AbilityRejected.new()
+	event.set_ability_id("cleave")
+	event.set_reason(reason)
+	return event
 
 
 func _warrior() -> GameV1.ClassInfo:

@@ -23,7 +23,7 @@ func _run() -> void:
 	var melee: EnemyView = views.melee
 	var ranged: EnemyView = views.ranged
 	var elite: EnemyView = views.elite
-	_check(melee.is_in_group("enemies") and main.nearest_enemy(melee.position) is EnemyView, "enemies are attack targets")
+	_check(melee.is_in_group("enemies"), "enemies are attack targets")
 	_check(melee._sprite.texture != ranged._sprite.texture and ranged._sprite.texture != elite._sprite.texture and melee._sprite.texture != elite._sprite.texture, "each archetype has its own sprite")
 	_check(elite._sprite.scale.x > melee._sprite.scale.x, "elite is drawn bigger")
 	_check(melee._sprite.animation() == "walk", "a moving enemy walks")
@@ -54,7 +54,7 @@ func _run() -> void:
 	main._views[99] = shot
 	shot._process(0.5)
 	_check(shot.position.is_equal_approx(Vector2(170, 0)), "projectile flies by its velocity between snapshots")
-	_check(main.nearest_enemy(shot.position) == null, "projectiles are not attack targets")
+	_check(not shot.is_in_group("enemies"), "projectiles are not attack targets")
 
 	print("enemy_view_test: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
 	quit(1 if _failures > 0 else 0)
