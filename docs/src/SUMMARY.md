@@ -6,3 +6,4 @@
 
 - [Loot](design/loot.md)
 - [Enemy AI](design/enemy-ai.md)
+- [Classes](design/classes.md)
