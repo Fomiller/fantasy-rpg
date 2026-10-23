@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 [ext_resource type="Script" path="res://scripts/server_connection.gd" id="4_connection"]
+[ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="5_inventory"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -42,3 +43,14 @@ offset_bottom = 200.0
 bbcode_enabled = true
 fit_content = true
 mouse_filter = 2
+
+[node name="Inventory" type="PanelContainer" parent="HUD"]
+visible = false
+offset_left = 800.0
+offset_top = 8.0
+offset_right = 1272.0
+offset_bottom = 200.0
+script = ExtResource("5_inventory")
+
+[node name="List" type="VBoxContainer" parent="HUD/Inventory"]
+layout_mode = 2

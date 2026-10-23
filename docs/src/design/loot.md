@@ -189,6 +189,35 @@ First tables:
 - Items are only safe after extraction. Then they move to the player's
   stash. Saving the stash is part of FOM-103 and the database work.
 
+## Inventory
+
+FOM-103 built the first version of this.
+
+- A player has equipment, one item per gear slot, and a bag of 20 slots.
+  A stack takes one slot. Stacks fill up before a new slot is used.
+- Interact on a chest or ground pile takes everything that fits. The rest
+  stays. An empty pile goes away. An empty chest stays, opened.
+- The loop cave has three chests. Each rolls `cave1_chest` when the run
+  starts. A killed enemy rolls `cave1_grunt` and drops a pile if it got
+  anything.
+- From the bag a player can equip, drop, or use a consumable. Equipping
+  swaps the old item into the bag. Unequip needs a free bag slot. Drop puts
+  the whole entry on the ground at the player's feet.
+- On death, all equipment and bag items drop as one pile.
+- The client sends requests. The server checks range, ownership and room,
+  then sends the new `EquipmentUpdated` and `InventoryUpdated`. A request it
+  cannot do is ignored.
+
+Saving, for now:
+
+- The server saves a player's loadout under their name after every change.
+  Joining with that name again restores it.
+- A player who loses everything, by death or by dropping it all, starts over
+  with the starter kit.
+- Only one connection per name at a time.
+- The store is in memory, so a server restart forgets it. Postgres replaces
+  it in FOM-114. The stash and the at-risk rules above still apply then.
+
 ## Data files
 
 - Definitions, affixes, uniques and drop tables live as JSON in

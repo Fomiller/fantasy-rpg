@@ -58,7 +58,51 @@ func _run() -> void:
 			enemies += 1
 	_check(enemies == 5, "snapshot includes all five enemies of the loop cave")
 
+	await _test_loot_then_equip(main, hud)
 	_finish()
+
+
+# Unequip the sword, drop it, loot it back with interact, and equip it again,
+# all through the inventory panel and the server.
+func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
+	var panel: InventoryPanel = main.get_node("HUD/Inventory")
+	Input.action_press("inventory")
+	await physics_frame
+	await physics_frame
+	Input.action_release("inventory")
+	_check(panel.visible, "inventory key opens the panel")
+
+	var unequip := _button(panel, "Rusty Sword", "Unequip")
+	_check(unequip != null, "panel lists the equipped sword")
+	if unequip == null:
+		return
+	unequip.pressed.emit()
+	_check(await _until(func() -> bool: return _button(panel, "Rusty Sword", "Drop") != null), "unequipped sword is in the bag")
+	_check(await _until(func() -> bool: return "Rusty Sword" not in hud.text), "HUD drops the sword")
+
+	_button(panel, "Rusty Sword", "Drop").pressed.emit()
+	_check(await _until(func() -> bool: return main.nearest_loot(main.get_node("ServerGhost").position) != null), "dropped sword lies on the ground")
+	_check(_button(panel, "Rusty Sword", "Drop") == null, "bag is empty after the drop")
+
+	Input.action_press("interact")
+	await physics_frame
+	await physics_frame
+	Input.action_release("interact")
+	_check(await _until(func() -> bool: return _button(panel, "Rusty Sword", "Equip") != null), "interact loots the sword into the bag")
+
+	_button(panel, "Rusty Sword", "Equip").pressed.emit()
+	_check(await _until(func() -> bool: return "Rusty Sword" in hud.text), "equipped the looted sword")
+	_check(_button(panel, "Rusty Sword", "Unequip") != null and _button(panel, "Rusty Sword", "Equip") == null, "panel shows the sword equipped, not in the bag")
+
+
+func _button(panel: InventoryPanel, item_name: String, text: String) -> Button:
+	for row in panel.get_node("List").get_children():
+		if not row is HBoxContainer or item_name not in (row.get_child(0) as RichTextLabel).text:
+			continue
+		for child in row.get_children():
+			if child is Button and child.text == text:
+				return child
+	return null
 
 
 func _server_pos(snapshot: GameV1.WorldSnapshot, player_id: int) -> Vector2:

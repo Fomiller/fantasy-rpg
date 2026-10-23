@@ -29,6 +29,9 @@ const (
 	EntityKind_ENTITY_KIND_UNSPECIFIED EntityKind = 0
 	EntityKind_ENTITY_KIND_PLAYER      EntityKind = 1
 	EntityKind_ENTITY_KIND_ENEMY       EntityKind = 2
+	EntityKind_ENTITY_KIND_CHEST       EntityKind = 3
+	// Loot on the ground. It goes away once someone picks all of it up.
+	EntityKind_ENTITY_KIND_LOOT EntityKind = 4
 )
 
 // Enum value maps for EntityKind.
@@ -37,11 +40,15 @@ var (
 		0: "ENTITY_KIND_UNSPECIFIED",
 		1: "ENTITY_KIND_PLAYER",
 		2: "ENTITY_KIND_ENEMY",
+		3: "ENTITY_KIND_CHEST",
+		4: "ENTITY_KIND_LOOT",
 	}
 	EntityKind_value = map[string]int32{
 		"ENTITY_KIND_UNSPECIFIED": 0,
 		"ENTITY_KIND_PLAYER":      1,
 		"ENTITY_KIND_ENEMY":       2,
+		"ENTITY_KIND_CHEST":       3,
+		"ENTITY_KIND_LOOT":        4,
 	}
 )
 
@@ -138,6 +145,11 @@ type ClientMessage struct {
 	//	*ClientMessage_Join
 	//	*ClientMessage_Move
 	//	*ClientMessage_Attack
+	//	*ClientMessage_Pickup
+	//	*ClientMessage_Equip
+	//	*ClientMessage_Unequip
+	//	*ClientMessage_Drop
+	//	*ClientMessage_Use
 	Payload       isClientMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -214,6 +226,51 @@ func (x *ClientMessage) GetAttack() *AttackRequest {
 	return nil
 }
 
+func (x *ClientMessage) GetPickup() *PickupRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Pickup); ok {
+			return x.Pickup
+		}
+	}
+	return nil
+}
+
+func (x *ClientMessage) GetEquip() *EquipRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Equip); ok {
+			return x.Equip
+		}
+	}
+	return nil
+}
+
+func (x *ClientMessage) GetUnequip() *UnequipRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Unequip); ok {
+			return x.Unequip
+		}
+	}
+	return nil
+}
+
+func (x *ClientMessage) GetDrop() *DropRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Drop); ok {
+			return x.Drop
+		}
+	}
+	return nil
+}
+
+func (x *ClientMessage) GetUse() *UseRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Use); ok {
+			return x.Use
+		}
+	}
+	return nil
+}
+
 type isClientMessage_Payload interface {
 	isClientMessage_Payload()
 }
@@ -230,11 +287,41 @@ type ClientMessage_Attack struct {
 	Attack *AttackRequest `protobuf:"bytes,12,opt,name=attack,proto3,oneof"`
 }
 
+type ClientMessage_Pickup struct {
+	Pickup *PickupRequest `protobuf:"bytes,13,opt,name=pickup,proto3,oneof"`
+}
+
+type ClientMessage_Equip struct {
+	Equip *EquipRequest `protobuf:"bytes,14,opt,name=equip,proto3,oneof"`
+}
+
+type ClientMessage_Unequip struct {
+	Unequip *UnequipRequest `protobuf:"bytes,15,opt,name=unequip,proto3,oneof"`
+}
+
+type ClientMessage_Drop struct {
+	Drop *DropRequest `protobuf:"bytes,16,opt,name=drop,proto3,oneof"`
+}
+
+type ClientMessage_Use struct {
+	Use *UseRequest `protobuf:"bytes,17,opt,name=use,proto3,oneof"`
+}
+
 func (*ClientMessage_Join) isClientMessage_Payload() {}
 
 func (*ClientMessage_Move) isClientMessage_Payload() {}
 
 func (*ClientMessage_Attack) isClientMessage_Payload() {}
+
+func (*ClientMessage_Pickup) isClientMessage_Payload() {}
+
+func (*ClientMessage_Equip) isClientMessage_Payload() {}
+
+func (*ClientMessage_Unequip) isClientMessage_Payload() {}
+
+func (*ClientMessage_Drop) isClientMessage_Payload() {}
+
+func (*ClientMessage_Use) isClientMessage_Payload() {}
 
 type ServerMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -854,8 +941,10 @@ type EntityState struct {
 	MaxHealth       int32   `protobuf:"varint,7,opt,name=max_health,json=maxHealth,proto3" json:"max_health,omitempty"`
 	// Players only. The last MoveInput seq the server applied, so the client
 	// knows which of its predicted inputs to replay.
-	LastInputSeq  uint32  `protobuf:"varint,8,opt,name=last_input_seq,json=lastInputSeq,proto3" json:"last_input_seq,omitempty"`
-	MaxSpeed      float32 `protobuf:"fixed32,9,opt,name=max_speed,json=maxSpeed,proto3" json:"max_speed,omitempty"`
+	LastInputSeq uint32  `protobuf:"varint,8,opt,name=last_input_seq,json=lastInputSeq,proto3" json:"last_input_seq,omitempty"`
+	MaxSpeed     float32 `protobuf:"fixed32,9,opt,name=max_speed,json=maxSpeed,proto3" json:"max_speed,omitempty"`
+	// Chests and loot only.
+	ItemCount     uint32 `protobuf:"varint,10,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -949,6 +1038,13 @@ func (x *EntityState) GetLastInputSeq() uint32 {
 func (x *EntityState) GetMaxSpeed() float32 {
 	if x != nil {
 		return x.MaxSpeed
+	}
+	return 0
+}
+
+func (x *EntityState) GetItemCount() uint32 {
+	if x != nil {
+		return x.ItemCount
 	}
 	return 0
 }
@@ -1351,9 +1447,12 @@ func (x *EquipmentUpdated) GetItems() []*Item {
 	return nil
 }
 
+// InventoryUpdated is everything in the player's bag, sent to that player
+// whenever it changes.
 type InventoryUpdated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*Item                `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Capacity      uint32                 `protobuf:"varint,2,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1395,17 +1494,254 @@ func (x *InventoryUpdated) GetItems() []*Item {
 	return nil
 }
 
+func (x *InventoryUpdated) GetCapacity() uint32 {
+	if x != nil {
+		return x.Capacity
+	}
+	return 0
+}
+
+// PickupRequest takes everything that fits from a chest or loot entity.
+type PickupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetId      uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PickupRequest) Reset() {
+	*x = PickupRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PickupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PickupRequest) ProtoMessage() {}
+
+func (x *PickupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PickupRequest.ProtoReflect.Descriptor instead.
+func (*PickupRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *PickupRequest) GetTargetId() uint64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+// EquipRequest moves an item from the bag to its slot. Whatever was in the
+// slot goes back to the bag.
+type EquipRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EquipRequest) Reset() {
+	*x = EquipRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EquipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EquipRequest) ProtoMessage() {}
+
+func (x *EquipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EquipRequest.ProtoReflect.Descriptor instead.
+func (*EquipRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *EquipRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+type UnequipRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Slot          string                 `protobuf:"bytes,1,opt,name=slot,proto3" json:"slot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnequipRequest) Reset() {
+	*x = UnequipRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnequipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnequipRequest) ProtoMessage() {}
+
+func (x *UnequipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnequipRequest.ProtoReflect.Descriptor instead.
+func (*UnequipRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UnequipRequest) GetSlot() string {
+	if x != nil {
+		return x.Slot
+	}
+	return ""
+}
+
+// DropRequest puts a whole bag entry on the ground at the player's feet.
+type DropRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DropRequest) Reset() {
+	*x = DropRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DropRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DropRequest) ProtoMessage() {}
+
+func (x *DropRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DropRequest.ProtoReflect.Descriptor instead.
+func (*DropRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DropRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+// UseRequest uses one of a consumable, like drinking a potion.
+type UseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UseRequest) Reset() {
+	*x = UseRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UseRequest) ProtoMessage() {}
+
+func (x *UseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UseRequest.ProtoReflect.Descriptor instead.
+func (*UseRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *UseRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
 var File_game_v1_game_proto protoreflect.FileDescriptor
 
 const file_game_v1_game_proto_rawDesc = "" +
 	"\n" +
-	"\x12game/v1/game.proto\x12\agame.v1\"\xcd\x01\n" +
+	"\x12game/v1/game.proto\x12\agame.v1\"\xb8\x03\n" +
 	"\rClientMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12*\n" +
 	"\x04join\x18\n" +
 	" \x01(\v2\x14.game.v1.JoinRequestH\x00R\x04join\x12(\n" +
 	"\x04move\x18\v \x01(\v2\x12.game.v1.MoveInputH\x00R\x04move\x120\n" +
-	"\x06attack\x18\f \x01(\v2\x16.game.v1.AttackRequestH\x00R\x06attackB\t\n" +
+	"\x06attack\x18\f \x01(\v2\x16.game.v1.AttackRequestH\x00R\x06attack\x120\n" +
+	"\x06pickup\x18\r \x01(\v2\x16.game.v1.PickupRequestH\x00R\x06pickup\x12-\n" +
+	"\x05equip\x18\x0e \x01(\v2\x15.game.v1.EquipRequestH\x00R\x05equip\x123\n" +
+	"\aunequip\x18\x0f \x01(\v2\x17.game.v1.UnequipRequestH\x00R\aunequip\x12*\n" +
+	"\x04drop\x18\x10 \x01(\v2\x14.game.v1.DropRequestH\x00R\x04drop\x12'\n" +
+	"\x03use\x18\x11 \x01(\v2\x13.game.v1.UseRequestH\x00R\x03useB\t\n" +
 	"\apayload\"\x86\x03\n" +
 	"\rServerMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12/\n" +
@@ -1445,7 +1781,7 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\ttarget_id\x18\x02 \x01(\x04R\btargetId\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\x05R\x06amount\x12#\n" +
 	"\rtarget_health\x18\x04 \x01(\x05R\ftargetHealth\x12\x16\n" +
-	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xc1\x02\n" +
+	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xe0\x02\n" +
 	"\vEntityState\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.game.v1.EntityKindR\x04kind\x12)\n" +
@@ -1456,7 +1792,10 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\n" +
 	"max_health\x18\a \x01(\x05R\tmaxHealth\x12$\n" +
 	"\x0elast_input_seq\x18\b \x01(\rR\flastInputSeq\x12\x1b\n" +
-	"\tmax_speed\x18\t \x01(\x02R\bmaxSpeed\"U\n" +
+	"\tmax_speed\x18\t \x01(\x02R\bmaxSpeed\x12\x1d\n" +
+	"\n" +
+	"item_count\x18\n" +
+	" \x01(\rR\titemCount\"U\n" +
 	"\rWorldSnapshot\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x120\n" +
 	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\x9b\x01\n" +
@@ -1487,14 +1826,28 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x05value\x18\x03 \x01(\x05R\x05value\x12\x12\n" +
 	"\x04tier\x18\x04 \x01(\rR\x04tier\"7\n" +
 	"\x10EquipmentUpdated\x12#\n" +
-	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\"7\n" +
+	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\"S\n" +
 	"\x10InventoryUpdated\x12#\n" +
-	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items*X\n" +
+	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\x12\x1a\n" +
+	"\bcapacity\x18\x02 \x01(\rR\bcapacity\",\n" +
+	"\rPickupRequest\x12\x1b\n" +
+	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\"'\n" +
+	"\fEquipRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"$\n" +
+	"\x0eUnequipRequest\x12\x12\n" +
+	"\x04slot\x18\x01 \x01(\tR\x04slot\"&\n" +
+	"\vDropRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"%\n" +
+	"\n" +
+	"UseRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId*\x85\x01\n" +
 	"\n" +
 	"EntityKind\x12\x1b\n" +
 	"\x17ENTITY_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12ENTITY_KIND_PLAYER\x10\x01\x12\x15\n" +
-	"\x11ENTITY_KIND_ENEMY\x10\x02*}\n" +
+	"\x11ENTITY_KIND_ENEMY\x10\x02\x12\x15\n" +
+	"\x11ENTITY_KIND_CHEST\x10\x03\x12\x14\n" +
+	"\x10ENTITY_KIND_LOOT\x10\x04*}\n" +
 	"\x06Rarity\x12\x16\n" +
 	"\x12RARITY_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rRARITY_COMMON\x10\x01\x12\x13\n" +
@@ -1517,7 +1870,7 @@ func file_game_v1_game_proto_rawDescGZIP() []byte {
 }
 
 var file_game_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_game_v1_game_proto_goTypes = []any{
 	(EntityKind)(0),          // 0: game.v1.EntityKind
 	(Rarity)(0),              // 1: game.v1.Rarity
@@ -1539,39 +1892,49 @@ var file_game_v1_game_proto_goTypes = []any{
 	(*ItemAffix)(nil),        // 17: game.v1.ItemAffix
 	(*EquipmentUpdated)(nil), // 18: game.v1.EquipmentUpdated
 	(*InventoryUpdated)(nil), // 19: game.v1.InventoryUpdated
+	(*PickupRequest)(nil),    // 20: game.v1.PickupRequest
+	(*EquipRequest)(nil),     // 21: game.v1.EquipRequest
+	(*UnequipRequest)(nil),   // 22: game.v1.UnequipRequest
+	(*DropRequest)(nil),      // 23: game.v1.DropRequest
+	(*UseRequest)(nil),       // 24: game.v1.UseRequest
 }
 var file_game_v1_game_proto_depIdxs = []int32{
 	6,  // 0: game.v1.ClientMessage.join:type_name -> game.v1.JoinRequest
 	9,  // 1: game.v1.ClientMessage.move:type_name -> game.v1.MoveInput
 	10, // 2: game.v1.ClientMessage.attack:type_name -> game.v1.AttackRequest
-	7,  // 3: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
-	13, // 4: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
-	11, // 5: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
-	19, // 6: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
-	8,  // 7: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
-	18, // 8: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
-	4,  // 9: game.v1.Rect.min:type_name -> game.v1.Vec2
-	4,  // 10: game.v1.Rect.max:type_name -> game.v1.Vec2
-	14, // 11: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
-	4,  // 12: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
-	4,  // 13: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
-	0,  // 14: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
-	4,  // 15: game.v1.EntityState.position:type_name -> game.v1.Vec2
-	4,  // 16: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
-	12, // 17: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
-	5,  // 18: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
-	5,  // 19: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
-	5,  // 20: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
-	1,  // 21: game.v1.Item.rarity:type_name -> game.v1.Rarity
-	16, // 22: game.v1.Item.base:type_name -> game.v1.ItemStat
-	17, // 23: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
-	15, // 24: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
-	15, // 25: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	20, // 3: game.v1.ClientMessage.pickup:type_name -> game.v1.PickupRequest
+	21, // 4: game.v1.ClientMessage.equip:type_name -> game.v1.EquipRequest
+	22, // 5: game.v1.ClientMessage.unequip:type_name -> game.v1.UnequipRequest
+	23, // 6: game.v1.ClientMessage.drop:type_name -> game.v1.DropRequest
+	24, // 7: game.v1.ClientMessage.use:type_name -> game.v1.UseRequest
+	7,  // 8: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
+	13, // 9: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
+	11, // 10: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
+	19, // 11: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
+	8,  // 12: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
+	18, // 13: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
+	4,  // 14: game.v1.Rect.min:type_name -> game.v1.Vec2
+	4,  // 15: game.v1.Rect.max:type_name -> game.v1.Vec2
+	14, // 16: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
+	4,  // 17: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
+	4,  // 18: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
+	0,  // 19: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
+	4,  // 20: game.v1.EntityState.position:type_name -> game.v1.Vec2
+	4,  // 21: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
+	12, // 22: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
+	5,  // 23: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
+	5,  // 24: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
+	5,  // 25: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
+	1,  // 26: game.v1.Item.rarity:type_name -> game.v1.Rarity
+	16, // 27: game.v1.Item.base:type_name -> game.v1.ItemStat
+	17, // 28: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
+	15, // 29: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
+	15, // 30: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_game_v1_game_proto_init() }
@@ -1583,6 +1946,11 @@ func file_game_v1_game_proto_init() {
 		(*ClientMessage_Join)(nil),
 		(*ClientMessage_Move)(nil),
 		(*ClientMessage_Attack)(nil),
+		(*ClientMessage_Pickup)(nil),
+		(*ClientMessage_Equip)(nil),
+		(*ClientMessage_Unequip)(nil),
+		(*ClientMessage_Drop)(nil),
+		(*ClientMessage_Use)(nil),
 	}
 	file_game_v1_game_proto_msgTypes[1].OneofWrappers = []any{
 		(*ServerMessage_Joined)(nil),
@@ -1598,7 +1966,7 @@ func file_game_v1_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_v1_game_proto_rawDesc), len(file_game_v1_game_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   18,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

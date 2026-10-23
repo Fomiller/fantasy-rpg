@@ -1,10 +1,12 @@
 extends Node2D
 
-# Mirrors sim.DefaultConfig. Only picks a target; the server decides if it hits.
+# Mirror sim.DefaultConfig. They only pick a target; the server decides.
 const ATTACK_RANGE := 64.0
+const PICKUP_RANGE := 48.0
 
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
+const LOOT_SCENE := preload("res://scenes/loot.tscn")
 const EXTRACTED_TEXT := "extracted · press E to go again"
 
 @onready var _connection: ServerConnection = $ServerConnection
@@ -14,6 +16,7 @@ const EXTRACTED_TEXT := "extracted · press E to go again"
 @onready var _entities: Node2D = $Entities
 @onready var _status: Label = $HUD/Status
 @onready var _equipment: RichTextLabel = $HUD/Equipment
+@onready var _inventory: InventoryPanel = $HUD/Inventory
 
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
@@ -29,6 +32,9 @@ func _ready() -> void:
 	_connection.damage_received.connect(_on_damage)
 	_connection.extracted.connect(_on_extracted)
 	_connection.equipment_received.connect(_on_equipment)
+	_connection.equipment_received.connect(_inventory.show_equipment)
+	_connection.inventory_received.connect(_inventory.show_inventory)
+	_inventory.connection = _connection
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	_on_disconnected()
@@ -39,7 +45,12 @@ func _physics_process(_delta: float) -> void:
 		if Input.is_action_just_pressed("interact"):
 			_connection.rejoin()
 		return
-	if Input.is_action_just_pressed("attack"):
+	if Input.is_action_just_pressed("inventory"):
+		_inventory.visible = not _inventory.visible
+	if Input.is_action_just_pressed("interact"):
+		_pickup()
+	# A click on the open panel is for its buttons, not an attack.
+	if Input.is_action_just_pressed("attack") and not _inventory.visible:
 		_attack()
 
 
@@ -49,12 +60,26 @@ func _attack() -> void:
 		_connection.send_attack(target.entity_id)
 
 
-# Uses the server position, since that is where the server measures range from.
+func _pickup() -> void:
+	var target := nearest_loot(_ghost.position)
+	if target:
+		_connection.send_pickup(target.entity_id)
+
+
+# Both use the server position, since that is where the server measures range from.
 func nearest_enemy(from: Vector2) -> EntityView:
+	return _nearest(from, ATTACK_RANGE, func(view: EntityView) -> bool: return view.is_in_group("enemies") and view.is_alive())
+
+
+func nearest_loot(from: Vector2) -> EntityView:
+	return _nearest(from, PICKUP_RANGE, func(view: EntityView) -> bool: return view is LootView and (view as LootView).item_count > 0)
+
+
+func _nearest(from: Vector2, max_distance: float, wanted: Callable) -> EntityView:
 	var nearest: EntityView = null
-	var nearest_distance := ATTACK_RANGE
+	var nearest_distance := max_distance
 	for view: EntityView in _views.values():
-		if not view.is_in_group("enemies") or not view.is_alive():
+		if not wanted.call(view):
 			continue
 		var distance := from.distance_to(view.position)
 		if distance <= nearest_distance:
@@ -78,6 +103,7 @@ func _on_disconnected() -> void:
 		view.queue_free()
 	_views.clear()
 	_equipment.text = ""
+	_inventory.clear()
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
@@ -123,6 +149,8 @@ func _spawn_view(kind: int) -> EntityView:
 	if kind == GameV1.EntityKind.ENEMY:
 		view = ENEMY_SCENE.instantiate()
 		view.add_to_group("enemies")
+	elif kind == GameV1.EntityKind.CHEST or kind == GameV1.EntityKind.LOOT:
+		view = LOOT_SCENE.instantiate()
 	else:
 		view = REMOTE_PLAYER_SCENE.instantiate()
 	_entities.add_child(view)

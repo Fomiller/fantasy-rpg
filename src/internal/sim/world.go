@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
@@ -39,6 +40,12 @@ type Config struct {
 
 	ArmorScale   int
 	MoveSpeedCap int
+
+	InventorySize int
+	PickupRange   float64
+	LootLevel     int
+	EnemyLoot     string
+	ChestLoot     string
 }
 
 // DefaultConfig matches the movement values on the Godot Player node.
@@ -69,6 +76,12 @@ func DefaultConfig() Config {
 
 		ArmorScale:   50,
 		MoveSpeedCap: 20,
+
+		InventorySize: 20,
+		PickupRange:   48,
+		LootLevel:     1,
+		EnemyLoot:     "cave1_grunt",
+		ChestLoot:     "cave1_chest",
 	}
 }
 
@@ -78,6 +91,7 @@ type Player struct {
 	Health       int
 	MaxHealth    int
 	Equipment    map[items.Slot]items.Instance
+	Inventory    inventory.Bag
 	LastInputSeq uint32
 	input        Vec2
 	inputs       []MoveCommand
@@ -124,6 +138,8 @@ type DamageEvent struct {
 type Events struct {
 	Damage    []DamageEvent
 	Extracted []EntityID
+	// Inventory lists players whose bag or equipment changed.
+	Inventory []EntityID
 }
 
 type World struct {
@@ -133,6 +149,8 @@ type World struct {
 	exit    *Rect
 	players map[EntityID]*Player
 	enemies map[EntityID]*Enemy
+	piles   map[EntityID]*Pile
+	loot    *items.Roller
 	nextID  EntityID
 	pending []any
 }
@@ -143,6 +161,7 @@ func NewWorld(cfg Config, walls []Rect) *World {
 		walls:   walls,
 		players: map[EntityID]*Player{},
 		enemies: map[EntityID]*Enemy{},
+		piles:   map[EntityID]*Pile{},
 	}
 }
 
@@ -159,6 +178,7 @@ func (w *World) AddPlayer(pos Vec2) EntityID {
 		Health:    w.cfg.PlayerHealth,
 		MaxHealth: w.cfg.PlayerHealth,
 		Equipment: map[items.Slot]items.Instance{},
+		Inventory: inventory.Bag{Size: w.cfg.InventorySize},
 		stats:     map[items.Stat]int{},
 	}
 	return w.nextID
@@ -225,6 +245,10 @@ func (w *World) Step(dt time.Duration) Events {
 			if d, ok := w.applyAttack(c); ok {
 				ev.Damage = append(ev.Damage, d)
 			}
+		case ItemCommand:
+			if w.applyItem(c) {
+				ev.changed(c.player())
+			}
 		}
 	}
 	w.pending = w.pending[:0]
@@ -234,6 +258,7 @@ func (w *World) Step(dt time.Duration) Events {
 		p.cooldown = max(p.cooldown-dt, 0)
 	}
 	ev.Damage = append(ev.Damage, w.stepEnemies(dt)...)
+	w.dropOnKill(&ev)
 	ev.Extracted = w.stepExtraction(dt)
 	w.Tick++
 	return ev

@@ -5,6 +5,7 @@ signal joined(player_id: int)
 signal disconnected
 signal extracted(player_id: int)
 signal equipment_received(items: Array[GameV1.Item])
+signal inventory_received(items: Array[GameV1.Item], capacity: int)
 signal snapshot_received(snapshot: GameV1.WorldSnapshot)
 signal damage_received(event: GameV1.DamageEvent)
 
@@ -12,7 +13,9 @@ const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
 const RETRY_SECONDS := 2.0
 
-@export var player_name := "player"
+# The server keeps items by name, so the same name gets them back on reconnect.
+# Random by default so two local windows do not fight over one name.
+@export var player_name := ""
 
 var player_id := 0
 var cave: GameV1.CaveLayout
@@ -30,7 +33,9 @@ var _attack_seq := 0
 
 
 func _ready() -> void:
-	_url = _url_from_args()
+	_url = _arg("--server=", DEFAULT_URL)
+	if player_name == "":
+		player_name = _arg("--name=", "player-%04x" % (randi() % 0x10000))
 	_connect()
 
 
@@ -71,6 +76,46 @@ func send_attack(target_id: int) -> void:
 	attack.set_seq(_attack_seq)
 	attack.set_target_id(target_id)
 	attack.set_ability_id("basic")
+	_send(msg)
+
+
+func send_pickup(target_id: int) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_pickup().set_target_id(target_id)
+	_send(msg)
+
+
+func send_equip(item_id: String) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_equip().set_item_id(item_id)
+	_send(msg)
+
+
+func send_unequip(slot: String) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_unequip().set_slot(slot)
+	_send(msg)
+
+
+func send_drop(item_id: String) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_drop().set_item_id(item_id)
+	_send(msg)
+
+
+func send_use(item_id: String) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_use().set_item_id(item_id)
 	_send(msg)
 
 
@@ -130,6 +175,9 @@ func _handle(bytes: PackedByteArray) -> void:
 		damage_received.emit(msg.get_damage())
 	elif msg.has_equipment():
 		equipment_received.emit(msg.get_equipment().get_items())
+	elif msg.has_inventory():
+		var inventory := msg.get_inventory()
+		inventory_received.emit(inventory.get_items(), inventory.get_capacity())
 	elif msg.has_extracted():
 		var id := msg.get_extracted().get_player_id()
 		if id == player_id:
@@ -147,9 +195,10 @@ func _send(msg: GameV1.ClientMessage) -> void:
 	_socket.send(msg.to_bytes(), WebSocketPeer.WRITE_MODE_BINARY)
 
 
-# Run with `-- --server=ws://host:port/ws` to point at another server.
-func _url_from_args() -> String:
+# Run with `-- --server=ws://host:port/ws` to point at another server, and
+# `-- --name=ann` to play as a set name.
+func _arg(prefix: String, default: String) -> String:
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--server="):
-			return arg.trim_prefix("--server=")
-	return DEFAULT_URL
+		if arg.begins_with(prefix):
+			return arg.trim_prefix(prefix)
+	return default

@@ -5,6 +5,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -99,5 +100,51 @@ func TestItemAndEquipment(t *testing.T) {
 	}
 	if len(it.GetAffixes()) != len(sword.Affixes) || it.GetBase()[0].GetStat() != "damage" || it.GetBase()[0].GetValue() != int32(sword.Base[items.Damage]) {
 		t.Fatalf("item stats = %v", it)
+	}
+}
+
+func TestItemCommands(t *testing.T) {
+	tests := []struct {
+		msg  *gamev1.ClientMessage
+		want any
+	}{
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Pickup{Pickup: &gamev1.PickupRequest{TargetId: 9}}}, sim.PickupCommand{Player: 7, Target: 9}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Equip{Equip: &gamev1.EquipRequest{ItemId: "a"}}}, sim.EquipCommand{Player: 7, Item: "a"}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "head"}}}, sim.UnequipCommand{Player: 7, Slot: items.Head}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Drop{Drop: &gamev1.DropRequest{ItemId: "b"}}}, sim.DropCommand{Player: 7, Item: "b"}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Use{Use: &gamev1.UseRequest{ItemId: "c"}}}, sim.UseCommand{Player: 7, Item: "c"}},
+	}
+	for _, tt := range tests {
+		if got, ok := Command(tt.msg, 7); !ok || got != tt.want {
+			t.Errorf("Command(%v) = %+v, %v, want %+v", tt.msg, got, ok, tt.want)
+		}
+	}
+}
+
+func TestInventoryAndPilesInSnapshot(t *testing.T) {
+	r := items.NewRoller(items.Default(), 1)
+	potion, _ := r.Make("health_potion", 1, items.Common)
+	w := sim.NewWorld(sim.DefaultConfig(), nil)
+	w.SetLoot(r)
+	id := w.AddPlayer(sim.Vec2{})
+	w.Restore(id, inventory.Loadout{Items: []items.Instance{potion}})
+	chest := w.AddChest(sim.Vec2{X: 100})
+	loot := w.AddPile(sim.Vec2{X: 200}, []items.Instance{potion})
+
+	p, _ := w.Player(id)
+	inv := Inventory(p).GetInventory()
+	if inv.GetCapacity() != uint32(sim.DefaultConfig().InventorySize) || len(inv.GetItems()) != 1 || inv.GetItems()[0].GetName() != "Health Potion" {
+		t.Fatalf("inventory = %v", inv)
+	}
+
+	kinds := map[uint64]gamev1.EntityKind{}
+	for _, e := range Snapshot(w).GetSnapshot().GetEntities() {
+		kinds[e.GetId()] = e.GetKind()
+		if e.GetId() == uint64(loot) && e.GetItemCount() != 1 {
+			t.Fatalf("loot entity = %v", e)
+		}
+	}
+	if kinds[uint64(chest)] != gamev1.EntityKind_ENTITY_KIND_CHEST || kinds[uint64(loot)] != gamev1.EntityKind_ENTITY_KIND_LOOT {
+		t.Fatalf("kinds = %v", kinds)
 	}
 }

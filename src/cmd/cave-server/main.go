@@ -43,13 +43,14 @@ func run() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	cave := caves.Loop()
-	world := cave.NewWorld(sim.DefaultConfig())
 	seed, err := lootSeed()
 	if err != nil {
 		return err
 	}
-	game := server.New(world, cave, items.NewRoller(items.Default(), seed), slog.Default())
+	cave := caves.Loop()
+	loot := items.NewRoller(items.Default(), seed)
+	world := cave.NewWorld(sim.DefaultConfig(), loot)
+	game := server.New(world, cave, loot, slog.Default())
 	game.TickRate = rate
 	defer game.Close()
 

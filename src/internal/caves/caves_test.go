@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
 func TestLoopParses(t *testing.T) {
 	c := Loop()
-	if len(c.PlayerSpawns) != 2 || len(c.Enemies) != 5 {
-		t.Fatalf("spawns = %d, enemies = %d", len(c.PlayerSpawns), len(c.Enemies))
+	if len(c.PlayerSpawns) != 2 || len(c.Enemies) != 5 || len(c.Chests) != 3 {
+		t.Fatalf("spawns = %d, enemies = %d, chests = %d", len(c.PlayerSpawns), len(c.Enemies), len(c.Chests))
 	}
 	if c.Bounds.Max != (sim.Vec2{X: 31 * TileSize, Y: 16 * TileSize}) {
 		t.Fatalf("bounds = %v", c.Bounds)
@@ -84,11 +85,20 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
-func TestNewWorldPlacesEnemies(t *testing.T) {
+func TestNewWorldPlacesEnemiesAndChests(t *testing.T) {
 	c := Loop()
-	w := c.NewWorld(sim.DefaultConfig())
+	w := c.NewWorld(sim.DefaultConfig(), items.NewRoller(items.Default(), 1))
 	if got := len(w.Enemies()); got != len(c.Enemies) {
 		t.Fatalf("world has %d enemies, want %d", got, len(c.Enemies))
+	}
+	piles := w.Piles()
+	if len(piles) != len(c.Chests) {
+		t.Fatalf("world has %d piles, want %d chests", len(piles), len(c.Chests))
+	}
+	for _, p := range piles {
+		if !p.Chest || len(p.Items) < 2 {
+			t.Fatalf("chest %+v, want at least two items", p)
+		}
 	}
 }
 
@@ -104,7 +114,7 @@ func TestBothRoutesReachExtraction(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := sim.DefaultConfig()
 			cfg.DetectRadius = 0
-			w := Loop().NewWorld(cfg)
+			w := Loop().NewWorld(cfg, nil)
 			id := w.AddPlayer(Loop().PlayerSpawns[0])
 
 			next, seq := 0, uint32(0)

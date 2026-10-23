@@ -29,6 +29,16 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 			Target:  sim.EntityID(p.Attack.GetTargetId()),
 			Ability: p.Attack.GetAbilityId(),
 		}, true
+	case *gamev1.ClientMessage_Pickup:
+		return sim.PickupCommand{Player: player, Target: sim.EntityID(p.Pickup.GetTargetId())}, true
+	case *gamev1.ClientMessage_Equip:
+		return sim.EquipCommand{Player: player, Item: p.Equip.GetItemId()}, true
+	case *gamev1.ClientMessage_Unequip:
+		return sim.UnequipCommand{Player: player, Slot: items.Slot(p.Unequip.GetSlot())}, true
+	case *gamev1.ClientMessage_Drop:
+		return sim.DropCommand{Player: player, Item: p.Drop.GetItemId()}, true
+	case *gamev1.ClientMessage_Use:
+		return sim.UseCommand{Player: player, Item: p.Use.GetItemId()}, true
 	}
 	return nil, false
 }
@@ -77,6 +87,18 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 			Health:   int32(e.Health),
 		})
 	}
+	for _, p := range w.Piles() {
+		kind := gamev1.EntityKind_ENTITY_KIND_LOOT
+		if p.Chest {
+			kind = gamev1.EntityKind_ENTITY_KIND_CHEST
+		}
+		snap.Entities = append(snap.Entities, &gamev1.EntityState{
+			Id:        uint64(p.ID),
+			Kind:      kind,
+			Position:  vec(p.Pos),
+			ItemCount: uint32(len(p.Items)),
+		})
+	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Snapshot{Snapshot: snap}}
 }
 
@@ -100,6 +122,14 @@ func Equipment(p sim.Player) *gamev1.ServerMessage {
 		}
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Equipment{Equipment: msg}}
+}
+
+func Inventory(p sim.Player) *gamev1.ServerMessage {
+	msg := &gamev1.InventoryUpdated{Capacity: uint32(p.Inventory.Size)}
+	for _, inst := range p.Inventory.Items {
+		msg.Items = append(msg.Items, Item(inst))
+	}
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Inventory{Inventory: msg}}
 }
 
 func Item(inst items.Instance) *gamev1.Item {

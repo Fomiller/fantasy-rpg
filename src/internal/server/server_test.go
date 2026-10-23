@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,9 +49,10 @@ func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	t.Helper()
 	// Enemy stays put, so the only damage in these tests comes from players.
 	cfg.DetectRadius, cfg.PatrolSpeed = 0, 0
-	world := cave.NewWorld(cfg)
+	loot := items.NewRoller(items.Default(), 1)
+	world := cave.NewWorld(cfg, loot)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, 30)
-	srv := New(world, cave, items.NewRoller(items.Default(), 1), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(world, cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	loop := &tick.Loop{
@@ -96,10 +99,17 @@ func join(t *testing.T, conn *websocket.Conn) uint64 {
 	return joinAccepted(t, conn).GetPlayerId()
 }
 
+var testers atomic.Int64
+
 func joinAccepted(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
 	t.Helper()
+	return joinAs(t, conn, fmt.Sprintf("tester%d", testers.Add(1)))
+}
+
+func joinAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.JoinAccepted {
+	t.Helper()
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
-		Join: &gamev1.JoinRequest{Name: "tester"},
+		Join: &gamev1.JoinRequest{Name: name},
 	}})
 	msg := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil })
 	return msg.GetJoined()
@@ -310,5 +320,108 @@ func TestJoinEquipsStarterKit(t *testing.T) {
 	snap := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), id) != nil }).GetSnapshot()
 	if p := entity(snap, id); p.GetMaxHealth() != 100 || p.GetHealth() != 100 {
 		t.Fatalf("player = %v", p)
+	}
+}
+
+func sendItem(t *testing.T, conn *websocket.Conn, msg *gamev1.ClientMessage) {
+	t.Helper()
+	msg.ProtocolVersion = protocol.Version
+	send(t, conn, msg)
+}
+
+func inventoryWith(defID string) func(*gamev1.ServerMessage) bool {
+	return func(m *gamev1.ServerMessage) bool {
+		for _, it := range m.GetInventory().GetItems() {
+			if it.GetItemDefId() == defID {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func equipmentWith(defID string) func(*gamev1.ServerMessage) bool {
+	return func(m *gamev1.ServerMessage) bool {
+		for _, it := range m.GetEquipment().GetItems() {
+			if it.GetItemDefId() == defID {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func TestLootThenEquip(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	join(t, conn)
+
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
+	inv := waitFor(t, conn, inventoryWith("rusty_sword")).GetInventory()
+	if inv.GetCapacity() != uint32(sim.DefaultConfig().InventorySize) {
+		t.Fatalf("capacity = %d", inv.GetCapacity())
+	}
+	swordID := inv.GetItems()[0].GetId()
+
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Drop{Drop: &gamev1.DropRequest{ItemId: swordID}}})
+	var lootID uint64
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		for _, e := range m.GetSnapshot().GetEntities() {
+			if e.GetKind() == gamev1.EntityKind_ENTITY_KIND_LOOT && e.GetItemCount() == 1 {
+				lootID = e.GetId()
+				return true
+			}
+		}
+		return false
+	})
+
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Pickup{Pickup: &gamev1.PickupRequest{TargetId: lootID}}})
+	waitFor(t, conn, inventoryWith("rusty_sword"))
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Equip{Equip: &gamev1.EquipRequest{ItemId: swordID}}})
+	eq := waitFor(t, conn, equipmentWith("rusty_sword")).GetEquipment()
+	if eq.GetItems()[0].GetId() != swordID {
+		t.Fatalf("equipped %v, want the sword that was looted", eq.GetItems()[0])
+	}
+}
+
+func TestReconnectGetsItemsBack(t *testing.T) {
+	h := start(t)
+	first := dial(t, h.url)
+	joinAs(t, first, "ann")
+	sendItem(t, first, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
+	sword := waitFor(t, first, inventoryWith("rusty_sword")).GetInventory().GetItems()[0]
+	first.Close(websocket.StatusNormalClosure, "")
+
+	// The server frees the name once it handles the disconnect, so retry
+	// until it does.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		conn := dial(t, h.url)
+		send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		_, _, err := conn.Read(ctx)
+		cancel()
+		if err == nil {
+			inv := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetInventory() != nil }).GetInventory()
+			if len(inv.GetItems()) != 1 || inv.GetItems()[0].GetId() != sword.GetId() {
+				t.Fatalf("inventory after reconnect = %v, want %v", inv.GetItems(), sword)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("could not rejoin as ann: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestNameInUseIsRejected(t *testing.T) {
+	h := start(t)
+	joinAs(t, dial(t, h.url), "ann")
+	second := dial(t, h.url)
+	send(t, second, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
+	_, _, err := second.Read(context.Background())
+	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("got %v, want policy violation close", err)
 	}
 }
