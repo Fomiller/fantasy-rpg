@@ -3,6 +3,7 @@ module github.com/Fomiller/fantasy-rpg
 go 1.27.0
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/prometheus/client_golang v1.25.0
 	google.golang.org/protobuf v1.36.12
 )

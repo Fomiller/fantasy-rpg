@@ -68,9 +68,12 @@ just client         # open the editor
 just client-run     # run the game
 just client-check   # import and run headless; prints "main scene loaded"
 just client-test    # headless player tests: movement, walls, interact
+just net-test       # start cave-server and check a real client can join and move
 ```
 
 Controls: WASD or arrow keys to move, E to interact.
+
+To play against the server, start it with `just cave`, then run `just client-run`. The client joins `ws://127.0.0.1:8080/ws`. The top-left label shows your player ID and the server tick. A white outline marks where the server thinks you are. Without a server the label says "offline", the game still runs, and the client retries every 2 seconds. Point at another server with `/Applications/Godot.app/Contents/MacOS/Godot --path client/godot -- --server=ws://host:port/ws`.
 
 The recipes use `/Applications/Godot.app`. For another install, pass the path: `just godot=/path/to/godot client`.
 

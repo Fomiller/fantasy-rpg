@@ -35,6 +35,9 @@ deps:
 dev: deps
     go run ./src/cmd/world-server
 
+cave:
+    go run ./src/cmd/cave-server
+
 up:
     {{compose}} --profile full up -d --build --wait
 
@@ -81,6 +84,14 @@ client-test:
     {{godot}} --headless --path client/godot --import
     {{godot}} --headless --path client/godot --script res://tests/player_test.gd
     {{godot}} --headless --path client/godot --script res://tests/proto_test.gd
+
+net-test: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ./bin/cave-server & pid=$!
+    trap 'kill $pid' EXIT
+    for i in $(seq 50); do curl -sf localhost:8080/healthz >/dev/null && break; sleep 0.1; done
+    {{godot}} --headless --path client/godot --script res://tests/net_test.gd
 
 proto:
     buf lint
