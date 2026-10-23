@@ -1243,6 +1243,11 @@ class JoinAccepted:
 		service.func_ref = Callable(self, "new_spawn")
 		data[__spawn.tag] = service
 		
+		__tick_rate = PBField.new("tick_rate", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __tick_rate
+		data[__tick_rate.tag] = service
+		
 	var data = {}
 	
 	var __player_id: PBField
@@ -1285,6 +1290,19 @@ class JoinAccepted:
 	func new_spawn() -> Vec2:
 		__spawn.value = Vec2.new()
 		return __spawn.value
+	
+	var __tick_rate: PBField
+	func has_tick_rate() -> bool:
+		if __tick_rate.value != null:
+			return true
+		return false
+	func get_tick_rate() -> int:
+		return __tick_rate.value
+	func clear_tick_rate() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__tick_rate.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_tick_rate(value : int) -> void:
+		__tick_rate.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -1662,6 +1680,16 @@ class EntityState:
 		service.field = __max_health
 		data[__max_health.tag] = service
 		
+		__last_input_seq = PBField.new("last_input_seq", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 8, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __last_input_seq
+		data[__last_input_seq.tag] = service
+		
+		__max_speed = PBField.new("max_speed", PB_DATA_TYPE.FLOAT, PB_RULE.OPTIONAL, 9, true, DEFAULT_VALUES_3[PB_DATA_TYPE.FLOAT])
+		service = PBServiceField.new()
+		service.field = __max_speed
+		data[__max_speed.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -1756,6 +1784,32 @@ class EntityState:
 		__max_health.value = DEFAULT_VALUES_3[PB_DATA_TYPE.INT32]
 	func set_max_health(value : int) -> void:
 		__max_health.value = value
+	
+	var __last_input_seq: PBField
+	func has_last_input_seq() -> bool:
+		if __last_input_seq.value != null:
+			return true
+		return false
+	func get_last_input_seq() -> int:
+		return __last_input_seq.value
+	func clear_last_input_seq() -> void:
+		data[8].state = PB_SERVICE_STATE.UNFILLED
+		__last_input_seq.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_last_input_seq(value : int) -> void:
+		__last_input_seq.value = value
+	
+	var __max_speed: PBField
+	func has_max_speed() -> bool:
+		if __max_speed.value != null:
+			return true
+		return false
+	func get_max_speed() -> float:
+		return __max_speed.value
+	func clear_max_speed() -> void:
+		data[9].state = PB_SERVICE_STATE.UNFILLED
+		__max_speed.value = DEFAULT_VALUES_3[PB_DATA_TYPE.FLOAT]
+	func set_max_speed(value : float) -> void:
+		__max_speed.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

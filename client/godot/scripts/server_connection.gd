@@ -17,6 +17,7 @@ const RETRY_SECONDS := 2.0
 var player_id := 0
 var cave: GameV1.CaveLayout
 var spawn := Vector2.ZERO
+var tick_rate := 20
 # Set once this player leaves through the exit. Stops the reconnect loop until rejoin().
 var has_extracted := false
 
@@ -26,7 +27,6 @@ var _was_open := false
 var _retry_in := 0.0
 var _move_seq := 0
 var _attack_seq := 0
-var _last_direction := Vector2.INF
 
 
 func _ready() -> void:
@@ -47,12 +47,10 @@ func rejoin() -> void:
 	_connect()
 
 
-# Only sends when the direction changes. The server keeps applying the last
-# input it got, so repeating it every frame would be wasted bandwidth.
-func send_move(direction: Vector2) -> void:
-	if not is_joined() or direction == _last_direction:
-		return
-	_last_direction = direction
+# Returns the seq it sent, or 0 when not joined.
+func send_move(direction: Vector2) -> int:
+	if not is_joined():
+		return 0
 	_move_seq += 1
 	var msg := _new_message()
 	var move := msg.new_move()
@@ -61,6 +59,7 @@ func send_move(direction: Vector2) -> void:
 	d.set_x(direction.x)
 	d.set_y(direction.y)
 	_send(msg)
+	return _move_seq
 
 
 func send_attack(target_id: int) -> void:
@@ -88,7 +87,6 @@ func _process(delta: float) -> void:
 			if _was_open:
 				_was_open = false
 				player_id = 0
-				_last_direction = Vector2.INF
 				print("disconnected from %s (%d)" % [_url, _socket.get_close_code()])
 				disconnected.emit()
 			if has_extracted:
@@ -122,6 +120,8 @@ func _handle(bytes: PackedByteArray) -> void:
 		player_id = accepted.get_player_id()
 		cave = accepted.get_cave()
 		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())
+		if accepted.get_tick_rate() > 0:
+			tick_rate = accepted.get_tick_rate()
 		print("joined %s as player %d in %s" % [_url, player_id, cave.get_name()])
 		joined.emit(player_id)
 	elif msg.has_snapshot():

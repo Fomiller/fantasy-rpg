@@ -80,6 +80,8 @@ type Player struct {
 	Equipment    map[items.Slot]items.Instance
 	LastInputSeq uint32
 	input        Vec2
+	inputs       []MoveCommand
+	queuedSeq    uint32
 	cooldown     time.Duration
 	// ExtractProgress runs from 0 to 1 while the player stands in the extraction zone.
 	ExtractProgress float64
@@ -261,21 +263,40 @@ func (w *World) stepExtraction(dt time.Duration) []EntityID {
 	return out
 }
 
+// maxQueuedInputs bounds how far behind a player's inputs can fall. The
+// client sends one input per tick, so a longer queue only adds lag.
+const maxQueuedInputs = 8
+
+// applyMove queues an input. Each tick uses one, so a client that sends
+// faster than the tick rate cannot move faster.
 func (w *World) applyMove(c MoveCommand) {
 	p, ok := w.players[c.Player]
-	if !ok || c.Seq <= p.LastInputSeq {
+	if !ok || c.Seq <= p.queuedSeq {
 		return
 	}
-	dir := c.Direction
 	// Direction comes from the client. NaN or Inf would poison the position forever.
-	if !finite(dir.X) || !finite(dir.Y) {
+	if !finite(c.Direction.X) || !finite(c.Direction.Y) {
 		return
 	}
-	if l := dir.Len(); l > 1 {
-		dir = dir.Scale(1 / l)
+	if l := c.Direction.Len(); l > 1 {
+		c.Direction = c.Direction.Scale(1 / l)
 	}
-	p.input = dir
-	p.LastInputSeq = c.Seq
+	if len(p.inputs) == maxQueuedInputs {
+		p.inputs = p.inputs[1:]
+	}
+	p.inputs = append(p.inputs, c)
+	p.queuedSeq = c.Seq
+}
+
+// nextInput takes the oldest queued input. With none queued the player keeps
+// the last one, so a late packet does not stop them.
+func (p *Player) nextInput() {
+	if len(p.inputs) == 0 {
+		return
+	}
+	p.input = p.inputs[0].Direction
+	p.LastInputSeq = p.inputs[0].Seq
+	p.inputs = p.inputs[1:]
 }
 
 func (w *World) applyAttack(c AttackCommand) (DamageEvent, bool) {
@@ -300,6 +321,7 @@ func (w *World) applyAttack(c AttackCommand) (DamageEvent, bool) {
 }
 
 func (w *World) movePlayer(p *Player, dt time.Duration) {
+	p.nextInput()
 	if p.Health <= 0 {
 		p.Vel = Vec2{}
 		return

@@ -29,6 +29,8 @@ func _ready() -> void:
 	_connection.damage_received.connect(_on_damage)
 	_connection.extracted.connect(_on_extracted)
 	_connection.equipment_received.connect(_on_equipment)
+	_player.cave = _cave
+	_player.send_move = _connection.send_move
 	_on_disconnected()
 
 
@@ -37,7 +39,6 @@ func _physics_process(_delta: float) -> void:
 		if Input.is_action_just_pressed("interact"):
 			_connection.rejoin()
 		return
-	_connection.send_move(_player.get_move_input())
 	if Input.is_action_just_pressed("attack"):
 		_attack()
 
@@ -64,8 +65,8 @@ func nearest_enemy(from: Vector2) -> EntityView:
 
 func _on_joined(player_id: int) -> void:
 	_cave.build(_connection.cave)
-	_player.position = _connection.spawn
-	_player.velocity = Vector2.ZERO
+	_player.tick_seconds = 1.0 / _connection.tick_rate
+	_player.place(_connection.spawn)
 	_player.visible = true
 	_player.revive()
 	_status.text = "player %d" % player_id
@@ -80,16 +81,20 @@ func _on_disconnected() -> void:
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
-# The ghost marks where the server thinks this player is. Until prediction and
-# reconciliation land, it shows how far the client and server drift apart.
+# The ghost marks where the server thinks this player is. With prediction it
+# should sit just behind the player, about one round trip back.
 func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 	var seen := {}
 	for entity: GameV1.EntityState in snapshot.get_entities():
 		var id := entity.get_id()
 		if id == _connection.player_id:
 			var pos := entity.get_position()
+			var vel := entity.get_velocity()
 			_ghost.position = Vector2(pos.get_x(), pos.get_y())
 			_ghost.visible = true
+			if entity.get_max_speed() > 0.0:
+				_player.max_speed = entity.get_max_speed()
+			_player.reconcile(entity.get_last_input_seq(), _ghost.position, Vector2(vel.get_x(), vel.get_y()))
 			_health = entity.get_health()
 			_max_health = entity.get_max_health()
 			_extract_progress = entity.get_extract_progress()

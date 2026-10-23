@@ -50,6 +50,7 @@ func run() error {
 		return err
 	}
 	game := server.New(world, cave, items.NewRoller(items.Default(), seed), slog.Default())
+	game.TickRate = rate
 	defer game.Close()
 
 	loop := &tick.Loop{

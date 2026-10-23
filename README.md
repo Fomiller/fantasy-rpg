@@ -115,3 +115,5 @@ Godobuf limits:
 - No default values in the `.proto` file.
 
 `proto/testdata` holds bytes written by Go and read by GDScript, and the other way round. `just test` and `just client-test` both use them, so the two sides cannot drift apart without a test failing.
+
+`movement.json` there is a walk through the test room recorded by the Go sim. The client's `Movement` script replays it, because the client predicts its own movement with the same math. Run `just proto-fixtures` after changing movement on either side.
