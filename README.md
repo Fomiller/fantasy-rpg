@@ -67,7 +67,10 @@ The client is a 2D Godot 4.7 project in `client/godot`, written in GDScript. It 
 just client         # open the editor
 just client-run     # run the game
 just client-check   # import and run headless; prints "main scene loaded"
+just client-test    # headless player tests: movement, walls, interact
 ```
+
+Controls: WASD or arrow keys to move, E to interact.
 
 The recipes use `/Applications/Godot.app`. For another install, pass the path: `just godot=/path/to/godot client`.
 
