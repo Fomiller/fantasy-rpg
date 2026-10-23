@@ -16,6 +16,8 @@ message ClientMessage {
     UnequipRequest unequip = 15;
     DropRequest drop = 16;
     UseRequest use = 17;
+    LootOpenRequest loot_open = 18;
+    LootCloseRequest loot_close = 19;
   }
 }
 
@@ -30,6 +32,8 @@ message ServerMessage {
     EquipmentUpdated equipment = 15;
     AbilityUsed ability_used = 16;
     AbilityRejected ability_rejected = 17;
+    LootContents loot = 18;
+    PickupRejected pickup_rejected = 19;
   }
 }
 
@@ -257,12 +261,46 @@ message InventoryUpdated {
   uint32 capacity = 2;
 }
 
-// Item requests. The server ignores one it cannot do, like a pickup from too
-// far away, and the next InventoryUpdated shows what really happened.
+// Item requests. The server ignores one it cannot do, like an equip of an
+// item the player does not have, and the next InventoryUpdated shows what
+// really happened. A pickup it cannot do gets a PickupRejected.
 
-// PickupRequest takes everything that fits from a chest or loot entity.
+// PickupRequest takes one item from a chest or loot entity, or everything
+// that fits.
 message PickupRequest {
   uint64 target_id = 1;
+  // An item id from LootContents. Empty takes everything that fits.
+  string item_id = 2;
+}
+
+// PickupRejected is sent to the player whose pickup took nothing.
+message PickupRejected {
+  uint64 target_id = 1;
+  string item_id = 2;
+  // One of range, gone, bag_full.
+  string reason = 3;
+}
+
+// LootOpenRequest opens a loot window on a chest or loot entity. The server
+// answers with LootContents, and sends it again whenever the contents change,
+// until the window closes.
+message LootOpenRequest {
+  uint64 target_id = 1;
+}
+
+// LootCloseRequest stops the LootContents for that window.
+message LootCloseRequest {
+  uint64 target_id = 1;
+}
+
+// LootContents is what a loot window shows. Only the player who has the
+// window open gets it.
+message LootContents {
+  uint64 target_id = 1;
+  repeated Item items = 2;
+  // The server closed the window: the player walked out of range or died, or
+  // the pile is empty or gone. An open request from too far away gets this.
+  bool closed = 3;
 }
 
 // EquipRequest moves an item from the bag to its slot. Whatever was in the

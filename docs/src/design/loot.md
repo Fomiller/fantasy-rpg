@@ -195,8 +195,12 @@ FOM-103 built the first version of this.
 
 - A player has equipment, one item per gear slot, and a bag of 20 slots.
   A stack takes one slot. Stacks fill up before a new slot is used.
-- Interact on a chest or ground pile takes everything that fits. The rest
-  stays. An empty pile goes away. An empty chest stays, opened.
+- Interact on a chest or ground pile opens a loot window (FOM-207). It
+  lists every item, each with a Take button, plus Take all. Take all takes
+  everything that fits. The rest stays. An empty pile goes away. An empty
+  chest stays, opened.
+- The window closes on Escape, when the player walks out of pickup range,
+  dies, or the pile empties.
 - The loop cave has three chests. Each rolls `cave1_chest` when the run
   starts. A killed enemy rolls its archetype's table, `cave1_grunt` or
   `cave1_elite`, and drops a pile if it got anything.
@@ -207,6 +211,17 @@ FOM-103 built the first version of this.
 - The client sends requests. The server checks range, ownership and room,
   then sends the new `EquipmentUpdated` and `InventoryUpdated`. A request it
   cannot do is ignored.
+- The client only sees what is in a pile while it has the pile open.
+  `LootOpenRequest` asks for it. The server checks range and answers with
+  `LootContents` to that player only. It sends `LootContents` again each
+  time the pile changes, so an item another player takes leaves the window.
+  It sends one with `closed` set when the window should shut, including for
+  an open from too far away. `LootCloseRequest` stops the updates.
+- `PickupRequest` takes the item named by `item_id`, or everything that
+  fits when it is empty. The server checks range and bag room for that
+  item. A pickup that takes nothing gets a `PickupRejected` with the reason:
+  `range`, `gone` (another player took it first) or `bag_full`. The item
+  stays in the pile.
 
 Saving, for now:
 

@@ -475,3 +475,75 @@ func TestUnknownClassIsRejected(t *testing.T) {
 		t.Fatalf("got %v, want policy violation close", err)
 	}
 }
+
+// Two players loot one chest. What one takes leaves the other's window, and
+// the other cannot take it too.
+func TestLootWindowOverTheWire(t *testing.T) {
+	cave := testCave()
+	cave.Chests = []sim.Vec2{{X: 0, Y: 20}}
+	h := startCave(t, cave, sim.DefaultConfig())
+	ann, bob := dial(t, h.url), dial(t, h.url)
+	join(t, ann)
+	join(t, bob)
+
+	chest := chestID(t, ann)
+	isLoot := func(m *gamev1.ServerMessage) bool { return m.GetLoot().GetTargetId() == chest }
+	open := &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_LootOpen{LootOpen: &gamev1.LootOpenRequest{TargetId: chest}}}
+	sendItem(t, ann, open)
+	sendItem(t, bob, open)
+	contents := waitFor(t, ann, isLoot).GetLoot()
+	waitFor(t, bob, isLoot)
+	if len(contents.GetItems()) < 2 || contents.GetClosed() {
+		t.Fatalf("contents = %v, want at least two items", contents)
+	}
+
+	want := contents.GetItems()[0]
+	take := &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Pickup{Pickup: &gamev1.PickupRequest{TargetId: chest, ItemId: want.GetId()}}}
+	sendItem(t, ann, take)
+	waitFor(t, ann, inventoryWith(want.GetItemDefId()))
+	left := waitFor(t, bob, isLoot).GetLoot()
+	if len(left.GetItems()) != len(contents.GetItems())-1 {
+		t.Fatalf("bob sees %v after ann took %v", left.GetItems(), want)
+	}
+	for _, it := range left.GetItems() {
+		if it.GetId() == want.GetId() {
+			t.Fatalf("bob still sees %v", want)
+		}
+	}
+
+	sendItem(t, bob, take)
+	r := waitFor(t, bob, func(m *gamev1.ServerMessage) bool { return m.GetPickupRejected() != nil }).GetPickupRejected()
+	if r.GetTargetId() != chest || r.GetItemId() != want.GetId() || r.GetReason() != sim.PickupGone {
+		t.Fatalf("rejected = %v", r)
+	}
+}
+
+func TestLootOpenOutOfRangeIsClosed(t *testing.T) {
+	cave := testCave()
+	cave.Chests = []sim.Vec2{{X: -300}}
+	h := startCave(t, cave, sim.DefaultConfig())
+	conn := dial(t, h.url)
+	join(t, conn)
+
+	chest := chestID(t, conn)
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_LootOpen{LootOpen: &gamev1.LootOpenRequest{TargetId: chest}}})
+	l := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLoot() != nil }).GetLoot()
+	if !l.GetClosed() || len(l.GetItems()) != 0 {
+		t.Fatalf("loot = %v, want closed with no items", l)
+	}
+}
+
+func chestID(t *testing.T, conn *websocket.Conn) uint64 {
+	t.Helper()
+	var chest uint64
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		for _, e := range m.GetSnapshot().GetEntities() {
+			if e.GetKind() == gamev1.EntityKind_ENTITY_KIND_CHEST {
+				chest = e.GetId()
+				return true
+			}
+		}
+		return false
+	})
+	return chest
+}

@@ -33,7 +33,11 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 			Aim:     sim.Vec2{X: float64(p.Attack.GetAim().GetX()), Y: float64(p.Attack.GetAim().GetY())},
 		}, true
 	case *gamev1.ClientMessage_Pickup:
-		return sim.PickupCommand{Player: player, Target: sim.EntityID(p.Pickup.GetTargetId())}, true
+		return sim.PickupCommand{Player: player, Target: sim.EntityID(p.Pickup.GetTargetId()), Item: p.Pickup.GetItemId()}, true
+	case *gamev1.ClientMessage_LootOpen:
+		return sim.OpenLootCommand{Player: player, Target: sim.EntityID(p.LootOpen.GetTargetId())}, true
+	case *gamev1.ClientMessage_LootClose:
+		return sim.CloseLootCommand{Player: player, Target: sim.EntityID(p.LootClose.GetTargetId())}, true
 	case *gamev1.ClientMessage_Equip:
 		return sim.EquipCommand{Player: player, Item: p.Equip.GetItemId()}, true
 	case *gamev1.ClientMessage_Unequip:
@@ -198,6 +202,22 @@ func Inventory(p sim.Player) *gamev1.ServerMessage {
 		msg.Items = append(msg.Items, Item(inst))
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Inventory{Inventory: msg}}
+}
+
+func Loot(ev sim.LootEvent) *gamev1.ServerMessage {
+	msg := &gamev1.LootContents{TargetId: uint64(ev.Pile), Closed: ev.Closed}
+	for _, inst := range ev.Items {
+		msg.Items = append(msg.Items, Item(inst))
+	}
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Loot{Loot: msg}}
+}
+
+func PickupRejected(r sim.PickupRejection) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_PickupRejected{PickupRejected: &gamev1.PickupRejected{
+		TargetId: uint64(r.Pile),
+		ItemId:   r.Item,
+		Reason:   r.Reason,
+	}}}
 }
 
 func Item(inst items.Instance) *gamev1.Item {

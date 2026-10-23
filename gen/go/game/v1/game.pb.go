@@ -227,6 +227,8 @@ type ClientMessage struct {
 	//	*ClientMessage_Unequip
 	//	*ClientMessage_Drop
 	//	*ClientMessage_Use
+	//	*ClientMessage_LootOpen
+	//	*ClientMessage_LootClose
 	Payload       isClientMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -348,6 +350,24 @@ func (x *ClientMessage) GetUse() *UseRequest {
 	return nil
 }
 
+func (x *ClientMessage) GetLootOpen() *LootOpenRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_LootOpen); ok {
+			return x.LootOpen
+		}
+	}
+	return nil
+}
+
+func (x *ClientMessage) GetLootClose() *LootCloseRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_LootClose); ok {
+			return x.LootClose
+		}
+	}
+	return nil
+}
+
 type isClientMessage_Payload interface {
 	isClientMessage_Payload()
 }
@@ -384,6 +404,14 @@ type ClientMessage_Use struct {
 	Use *UseRequest `protobuf:"bytes,17,opt,name=use,proto3,oneof"`
 }
 
+type ClientMessage_LootOpen struct {
+	LootOpen *LootOpenRequest `protobuf:"bytes,18,opt,name=loot_open,json=lootOpen,proto3,oneof"`
+}
+
+type ClientMessage_LootClose struct {
+	LootClose *LootCloseRequest `protobuf:"bytes,19,opt,name=loot_close,json=lootClose,proto3,oneof"`
+}
+
 func (*ClientMessage_Join) isClientMessage_Payload() {}
 
 func (*ClientMessage_Move) isClientMessage_Payload() {}
@@ -400,6 +428,10 @@ func (*ClientMessage_Drop) isClientMessage_Payload() {}
 
 func (*ClientMessage_Use) isClientMessage_Payload() {}
 
+func (*ClientMessage_LootOpen) isClientMessage_Payload() {}
+
+func (*ClientMessage_LootClose) isClientMessage_Payload() {}
+
 type ServerMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
@@ -413,6 +445,8 @@ type ServerMessage struct {
 	//	*ServerMessage_Equipment
 	//	*ServerMessage_AbilityUsed
 	//	*ServerMessage_AbilityRejected
+	//	*ServerMessage_Loot
+	//	*ServerMessage_PickupRejected
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -534,6 +568,24 @@ func (x *ServerMessage) GetAbilityRejected() *AbilityRejected {
 	return nil
 }
 
+func (x *ServerMessage) GetLoot() *LootContents {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_Loot); ok {
+			return x.Loot
+		}
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetPickupRejected() *PickupRejected {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_PickupRejected); ok {
+			return x.PickupRejected
+		}
+	}
+	return nil
+}
+
 type isServerMessage_Payload interface {
 	isServerMessage_Payload()
 }
@@ -570,6 +622,14 @@ type ServerMessage_AbilityRejected struct {
 	AbilityRejected *AbilityRejected `protobuf:"bytes,17,opt,name=ability_rejected,json=abilityRejected,proto3,oneof"`
 }
 
+type ServerMessage_Loot struct {
+	Loot *LootContents `protobuf:"bytes,18,opt,name=loot,proto3,oneof"`
+}
+
+type ServerMessage_PickupRejected struct {
+	PickupRejected *PickupRejected `protobuf:"bytes,19,opt,name=pickup_rejected,json=pickupRejected,proto3,oneof"`
+}
+
 func (*ServerMessage_Joined) isServerMessage_Payload() {}
 
 func (*ServerMessage_Snapshot) isServerMessage_Payload() {}
@@ -585,6 +645,10 @@ func (*ServerMessage_Equipment) isServerMessage_Payload() {}
 func (*ServerMessage_AbilityUsed) isServerMessage_Payload() {}
 
 func (*ServerMessage_AbilityRejected) isServerMessage_Payload() {}
+
+func (*ServerMessage_Loot) isServerMessage_Payload() {}
+
+func (*ServerMessage_PickupRejected) isServerMessage_Payload() {}
 
 type Vec2 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2007,10 +2071,13 @@ func (x *InventoryUpdated) GetCapacity() uint32 {
 	return 0
 }
 
-// PickupRequest takes everything that fits from a chest or loot entity.
+// PickupRequest takes one item from a chest or loot entity, or everything
+// that fits.
 type PickupRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TargetId      uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	TargetId uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	// An item id from LootContents. Empty takes everything that fits.
+	ItemId        string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2052,6 +2119,231 @@ func (x *PickupRequest) GetTargetId() uint64 {
 	return 0
 }
 
+func (x *PickupRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+// PickupRejected is sent to the player whose pickup took nothing.
+type PickupRejected struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	TargetId uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	ItemId   string                 `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	// One of range, gone, bag_full.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PickupRejected) Reset() {
+	*x = PickupRejected{}
+	mi := &file_game_v1_game_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PickupRejected) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PickupRejected) ProtoMessage() {}
+
+func (x *PickupRejected) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PickupRejected.ProtoReflect.Descriptor instead.
+func (*PickupRejected) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *PickupRejected) GetTargetId() uint64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *PickupRejected) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *PickupRejected) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// LootOpenRequest opens a loot window on a chest or loot entity. The server
+// answers with LootContents, and sends it again whenever the contents change,
+// until the window closes.
+type LootOpenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetId      uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LootOpenRequest) Reset() {
+	*x = LootOpenRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LootOpenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LootOpenRequest) ProtoMessage() {}
+
+func (x *LootOpenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LootOpenRequest.ProtoReflect.Descriptor instead.
+func (*LootOpenRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *LootOpenRequest) GetTargetId() uint64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+// LootCloseRequest stops the LootContents for that window.
+type LootCloseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetId      uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LootCloseRequest) Reset() {
+	*x = LootCloseRequest{}
+	mi := &file_game_v1_game_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LootCloseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LootCloseRequest) ProtoMessage() {}
+
+func (x *LootCloseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LootCloseRequest.ProtoReflect.Descriptor instead.
+func (*LootCloseRequest) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *LootCloseRequest) GetTargetId() uint64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+// LootContents is what a loot window shows. Only the player who has the
+// window open gets it.
+type LootContents struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	TargetId uint64                 `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Items    []*Item                `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	// The server closed the window: the player walked out of range or died, or
+	// the pile is empty or gone. An open request from too far away gets this.
+	Closed        bool `protobuf:"varint,3,opt,name=closed,proto3" json:"closed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LootContents) Reset() {
+	*x = LootContents{}
+	mi := &file_game_v1_game_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LootContents) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LootContents) ProtoMessage() {}
+
+func (x *LootContents) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LootContents.ProtoReflect.Descriptor instead.
+func (*LootContents) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *LootContents) GetTargetId() uint64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *LootContents) GetItems() []*Item {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *LootContents) GetClosed() bool {
+	if x != nil {
+		return x.Closed
+	}
+	return false
+}
+
 // EquipRequest moves an item from the bag to its slot. Whatever was in the
 // slot goes back to the bag.
 type EquipRequest struct {
@@ -2063,7 +2355,7 @@ type EquipRequest struct {
 
 func (x *EquipRequest) Reset() {
 	*x = EquipRequest{}
-	mi := &file_game_v1_game_proto_msgTypes[23]
+	mi := &file_game_v1_game_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2075,7 +2367,7 @@ func (x *EquipRequest) String() string {
 func (*EquipRequest) ProtoMessage() {}
 
 func (x *EquipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_v1_game_proto_msgTypes[23]
+	mi := &file_game_v1_game_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2088,7 +2380,7 @@ func (x *EquipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EquipRequest.ProtoReflect.Descriptor instead.
 func (*EquipRequest) Descriptor() ([]byte, []int) {
-	return file_game_v1_game_proto_rawDescGZIP(), []int{23}
+	return file_game_v1_game_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *EquipRequest) GetItemId() string {
@@ -2107,7 +2399,7 @@ type UnequipRequest struct {
 
 func (x *UnequipRequest) Reset() {
 	*x = UnequipRequest{}
-	mi := &file_game_v1_game_proto_msgTypes[24]
+	mi := &file_game_v1_game_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2119,7 +2411,7 @@ func (x *UnequipRequest) String() string {
 func (*UnequipRequest) ProtoMessage() {}
 
 func (x *UnequipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_v1_game_proto_msgTypes[24]
+	mi := &file_game_v1_game_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2132,7 +2424,7 @@ func (x *UnequipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnequipRequest.ProtoReflect.Descriptor instead.
 func (*UnequipRequest) Descriptor() ([]byte, []int) {
-	return file_game_v1_game_proto_rawDescGZIP(), []int{24}
+	return file_game_v1_game_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *UnequipRequest) GetSlot() string {
@@ -2152,7 +2444,7 @@ type DropRequest struct {
 
 func (x *DropRequest) Reset() {
 	*x = DropRequest{}
-	mi := &file_game_v1_game_proto_msgTypes[25]
+	mi := &file_game_v1_game_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2164,7 +2456,7 @@ func (x *DropRequest) String() string {
 func (*DropRequest) ProtoMessage() {}
 
 func (x *DropRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_v1_game_proto_msgTypes[25]
+	mi := &file_game_v1_game_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2177,7 +2469,7 @@ func (x *DropRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropRequest.ProtoReflect.Descriptor instead.
 func (*DropRequest) Descriptor() ([]byte, []int) {
-	return file_game_v1_game_proto_rawDescGZIP(), []int{25}
+	return file_game_v1_game_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DropRequest) GetItemId() string {
@@ -2197,7 +2489,7 @@ type UseRequest struct {
 
 func (x *UseRequest) Reset() {
 	*x = UseRequest{}
-	mi := &file_game_v1_game_proto_msgTypes[26]
+	mi := &file_game_v1_game_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2209,7 +2501,7 @@ func (x *UseRequest) String() string {
 func (*UseRequest) ProtoMessage() {}
 
 func (x *UseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_v1_game_proto_msgTypes[26]
+	mi := &file_game_v1_game_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2222,7 +2514,7 @@ func (x *UseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UseRequest.ProtoReflect.Descriptor instead.
 func (*UseRequest) Descriptor() ([]byte, []int) {
-	return file_game_v1_game_proto_rawDescGZIP(), []int{26}
+	return file_game_v1_game_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UseRequest) GetItemId() string {
@@ -2236,7 +2528,7 @@ var File_game_v1_game_proto protoreflect.FileDescriptor
 
 const file_game_v1_game_proto_rawDesc = "" +
 	"\n" +
-	"\x12game/v1/game.proto\x12\agame.v1\"\xb8\x03\n" +
+	"\x12game/v1/game.proto\x12\agame.v1\"\xad\x04\n" +
 	"\rClientMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12*\n" +
 	"\x04join\x18\n" +
@@ -2247,8 +2539,11 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x05equip\x18\x0e \x01(\v2\x15.game.v1.EquipRequestH\x00R\x05equip\x123\n" +
 	"\aunequip\x18\x0f \x01(\v2\x17.game.v1.UnequipRequestH\x00R\aunequip\x12*\n" +
 	"\x04drop\x18\x10 \x01(\v2\x14.game.v1.DropRequestH\x00R\x04drop\x12'\n" +
-	"\x03use\x18\x11 \x01(\v2\x13.game.v1.UseRequestH\x00R\x03useB\t\n" +
-	"\apayload\"\x88\x04\n" +
+	"\x03use\x18\x11 \x01(\v2\x13.game.v1.UseRequestH\x00R\x03use\x127\n" +
+	"\tloot_open\x18\x12 \x01(\v2\x18.game.v1.LootOpenRequestH\x00R\blootOpen\x12:\n" +
+	"\n" +
+	"loot_close\x18\x13 \x01(\v2\x19.game.v1.LootCloseRequestH\x00R\tlootCloseB\t\n" +
+	"\apayload\"\xf9\x04\n" +
 	"\rServerMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12/\n" +
 	"\x06joined\x18\n" +
@@ -2259,7 +2554,9 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\textracted\x18\x0e \x01(\v2\x12.game.v1.ExtractedH\x00R\textracted\x129\n" +
 	"\tequipment\x18\x0f \x01(\v2\x19.game.v1.EquipmentUpdatedH\x00R\tequipment\x129\n" +
 	"\fability_used\x18\x10 \x01(\v2\x14.game.v1.AbilityUsedH\x00R\vabilityUsed\x12E\n" +
-	"\x10ability_rejected\x18\x11 \x01(\v2\x18.game.v1.AbilityRejectedH\x00R\x0fabilityRejectedB\t\n" +
+	"\x10ability_rejected\x18\x11 \x01(\v2\x18.game.v1.AbilityRejectedH\x00R\x0fabilityRejected\x12+\n" +
+	"\x04loot\x18\x12 \x01(\v2\x15.game.v1.LootContentsH\x00R\x04loot\x12B\n" +
+	"\x0fpickup_rejected\x18\x13 \x01(\v2\x17.game.v1.PickupRejectedH\x00R\x0epickupRejectedB\t\n" +
 	"\apayload\"\"\n" +
 	"\x04Vec2\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +
@@ -2376,9 +2673,22 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\"S\n" +
 	"\x10InventoryUpdated\x12#\n" +
 	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\x12\x1a\n" +
-	"\bcapacity\x18\x02 \x01(\rR\bcapacity\",\n" +
+	"\bcapacity\x18\x02 \x01(\rR\bcapacity\"E\n" +
 	"\rPickupRequest\x12\x1b\n" +
-	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\"'\n" +
+	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\tR\x06itemId\"^\n" +
+	"\x0ePickupRejected\x12\x1b\n" +
+	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\".\n" +
+	"\x0fLootOpenRequest\x12\x1b\n" +
+	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\"/\n" +
+	"\x10LootCloseRequest\x12\x1b\n" +
+	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\"h\n" +
+	"\fLootContents\x12\x1b\n" +
+	"\ttarget_id\x18\x01 \x01(\x04R\btargetId\x12#\n" +
+	"\x05items\x18\x02 \x03(\v2\r.game.v1.ItemR\x05items\x12\x16\n" +
+	"\x06closed\x18\x03 \x01(\bR\x06closed\"'\n" +
 	"\fEquipRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"$\n" +
 	"\x0eUnequipRequest\x12\x12\n" +
@@ -2432,7 +2742,7 @@ func file_game_v1_game_proto_rawDescGZIP() []byte {
 }
 
 var file_game_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_game_v1_game_proto_goTypes = []any{
 	(EntityKind)(0),          // 0: game.v1.EntityKind
 	(EnemyState)(0),          // 1: game.v1.EnemyState
@@ -2460,56 +2770,65 @@ var file_game_v1_game_proto_goTypes = []any{
 	(*EquipmentUpdated)(nil), // 23: game.v1.EquipmentUpdated
 	(*InventoryUpdated)(nil), // 24: game.v1.InventoryUpdated
 	(*PickupRequest)(nil),    // 25: game.v1.PickupRequest
-	(*EquipRequest)(nil),     // 26: game.v1.EquipRequest
-	(*UnequipRequest)(nil),   // 27: game.v1.UnequipRequest
-	(*DropRequest)(nil),      // 28: game.v1.DropRequest
-	(*UseRequest)(nil),       // 29: game.v1.UseRequest
+	(*PickupRejected)(nil),   // 26: game.v1.PickupRejected
+	(*LootOpenRequest)(nil),  // 27: game.v1.LootOpenRequest
+	(*LootCloseRequest)(nil), // 28: game.v1.LootCloseRequest
+	(*LootContents)(nil),     // 29: game.v1.LootContents
+	(*EquipRequest)(nil),     // 30: game.v1.EquipRequest
+	(*UnequipRequest)(nil),   // 31: game.v1.UnequipRequest
+	(*DropRequest)(nil),      // 32: game.v1.DropRequest
+	(*UseRequest)(nil),       // 33: game.v1.UseRequest
 }
 var file_game_v1_game_proto_depIdxs = []int32{
 	7,  // 0: game.v1.ClientMessage.join:type_name -> game.v1.JoinRequest
 	12, // 1: game.v1.ClientMessage.move:type_name -> game.v1.MoveInput
 	13, // 2: game.v1.ClientMessage.attack:type_name -> game.v1.AttackRequest
 	25, // 3: game.v1.ClientMessage.pickup:type_name -> game.v1.PickupRequest
-	26, // 4: game.v1.ClientMessage.equip:type_name -> game.v1.EquipRequest
-	27, // 5: game.v1.ClientMessage.unequip:type_name -> game.v1.UnequipRequest
-	28, // 6: game.v1.ClientMessage.drop:type_name -> game.v1.DropRequest
-	29, // 7: game.v1.ClientMessage.use:type_name -> game.v1.UseRequest
-	8,  // 8: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
-	18, // 9: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
-	16, // 10: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
-	24, // 11: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
-	11, // 12: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
-	23, // 13: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
-	14, // 14: game.v1.ServerMessage.ability_used:type_name -> game.v1.AbilityUsed
-	15, // 15: game.v1.ServerMessage.ability_rejected:type_name -> game.v1.AbilityRejected
-	5,  // 16: game.v1.Rect.min:type_name -> game.v1.Vec2
-	5,  // 17: game.v1.Rect.max:type_name -> game.v1.Vec2
-	19, // 18: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
-	5,  // 19: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
-	9,  // 20: game.v1.JoinAccepted.class_info:type_name -> game.v1.ClassInfo
-	10, // 21: game.v1.ClassInfo.abilities:type_name -> game.v1.AbilityInfo
-	5,  // 22: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
-	5,  // 23: game.v1.AttackRequest.aim:type_name -> game.v1.Vec2
-	5,  // 24: game.v1.AbilityUsed.aim:type_name -> game.v1.Vec2
-	0,  // 25: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
-	5,  // 26: game.v1.EntityState.position:type_name -> game.v1.Vec2
-	5,  // 27: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
-	1,  // 28: game.v1.EntityState.enemy_state:type_name -> game.v1.EnemyState
-	5,  // 29: game.v1.EntityState.aim:type_name -> game.v1.Vec2
-	17, // 30: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
-	6,  // 31: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
-	6,  // 32: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
-	6,  // 33: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
-	2,  // 34: game.v1.Item.rarity:type_name -> game.v1.Rarity
-	21, // 35: game.v1.Item.base:type_name -> game.v1.ItemStat
-	22, // 36: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
-	20, // 37: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
-	20, // 38: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
-	39, // [39:39] is the sub-list for method output_type
-	39, // [39:39] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	30, // 4: game.v1.ClientMessage.equip:type_name -> game.v1.EquipRequest
+	31, // 5: game.v1.ClientMessage.unequip:type_name -> game.v1.UnequipRequest
+	32, // 6: game.v1.ClientMessage.drop:type_name -> game.v1.DropRequest
+	33, // 7: game.v1.ClientMessage.use:type_name -> game.v1.UseRequest
+	27, // 8: game.v1.ClientMessage.loot_open:type_name -> game.v1.LootOpenRequest
+	28, // 9: game.v1.ClientMessage.loot_close:type_name -> game.v1.LootCloseRequest
+	8,  // 10: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
+	18, // 11: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
+	16, // 12: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
+	24, // 13: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
+	11, // 14: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
+	23, // 15: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
+	14, // 16: game.v1.ServerMessage.ability_used:type_name -> game.v1.AbilityUsed
+	15, // 17: game.v1.ServerMessage.ability_rejected:type_name -> game.v1.AbilityRejected
+	29, // 18: game.v1.ServerMessage.loot:type_name -> game.v1.LootContents
+	26, // 19: game.v1.ServerMessage.pickup_rejected:type_name -> game.v1.PickupRejected
+	5,  // 20: game.v1.Rect.min:type_name -> game.v1.Vec2
+	5,  // 21: game.v1.Rect.max:type_name -> game.v1.Vec2
+	19, // 22: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
+	5,  // 23: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
+	9,  // 24: game.v1.JoinAccepted.class_info:type_name -> game.v1.ClassInfo
+	10, // 25: game.v1.ClassInfo.abilities:type_name -> game.v1.AbilityInfo
+	5,  // 26: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
+	5,  // 27: game.v1.AttackRequest.aim:type_name -> game.v1.Vec2
+	5,  // 28: game.v1.AbilityUsed.aim:type_name -> game.v1.Vec2
+	0,  // 29: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
+	5,  // 30: game.v1.EntityState.position:type_name -> game.v1.Vec2
+	5,  // 31: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
+	1,  // 32: game.v1.EntityState.enemy_state:type_name -> game.v1.EnemyState
+	5,  // 33: game.v1.EntityState.aim:type_name -> game.v1.Vec2
+	17, // 34: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
+	6,  // 35: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
+	6,  // 36: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
+	6,  // 37: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
+	2,  // 38: game.v1.Item.rarity:type_name -> game.v1.Rarity
+	21, // 39: game.v1.Item.base:type_name -> game.v1.ItemStat
+	22, // 40: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
+	20, // 41: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
+	20, // 42: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
+	20, // 43: game.v1.LootContents.items:type_name -> game.v1.Item
+	44, // [44:44] is the sub-list for method output_type
+	44, // [44:44] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_game_v1_game_proto_init() }
@@ -2526,6 +2845,8 @@ func file_game_v1_game_proto_init() {
 		(*ClientMessage_Unequip)(nil),
 		(*ClientMessage_Drop)(nil),
 		(*ClientMessage_Use)(nil),
+		(*ClientMessage_LootOpen)(nil),
+		(*ClientMessage_LootClose)(nil),
 	}
 	file_game_v1_game_proto_msgTypes[1].OneofWrappers = []any{
 		(*ServerMessage_Joined)(nil),
@@ -2536,6 +2857,8 @@ func file_game_v1_game_proto_init() {
 		(*ServerMessage_Equipment)(nil),
 		(*ServerMessage_AbilityUsed)(nil),
 		(*ServerMessage_AbilityRejected)(nil),
+		(*ServerMessage_Loot)(nil),
+		(*ServerMessage_PickupRejected)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2543,7 +2866,7 @@ func file_game_v1_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_v1_game_proto_rawDesc), len(file_game_v1_game_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   27,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

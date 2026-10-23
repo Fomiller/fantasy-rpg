@@ -10,6 +10,8 @@ signal snapshot_received(snapshot: GameV1.WorldSnapshot)
 signal damage_received(event: GameV1.DamageEvent)
 signal ability_used(event: GameV1.AbilityUsed)
 signal ability_rejected(event: GameV1.AbilityRejected)
+signal loot_received(contents: GameV1.LootContents)
+signal pickup_rejected(event: GameV1.PickupRejected)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
@@ -90,11 +92,30 @@ func send_attack(target_id: int, ability_id := "basic", aim := Vector2.ZERO) -> 
 	return _attack_seq
 
 
-func send_pickup(target_id: int) -> void:
+# An empty item_id takes everything that fits.
+func send_pickup(target_id: int, item_id := "") -> void:
 	if not is_joined():
 		return
 	var msg := _new_message()
-	msg.new_pickup().set_target_id(target_id)
+	var pickup := msg.new_pickup()
+	pickup.set_target_id(target_id)
+	pickup.set_item_id(item_id)
+	_send(msg)
+
+
+func send_loot_open(target_id: int) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_loot_open().set_target_id(target_id)
+	_send(msg)
+
+
+func send_loot_close(target_id: int) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_loot_close().set_target_id(target_id)
 	_send(msg)
 
 
@@ -196,6 +217,10 @@ func _handle(bytes: PackedByteArray) -> void:
 	elif msg.has_inventory():
 		var inventory := msg.get_inventory()
 		inventory_received.emit(inventory.get_items(), inventory.get_capacity())
+	elif msg.has_loot():
+		loot_received.emit(msg.get_loot())
+	elif msg.has_pickup_rejected():
+		pickup_rejected.emit(msg.get_pickup_rejected())
 	elif msg.has_extracted():
 		var id := msg.get_extracted().get_player_id()
 		if id == player_id:

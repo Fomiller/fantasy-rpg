@@ -91,6 +91,10 @@ type Player struct {
 	ExtractProgress float64
 	extracting      time.Duration
 	stats           map[items.Stat]int
+	// looting is the pile whose loot window is open, and lootSeen the pile
+	// version that window last got.
+	looting  EntityID
+	lootSeen uint64
 }
 
 type Enemy struct {
@@ -150,7 +154,9 @@ type Events struct {
 	Rejected  []Rejection
 	Extracted []EntityID
 	// Inventory lists players whose bag or equipment changed.
-	Inventory []EntityID
+	Inventory      []EntityID
+	PickupRejected []PickupRejection
+	Loot           []LootEvent
 }
 
 type World struct {
@@ -296,9 +302,11 @@ func (w *World) Step(dt time.Duration) Events {
 		case AttackCommand:
 			w.applyAttack(c, &ev)
 		case ItemCommand:
-			if w.applyItem(c) {
+			if w.applyItem(c, &ev) {
 				ev.changed(c.player())
 			}
+		case OpenLootCommand, CloseLootCommand:
+			w.applyLoot(c)
 		}
 	}
 	w.pending = w.pending[:0]
@@ -310,6 +318,7 @@ func (w *World) Step(dt time.Duration) Events {
 	ev.Damage = append(ev.Damage, w.stepProjectiles(dt)...)
 	w.dropOnKill(&ev)
 	ev.Extracted = w.stepExtraction(dt)
+	w.stepLoot(&ev)
 	w.Tick++
 	return ev
 }

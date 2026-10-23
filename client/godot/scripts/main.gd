@@ -22,6 +22,7 @@ const WINDOWS_GROUP := "windows"
 @onready var _equipment: RichTextLabel = $HUD/Equipment
 @onready var _inventory: InventoryPanel = $HUD/Inventory
 @onready var _abilities: AbilityBar = $HUD/Abilities
+@onready var _loot: LootWindow = $HUD/Loot
 
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
@@ -42,6 +43,11 @@ func _ready() -> void:
 	_connection.equipment_received.connect(_inventory.show_equipment)
 	_connection.inventory_received.connect(_inventory.show_inventory)
 	_inventory.connection = _connection
+	_connection.loot_received.connect(_loot.show_contents)
+	_connection.pickup_rejected.connect(_loot.show_rejected)
+	_loot.send_open = _connection.send_loot_open
+	_loot.send_close = _connection.send_loot_close
+	_loot.send_pickup = _connection.send_pickup
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	_on_disconnected()
@@ -57,7 +63,8 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("inventory"):
 		_inventory.visible = not _inventory.visible
 	if Input.is_action_just_pressed("interact"):
-		_pickup()
+		_open_loot()
+	_close_loot_out_of_range()
 	for i in ABILITY_ACTIONS.size():
 		# A click on an open window is for its buttons, not an attack.
 		if Input.is_action_just_pressed(ABILITY_ACTIONS[i]) and not (i == 0 and _top_window() != null):
@@ -90,10 +97,19 @@ func use_ability(index: int) -> void:
 	_connection.send_attack(0, ability.get_id(), aim)
 
 
-func _pickup() -> void:
+func _open_loot() -> void:
 	var target := nearest_loot(_ghost.position)
 	if target:
-		_connection.send_pickup(target.entity_id)
+		_loot.open(target.entity_id)
+
+
+# The server closes it too, but this does not wait a round trip for that.
+func _close_loot_out_of_range() -> void:
+	if _loot.target_id == 0:
+		return
+	var view: EntityView = _views.get(_loot.target_id)
+	if view == null or _ghost.position.distance_to(view.position) > PICKUP_RANGE:
+		_loot.close()
 
 
 # Uses the server position, since that is where the server measures range from.
@@ -132,6 +148,7 @@ func _on_disconnected() -> void:
 	_views.clear()
 	_equipment.text = ""
 	_inventory.clear()
+	_loot.close()
 	_abilities.clear()
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 

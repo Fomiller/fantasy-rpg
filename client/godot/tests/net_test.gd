@@ -34,6 +34,7 @@ func _run() -> void:
 	_check(cave.get_child_count() > 10 and connection.cave.get_walls().size() > 10, "built the cave the server sent")
 	_check(player.position.distance_to(connection.spawn) < 1.0 and connection.spawn != Vector2.ZERO, "player starts at the server spawn")
 	_check(cave.extraction.has_area(), "cave has an extraction zone")
+	await _test_chest(main, connection, latest)
 
 	var start_tick: int = latest.snapshot.get_tick()
 	var start_x := _server_x(latest.snapshot, connection.player_id)
@@ -102,6 +103,55 @@ func _press(action: String) -> void:
 	Input.action_release(action)
 
 
+# Walk from the spawn up the left corridor to the chest in the top left room,
+# open it, and take one item.
+func _test_chest(main: Node, connection: ServerConnection, latest: Dictionary) -> void:
+	var server_pos := func() -> Vector2: return _server_pos(latest.snapshot, connection.player_id)
+	Input.action_press("move_up")
+	await _until(func() -> bool: return server_pos.call().y < 100.0, 8000)
+	Input.action_release("move_up")
+	Input.action_press("move_left")
+	await _until(func() -> bool: return server_pos.call().x < 100.0, 3000)
+	Input.action_release("move_left")
+
+	var loot: LootWindow = main.get_node("HUD/Loot")
+	await _press("interact")
+	_check(await _until(func() -> bool: return loot.visible), "interact opens the chest's loot window")
+	if not loot.visible:
+		return
+	var rows := _loot_rows(loot)
+	_check(rows.size() >= 2, "loot window lists the chest's items")
+	var bag := {"ids": []}
+	connection.inventory_received.connect(func(items: Array[GameV1.Item], _capacity: int) -> void:
+		bag.ids = items.map(func(item: GameV1.Item) -> String: return item.get_id()))
+	var want: String = loot._items[0].get_id()
+	(rows[0].get_child(1) as Button).pressed.emit()
+	_check(await _until(func() -> bool: return want in bag.ids), "take puts that one item in the bag")
+	_check(await _until(func() -> bool: return loot.visible and _loot_rows(loot).size() == rows.size() - 1), "the item leaves the loot window, the rest stay")
+
+	Input.parse_input_event(_key(KEY_ESCAPE, true))
+	await physics_frame
+	await physics_frame
+	Input.parse_input_event(_key(KEY_ESCAPE, false))
+	_check(await _until(func() -> bool: return not loot.visible), "escape closes the loot window")
+
+
+func _loot_rows(loot: LootWindow) -> Array[HBoxContainer]:
+	var rows: Array[HBoxContainer] = []
+	for row in loot.get_node("List").get_children():
+		if row is HBoxContainer and row.get_child(0) is RichTextLabel and not row.is_queued_for_deletion():
+			rows.append(row)
+	return rows
+
+
+func _key(keycode: Key, pressed: bool) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.physical_keycode = keycode
+	event.keycode = keycode
+	event.pressed = pressed
+	return event
+
+
 # Unequip the sword, drop it, loot it back with interact, and equip it again,
 # all through the inventory panel and the server.
 func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
@@ -124,11 +174,15 @@ func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
 	_check(await _until(func() -> bool: return main.nearest_loot(main.get_node("ServerGhost").position) != null), "dropped sword lies on the ground")
 	_check(_button(panel, "Rusty Sword", "Drop") == null, "bag is empty after the drop")
 
-	Input.action_press("interact")
-	await physics_frame
-	await physics_frame
-	Input.action_release("interact")
-	_check(await _until(func() -> bool: return _button(panel, "Rusty Sword", "Equip") != null), "interact loots the sword into the bag")
+	var loot: LootWindow = main.get_node("HUD/Loot")
+	await _press("interact")
+	_check(await _until(func() -> bool: return loot.visible and _loot_rows(loot).size() == 1), "interact opens the dropped sword's loot window")
+	if _loot_rows(loot).is_empty():
+		return
+	_check("Rusty Sword" in _loot_rows(loot)[0].get_child(0).text, "the window shows the dropped sword")
+	_loot_rows(loot)[0].get_child(1).pressed.emit()
+	_check(await _until(func() -> bool: return _button(panel, "Rusty Sword", "Equip") != null), "take loots the sword into the bag")
+	_check(await _until(func() -> bool: return not loot.visible), "loot window closes once the pile is empty")
 
 	_button(panel, "Rusty Sword", "Equip").pressed.emit()
 	_check(await _until(func() -> bool: return "Rusty Sword" in hud.text), "equipped the looted sword")

@@ -140,6 +140,9 @@ func TestItemCommands(t *testing.T) {
 		want any
 	}{
 		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Pickup{Pickup: &gamev1.PickupRequest{TargetId: 9}}}, sim.PickupCommand{Player: 7, Target: 9}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Pickup{Pickup: &gamev1.PickupRequest{TargetId: 9, ItemId: "d"}}}, sim.PickupCommand{Player: 7, Target: 9, Item: "d"}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_LootOpen{LootOpen: &gamev1.LootOpenRequest{TargetId: 9}}}, sim.OpenLootCommand{Player: 7, Target: 9}},
+		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_LootClose{LootClose: &gamev1.LootCloseRequest{TargetId: 9}}}, sim.CloseLootCommand{Player: 7, Target: 9}},
 		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Equip{Equip: &gamev1.EquipRequest{ItemId: "a"}}}, sim.EquipCommand{Player: 7, Item: "a"}},
 		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "head"}}}, sim.UnequipCommand{Player: 7, Slot: items.Head}},
 		{&gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Drop{Drop: &gamev1.DropRequest{ItemId: "b"}}}, sim.DropCommand{Player: 7, Item: "b"}},

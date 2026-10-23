@@ -739,6 +739,18 @@ class ClientMessage:
 		service.func_ref = Callable(self, "new_use")
 		data[__use.tag] = service
 		
+		__loot_open = PBField.new("loot_open", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 18, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __loot_open
+		service.func_ref = Callable(self, "new_loot_open")
+		data[__loot_open.tag] = service
+		
+		__loot_close = PBField.new("loot_close", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 19, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __loot_close
+		service.func_ref = Callable(self, "new_loot_close")
+		data[__loot_close.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -751,6 +763,8 @@ class ClientMessage:
 		UNEQUIP = 15,
 		DROP = 16,
 		USE = 17,
+		LOOT_OPEN = 18,
+		LOOT_CLOSE = 19,
 	}
 	var _payload_case: int = 0
 
@@ -792,6 +806,10 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__join.value = JoinRequest.new()
 		return __join.value
 	
@@ -820,6 +838,10 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__move.value = MoveInput.new()
 		return __move.value
 	
@@ -848,6 +870,10 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__attack.value = AttackRequest.new()
 		return __attack.value
 	
@@ -876,6 +902,10 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__pickup.value = PickupRequest.new()
 		return __pickup.value
 	
@@ -904,6 +934,10 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__equip.value = EquipRequest.new()
 		return __equip.value
 	
@@ -932,6 +966,10 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__unequip.value = UnequipRequest.new()
 		return __unequip.value
 	
@@ -960,6 +998,10 @@ class ClientMessage:
 		_payload_case = 16
 		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__drop.value = DropRequest.new()
 		return __drop.value
 	
@@ -988,8 +1030,76 @@ class ClientMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		data[17].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 17
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = UseRequest.new()
 		return __use.value
+	
+	var __loot_open: PBField
+	func has_loot_open() -> bool:
+		return data[18].state == PB_SERVICE_STATE.FILLED
+	func get_loot_open() -> LootOpenRequest:
+		return __loot_open.value
+	func clear_loot_open() -> void:
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_loot_open() -> LootOpenRequest:
+		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		data[18].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 18
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = LootOpenRequest.new()
+		return __loot_open.value
+	
+	var __loot_close: PBField
+	func has_loot_close() -> bool:
+		return data[19].state == PB_SERVICE_STATE.FILLED
+	func get_loot_close() -> LootCloseRequest:
+		return __loot_close.value
+	func clear_loot_close() -> void:
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_loot_close() -> LootCloseRequest:
+		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		data[19].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 19
+		__loot_close.value = LootCloseRequest.new()
+		return __loot_close.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -1071,6 +1181,18 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_ability_rejected")
 		data[__ability_rejected.tag] = service
 		
+		__loot = PBField.new("loot", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 18, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __loot
+		service.func_ref = Callable(self, "new_loot")
+		data[__loot.tag] = service
+		
+		__pickup_rejected = PBField.new("pickup_rejected", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 19, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __pickup_rejected
+		service.func_ref = Callable(self, "new_pickup_rejected")
+		data[__pickup_rejected.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -1083,6 +1205,8 @@ class ServerMessage:
 		EQUIPMENT = 15,
 		ABILITY_USED = 16,
 		ABILITY_REJECTED = 17,
+		LOOT = 18,
+		PICKUP_REJECTED = 19,
 	}
 	var _payload_case: int = 0
 
@@ -1124,6 +1248,10 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
 	
@@ -1152,6 +1280,10 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
 	
@@ -1180,6 +1312,10 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
 	
@@ -1208,6 +1344,10 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
 	
@@ -1236,6 +1376,10 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__extracted.value = Extracted.new()
 		return __extracted.value
 	
@@ -1264,6 +1408,10 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__equipment.value = EquipmentUpdated.new()
 		return __equipment.value
 	
@@ -1292,6 +1440,10 @@ class ServerMessage:
 		_payload_case = 16
 		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__ability_used.value = AbilityUsed.new()
 		return __ability_used.value
 	
@@ -1320,8 +1472,76 @@ class ServerMessage:
 		data[16].state = PB_SERVICE_STATE.UNFILLED
 		data[17].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 17
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = AbilityRejected.new()
 		return __ability_rejected.value
+	
+	var __loot: PBField
+	func has_loot() -> bool:
+		return data[18].state == PB_SERVICE_STATE.FILLED
+	func get_loot() -> LootContents:
+		return __loot.value
+	func clear_loot() -> void:
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_loot() -> LootContents:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		data[18].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 18
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = LootContents.new()
+		return __loot.value
+	
+	var __pickup_rejected: PBField
+	func has_pickup_rejected() -> bool:
+		return data[19].state == PB_SERVICE_STATE.FILLED
+	func get_pickup_rejected() -> PickupRejected:
+		return __pickup_rejected.value
+	func clear_pickup_rejected() -> void:
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_pickup_rejected() -> PickupRejected:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		data[19].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 19
+		__pickup_rejected.value = PickupRejected.new()
+		return __pickup_rejected.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -3447,6 +3667,11 @@ class PickupRequest:
 		service.field = __target_id
 		data[__target_id.tag] = service
 		
+		__item_id = PBField.new("item_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __item_id
+		data[__item_id.tag] = service
+		
 	var data = {}
 	
 	var __target_id: PBField
@@ -3461,6 +3686,271 @@ class PickupRequest:
 		__target_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
 	func set_target_id(value : int) -> void:
 		__target_id.value = value
+	
+	var __item_id: PBField
+	func has_item_id() -> bool:
+		if __item_id.value != null:
+			return true
+		return false
+	func get_item_id() -> String:
+		return __item_id.value
+	func clear_item_id() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__item_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_item_id(value : String) -> void:
+		__item_id.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class PickupRejected:
+	func _init():
+		var service
+		
+		__target_id = PBField.new("target_id", PB_DATA_TYPE.UINT64, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64])
+		service = PBServiceField.new()
+		service.field = __target_id
+		data[__target_id.tag] = service
+		
+		__item_id = PBField.new("item_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __item_id
+		data[__item_id.tag] = service
+		
+		__reason = PBField.new("reason", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __reason
+		data[__reason.tag] = service
+		
+	var data = {}
+	
+	var __target_id: PBField
+	func has_target_id() -> bool:
+		if __target_id.value != null:
+			return true
+		return false
+	func get_target_id() -> int:
+		return __target_id.value
+	func clear_target_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__target_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
+	func set_target_id(value : int) -> void:
+		__target_id.value = value
+	
+	var __item_id: PBField
+	func has_item_id() -> bool:
+		if __item_id.value != null:
+			return true
+		return false
+	func get_item_id() -> String:
+		return __item_id.value
+	func clear_item_id() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__item_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_item_id(value : String) -> void:
+		__item_id.value = value
+	
+	var __reason: PBField
+	func has_reason() -> bool:
+		if __reason.value != null:
+			return true
+		return false
+	func get_reason() -> String:
+		return __reason.value
+	func clear_reason() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__reason.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_reason(value : String) -> void:
+		__reason.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class LootOpenRequest:
+	func _init():
+		var service
+		
+		__target_id = PBField.new("target_id", PB_DATA_TYPE.UINT64, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64])
+		service = PBServiceField.new()
+		service.field = __target_id
+		data[__target_id.tag] = service
+		
+	var data = {}
+	
+	var __target_id: PBField
+	func has_target_id() -> bool:
+		if __target_id.value != null:
+			return true
+		return false
+	func get_target_id() -> int:
+		return __target_id.value
+	func clear_target_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__target_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
+	func set_target_id(value : int) -> void:
+		__target_id.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class LootCloseRequest:
+	func _init():
+		var service
+		
+		__target_id = PBField.new("target_id", PB_DATA_TYPE.UINT64, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64])
+		service = PBServiceField.new()
+		service.field = __target_id
+		data[__target_id.tag] = service
+		
+	var data = {}
+	
+	var __target_id: PBField
+	func has_target_id() -> bool:
+		if __target_id.value != null:
+			return true
+		return false
+	func get_target_id() -> int:
+		return __target_id.value
+	func clear_target_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__target_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
+	func set_target_id(value : int) -> void:
+		__target_id.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class LootContents:
+	func _init():
+		var service
+		
+		__target_id = PBField.new("target_id", PB_DATA_TYPE.UINT64, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64])
+		service = PBServiceField.new()
+		service.field = __target_id
+		data[__target_id.tag] = service
+		
+		var __items_default: Array[Item] = []
+		__items = PBField.new("items", PB_DATA_TYPE.MESSAGE, PB_RULE.REPEATED, 2, true, __items_default)
+		service = PBServiceField.new()
+		service.field = __items
+		service.func_ref = Callable(self, "add_items")
+		data[__items.tag] = service
+		
+		__closed = PBField.new("closed", PB_DATA_TYPE.BOOL, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL])
+		service = PBServiceField.new()
+		service.field = __closed
+		data[__closed.tag] = service
+		
+	var data = {}
+	
+	var __target_id: PBField
+	func has_target_id() -> bool:
+		if __target_id.value != null:
+			return true
+		return false
+	func get_target_id() -> int:
+		return __target_id.value
+	func clear_target_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__target_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
+	func set_target_id(value : int) -> void:
+		__target_id.value = value
+	
+	var __items: PBField
+	func get_items() -> Array[Item]:
+		return __items.value
+	func clear_items() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__items.value.clear()
+	func add_items() -> Item:
+		var element = Item.new()
+		__items.value.append(element)
+		return element
+	
+	var __closed: PBField
+	func has_closed() -> bool:
+		if __closed.value != null:
+			return true
+		return false
+	func get_closed() -> bool:
+		return __closed.value
+	func clear_closed() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__closed.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
+	func set_closed(value : bool) -> void:
+		__closed.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
