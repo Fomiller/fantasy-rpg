@@ -69,7 +69,7 @@ func TestEnemyChasesAndHitsOnCooldown(t *testing.T) {
 
 	var hits []DamageEvent
 	for range 60 {
-		for _, ev := range w.Step(dt) {
+		for _, ev := range w.Step(dt).Damage {
 			if ev.Source == id {
 				hits = append(hits, ev)
 			}
@@ -98,7 +98,7 @@ func TestEnemyKillsPlayerThenGoesHome(t *testing.T) {
 
 	var killed bool
 	for range 40 {
-		for _, ev := range w.Step(dt) {
+		for _, ev := range w.Step(dt).Damage {
 			killed = killed || ev.Killed
 		}
 	}

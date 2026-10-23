@@ -35,16 +35,12 @@ func (r Rect) Overlaps(o Rect) bool {
 	return r.Min.X < o.Max.X && r.Max.X > o.Min.X && r.Min.Y < o.Max.Y && r.Max.Y > o.Min.Y
 }
 
-// TestRoomWalls mirrors client/godot/scenes/test_room.tscn.
-func TestRoomWalls() []Rect {
-	return []Rect{
-		{Vec2{-616, -352}, Vec2{616, -320}}, // top
-		{Vec2{-616, 320}, Vec2{616, 352}},   // bottom
-		{Vec2{-632, -320}, Vec2{-600, 320}}, // left
-		{Vec2{600, -320}, Vec2{632, 320}},   // right
-		{Vec2{168, -32}, Vec2{232, 32}},     // pillar
-		{Vec2{-220, -14}, Vec2{-180, 14}},   // chest
-	}
+func (r Rect) Contains(p Vec2) bool {
+	return p.X >= r.Min.X && p.X <= r.Max.X && p.Y >= r.Min.Y && p.Y <= r.Max.Y
+}
+
+func (r Rect) Center() Vec2 {
+	return Vec2{(r.Min.X + r.Max.X) / 2, (r.Min.Y + r.Max.Y) / 2}
 }
 
 // Intersects reports whether the segment from a to b passes through r.

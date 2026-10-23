@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Needs a fresh cave-server on 127.0.0.1:8080 with one enemy above spawn.
+# Needs a fresh cave-server on 127.0.0.1:8080 running the loop cave.
 # The enemy fights back, so the players must win before they run out of health.
 # `just net-test` starts one.
 const TIMEOUT_MSEC := 10000
@@ -21,19 +21,37 @@ class Client:
 			hits.append("%d->%d:%d%s" % [d.get_source_id(), d.get_target_id(), d.get_target_health(), " killed" if d.get_killed() else ""]))
 		tree.root.add_child(connection)
 
-	func entity(kind: int) -> GameV1.EntityState:
+	var enemy_id := 0
+
+	func by_id(id: int) -> GameV1.EntityState:
 		if snapshot == null:
 			return null
 		for e: GameV1.EntityState in snapshot.get_entities():
-			if (kind == GameV1.EntityKind.PLAYER and e.get_id() == connection.player_id) or (kind == GameV1.EntityKind.ENEMY and e.get_kind() == kind):
+			if e.get_id() == id:
 				return e
 		return null
 
 	func me() -> GameV1.EntityState:
-		return entity(GameV1.EntityKind.PLAYER)
+		return by_id(connection.player_id)
 
 	func enemy() -> GameV1.EntityState:
-		return entity(GameV1.EntityKind.ENEMY)
+		return by_id(enemy_id)
+
+	# The live enemy closest to this player.
+	func nearest_enemy() -> GameV1.EntityState:
+		var best: GameV1.EntityState = null
+		var best_distance := INF
+		for e: GameV1.EntityState in snapshot.get_entities():
+			if e.get_kind() != GameV1.EntityKind.ENEMY or e.get_health() <= 0:
+				continue
+			var d := pos(e).distance_to(pos(me()))
+			if d < best_distance:
+				best = e
+				best_distance = d
+		return best
+
+	static func pos(e: GameV1.EntityState) -> Vector2:
+		return Vector2(e.get_position().get_x(), e.get_position().get_y())
 
 
 func _initialize() -> void:
@@ -50,12 +68,25 @@ func _run() -> void:
 	if not joined:
 		_finish()
 		return
-	_check(a.enemy() != null and a.enemy().get_health() > 0, "enemy is alive")
+	var target := a.nearest_enemy()
+	_check(target != null, "an enemy is alive")
+	if target == null:
+		_finish()
+		return
+	var enemy_id := target.get_id()
+	a.enemy_id = enemy_id
+	b.enemy_id = enemy_id
 
-	var enemy_id := a.enemy().get_id()
-	for c in clients:
-		c.connection.send_move(Vector2.UP)
-	var in_range := await _until(func() -> bool: return _near(a) and _near(b))
+	# Walk toward the enemy until it is close. It also comes to us once it sees us.
+	var in_range := await _until(func() -> bool:
+		var done := true
+		for c in clients:
+			if _near(c):
+				c.connection.send_move(Vector2.ZERO)
+			else:
+				done = false
+				c.connection.send_move((Client.pos(c.enemy()) - Client.pos(c.me())).normalized())
+		return done)
 	for c in clients:
 		c.connection.send_move(Vector2.ZERO)
 	_check(in_range, "both clients reached the enemy")
@@ -87,9 +118,7 @@ func _run() -> void:
 
 
 func _near(c: Client) -> bool:
-	var me := c.me().get_position()
-	var enemy := c.enemy().get_position()
-	return Vector2(me.get_x(), me.get_y()).distance_to(Vector2(enemy.get_x(), enemy.get_y())) < 50.0
+	return Client.pos(c.me()).distance_to(Client.pos(c.enemy())) < 50.0
 
 
 func _until(condition: Callable) -> bool:

@@ -21,12 +21,18 @@ message ServerMessage {
     WorldSnapshot snapshot = 11;
     DamageEvent damage = 12;
     InventoryUpdated inventory = 13;
+    Extracted extracted = 14;
   }
 }
 
 message Vec2 {
   float x = 1;
   float y = 2;
+}
+
+message Rect {
+  Vec2 min = 1;
+  Vec2 max = 2;
 }
 
 // Player
@@ -36,6 +42,14 @@ message JoinRequest {
 }
 
 message JoinAccepted {
+  uint64 player_id = 1;
+  CaveLayout cave = 2;
+  Vec2 spawn = 3;
+}
+
+// Extracted is sent to everyone in the cave. The extracting player's
+// connection closes right after.
+message Extracted {
   uint64 player_id = 1;
 }
 
@@ -74,11 +88,24 @@ message EntityState {
   Vec2 position = 3;
   Vec2 velocity = 4;
   int32 health = 5;
+  // 0 to 1 while a player stands in the extraction zone.
+  float extract_progress = 6;
 }
 
 message WorldSnapshot {
   uint64 tick = 1;
   repeated EntityState entities = 2;
+}
+
+// Cave
+
+// CaveLayout is everything the client needs to draw the cave. Bounds is the
+// whole map, and anything outside a wall inside bounds is floor.
+message CaveLayout {
+  string name = 1;
+  Rect bounds = 2;
+  repeated Rect walls = 3;
+  Rect extraction = 4;
 }
 
 // Inventory

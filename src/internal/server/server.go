@@ -16,6 +16,7 @@ import (
 	"github.com/coder/websocket"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -27,7 +28,8 @@ const (
 
 type Server struct {
 	world   *sim.World
-	spawn   sim.Vec2
+	cave    caves.Cave
+	spawns  int
 	log     *slog.Logger
 	inbox   chan func()
 	done    chan struct{}
@@ -40,10 +42,10 @@ type client struct {
 	cancel context.CancelFunc
 }
 
-func New(world *sim.World, spawn sim.Vec2, log *slog.Logger) *Server {
+func New(world *sim.World, cave caves.Cave, log *slog.Logger) *Server {
 	return &Server{
 		world:   world,
-		spawn:   spawn,
+		cave:    cave,
 		log:     log,
 		inbox:   make(chan func(), 1024),
 		done:    make(chan struct{}),
@@ -71,8 +73,16 @@ func (s *Server) Step(dt time.Duration) {
 	events := s.world.Step(dt)
 
 	s.broadcast(protocol.Snapshot(s.world))
-	for _, ev := range events {
+	for _, ev := range events.Damage {
 		s.broadcast(protocol.Damage(ev))
+	}
+	for _, id := range events.Extracted {
+		s.broadcast(protocol.Extracted(id))
+		if c, ok := s.clients[id]; ok {
+			c.finish()
+			delete(s.clients, id)
+		}
+		s.log.Info("player extracted", "player", id)
 	}
 }
 
@@ -95,6 +105,15 @@ func (s *Server) broadcast(msg *gamev1.ServerMessage) {
 func (c *client) send(b []byte) {
 	select {
 	case c.out <- b:
+	default:
+		c.cancel()
+	}
+}
+
+// finish closes the connection once everything already queued is written.
+func (c *client) finish() {
+	select {
+	case c.out <- nil:
 	default:
 		c.cancel()
 	}
@@ -129,9 +148,11 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	c := &client{out: make(chan []byte, outboxSize), cancel: cancel}
 	joined := make(chan sim.EntityID, 1)
 	ok := s.enqueue(func() {
-		id := s.world.AddPlayer(s.spawn)
+		spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
+		s.spawns++
+		id := s.world.AddPlayer(spawn)
 		s.clients[id] = c
-		if b, err := protocol.EncodeServer(protocol.Joined(id)); err == nil {
+		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn)); err == nil {
 			c.send(b)
 		}
 		joined <- id
@@ -187,6 +208,10 @@ func (s *Server) writeLoop(ctx context.Context, conn *websocket.Conn, c *client,
 		case <-ctx.Done():
 			return
 		case b := <-c.out:
+			if b == nil {
+				conn.Close(websocket.StatusNormalClosure, "extracted")
+				return
+			}
 			if err := conn.Write(ctx, websocket.MessageBinary, b); err != nil {
 				return
 			}

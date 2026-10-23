@@ -2,6 +2,7 @@ package sim
 
 import (
 	"math"
+	"slices"
 	"testing"
 	"time"
 )
@@ -16,12 +17,25 @@ func passive() Config {
 	return c
 }
 
+// steps returns the damage from n steps.
 func steps(w *World, n int) []DamageEvent {
 	var events []DamageEvent
 	for range n {
-		events = append(events, w.Step(dt)...)
+		events = append(events, w.Step(dt).Damage...)
 	}
 	return events
+}
+
+// testRoomWalls is a closed room with a pillar at x=168..232, matching the
+// room the Godot player_test builds.
+func testRoomWalls() []Rect {
+	return []Rect{
+		{Vec2{-616, -352}, Vec2{616, -320}},
+		{Vec2{-616, 320}, Vec2{616, 352}},
+		{Vec2{-632, -320}, Vec2{-600, 320}},
+		{Vec2{600, -320}, Vec2{632, 320}},
+		{Vec2{168, -32}, Vec2{232, 32}},
+	}
 }
 
 func TestMoveAcceleratesThenHitsMaxSpeed(t *testing.T) {
@@ -79,7 +93,7 @@ func TestFrictionStopsPlayer(t *testing.T) {
 
 // Same setup as client/godot/tests/player_test.gd, so both sides stop at the same spot.
 func TestPillarStopsPlayerLikeClient(t *testing.T) {
-	w := NewWorld(DefaultConfig(), TestRoomWalls())
+	w := NewWorld(DefaultConfig(), testRoomWalls())
 	id := w.AddPlayer(Vec2{})
 	w.Submit(MoveCommand{Player: id, Seq: 1, Direction: Vec2{1, 0}})
 	steps(w, 40)
@@ -90,7 +104,7 @@ func TestPillarStopsPlayerLikeClient(t *testing.T) {
 }
 
 func TestWallSlideKeepsOtherAxis(t *testing.T) {
-	w := NewWorld(DefaultConfig(), TestRoomWalls())
+	w := NewWorld(DefaultConfig(), testRoomWalls())
 	id := w.AddPlayer(Vec2{0, 300})
 	w.Submit(MoveCommand{Player: id, Seq: 1, Direction: Vec2{1, 1}})
 	steps(w, 20)
@@ -163,7 +177,7 @@ func TestAttackRejected(t *testing.T) {
 			before, _ := w.Enemy(enemy)
 
 			w.Submit(AttackCommand{Player: player, Seq: 1, Target: tt.target(enemy), Ability: "basic"})
-			if events := w.Step(dt); len(events) != 0 {
+			if events := w.Step(dt).Damage; len(events) != 0 {
 				t.Fatalf("got %+v, want attack rejected", events)
 			}
 			if after, _ := w.Enemy(enemy); after.Health != before.Health {
@@ -209,5 +223,56 @@ func TestRemovePlayerAndSortedLists(t *testing.T) {
 	enemies := w.Enemies()
 	if len(enemies) != 2 || enemies[0].ID > enemies[1].ID {
 		t.Fatalf("enemies = %+v, want two sorted by ID", enemies)
+	}
+}
+
+func TestStandingInExtractionZoneExtracts(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	w.SetExtraction(Rect{Vec2{-50, -50}, Vec2{50, 50}})
+	inside := w.AddPlayer(Vec2{})
+	outside := w.AddPlayer(Vec2{200, 0})
+
+	need := int(DefaultConfig().ExtractTime / dt)
+	for i := 1; i < need; i++ {
+		if ev := w.Step(dt); len(ev.Extracted) != 0 {
+			t.Fatalf("step %d: extracted %v too early", i, ev.Extracted)
+		}
+	}
+	if p, _ := w.Player(inside); p.ExtractProgress < 0.9 || p.ExtractProgress >= 1 {
+		t.Fatalf("progress = %v, want just under 1", p.ExtractProgress)
+	}
+	if ev := w.Step(dt); !slices.Equal(ev.Extracted, []EntityID{inside}) {
+		t.Fatalf("extracted = %v, want [%d]", ev.Extracted, inside)
+	}
+	if _, ok := w.Player(inside); ok {
+		t.Fatal("extracted player is still in the world")
+	}
+	if p, _ := w.Player(outside); p.ExtractProgress != 0 {
+		t.Fatalf("outside player progress = %v", p.ExtractProgress)
+	}
+}
+
+func TestLeavingExtractionZoneResetsTimer(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	w.SetExtraction(Rect{Vec2{-50, -50}, Vec2{50, 50}})
+	id := w.AddPlayer(Vec2{})
+	steps(w, 20)
+
+	w.players[id].Pos = Vec2{200, 0}
+	w.Step(dt)
+	if p, _ := w.Player(id); p.ExtractProgress != 0 {
+		t.Fatalf("progress = %v after leaving, want 0", p.ExtractProgress)
+	}
+}
+
+func TestDeadPlayerCannotExtract(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	w.SetExtraction(Rect{Vec2{-50, -50}, Vec2{50, 50}})
+	id := w.AddPlayer(Vec2{})
+	w.players[id].Health = 0
+	for range 2 * int(DefaultConfig().ExtractTime/dt) {
+		if ev := w.Step(dt); len(ev.Extracted) != 0 {
+			t.Fatalf("dead player extracted")
+		}
 	}
 }

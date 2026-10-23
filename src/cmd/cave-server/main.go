@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
@@ -40,10 +41,9 @@ func run() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	world := sim.NewWorld(sim.DefaultConfig(), sim.TestRoomWalls())
-	// Just outside detection range of spawn, so joining does not start a fight.
-	world.AddEnemy(sim.Vec2{X: 0, Y: -220}, 30)
-	game := server.New(world, sim.Vec2{}, slog.Default())
+	cave := caves.Loop()
+	world := cave.NewWorld(sim.DefaultConfig())
+	game := server.New(world, cave, slog.Default())
 	defer game.Close()
 
 	loop := &tick.Loop{
@@ -73,7 +73,7 @@ func run() error {
 		}
 	}()
 
-	slog.Info("cave-server listening", "addr", srv.Addr, "tick_rate", rate)
+	slog.Info("cave-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name)
 	go func() { errc <- loop.Run(ctx) }()
 
 	select {

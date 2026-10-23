@@ -842,6 +842,12 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_inventory")
 		data[__inventory.tag] = service
 		
+		__extracted = PBField.new("extracted", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 14, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __extracted
+		service.func_ref = Callable(self, "new_extracted")
+		data[__extracted.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -850,6 +856,7 @@ class ServerMessage:
 		SNAPSHOT = 11,
 		DAMAGE = 12,
 		INVENTORY = 13,
+		EXTRACTED = 14,
 	}
 	var _payload_case: int = 0
 
@@ -883,6 +890,8 @@ class ServerMessage:
 		data[12].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
 	
@@ -903,6 +912,8 @@ class ServerMessage:
 		data[12].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
 	
@@ -923,6 +934,8 @@ class ServerMessage:
 		_payload_case = 12
 		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
 	
@@ -943,8 +956,32 @@ class ServerMessage:
 		data[12].state = PB_SERVICE_STATE.UNFILLED
 		data[13].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 13
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
+	
+	var __extracted: PBField
+	func has_extracted() -> bool:
+		return data[14].state == PB_SERVICE_STATE.FILLED
+	func get_extracted() -> Extracted:
+		return __extracted.value
+	func clear_extracted() -> void:
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_extracted() -> Extracted:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		data[14].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 14
+		__extracted.value = Extracted.new()
+		return __extracted.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -1032,6 +1069,73 @@ class Vec2:
 			return PB_ERR.PARSE_INCOMPLETE
 		return result
 	
+class Rect:
+	func _init():
+		var service
+		
+		__min = PBField.new("min", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __min
+		service.func_ref = Callable(self, "new_min")
+		data[__min.tag] = service
+		
+		__max = PBField.new("max", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __max
+		service.func_ref = Callable(self, "new_max")
+		data[__max.tag] = service
+		
+	var data = {}
+	
+	var __min: PBField
+	func has_min() -> bool:
+		if __min.value != null:
+			return true
+		return false
+	func get_min() -> Vec2:
+		return __min.value
+	func clear_min() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__min.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_min() -> Vec2:
+		__min.value = Vec2.new()
+		return __min.value
+	
+	var __max: PBField
+	func has_max() -> bool:
+		if __max.value != null:
+			return true
+		return false
+	func get_max() -> Vec2:
+		return __max.value
+	func clear_max() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__max.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_max() -> Vec2:
+		__max.value = Vec2.new()
+		return __max.value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
 class JoinRequest:
 	func _init():
 		var service
@@ -1078,6 +1182,91 @@ class JoinRequest:
 		return result
 	
 class JoinAccepted:
+	func _init():
+		var service
+		
+		__player_id = PBField.new("player_id", PB_DATA_TYPE.UINT64, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64])
+		service = PBServiceField.new()
+		service.field = __player_id
+		data[__player_id.tag] = service
+		
+		__cave = PBField.new("cave", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __cave
+		service.func_ref = Callable(self, "new_cave")
+		data[__cave.tag] = service
+		
+		__spawn = PBField.new("spawn", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __spawn
+		service.func_ref = Callable(self, "new_spawn")
+		data[__spawn.tag] = service
+		
+	var data = {}
+	
+	var __player_id: PBField
+	func has_player_id() -> bool:
+		if __player_id.value != null:
+			return true
+		return false
+	func get_player_id() -> int:
+		return __player_id.value
+	func clear_player_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__player_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
+	func set_player_id(value : int) -> void:
+		__player_id.value = value
+	
+	var __cave: PBField
+	func has_cave() -> bool:
+		if __cave.value != null:
+			return true
+		return false
+	func get_cave() -> CaveLayout:
+		return __cave.value
+	func clear_cave() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_cave() -> CaveLayout:
+		__cave.value = CaveLayout.new()
+		return __cave.value
+	
+	var __spawn: PBField
+	func has_spawn() -> bool:
+		if __spawn.value != null:
+			return true
+		return false
+	func get_spawn() -> Vec2:
+		return __spawn.value
+	func clear_spawn() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__spawn.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_spawn() -> Vec2:
+		__spawn.value = Vec2.new()
+		return __spawn.value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class Extracted:
 	func _init():
 		var service
 		
@@ -1422,6 +1611,11 @@ class EntityState:
 		service.field = __health
 		data[__health.tag] = service
 		
+		__extract_progress = PBField.new("extract_progress", PB_DATA_TYPE.FLOAT, PB_RULE.OPTIONAL, 6, true, DEFAULT_VALUES_3[PB_DATA_TYPE.FLOAT])
+		service = PBServiceField.new()
+		service.field = __extract_progress
+		data[__extract_progress.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -1491,6 +1685,19 @@ class EntityState:
 	func set_health(value : int) -> void:
 		__health.value = value
 	
+	var __extract_progress: PBField
+	func has_extract_progress() -> bool:
+		if __extract_progress.value != null:
+			return true
+		return false
+	func get_extract_progress() -> float:
+		return __extract_progress.value
+	func clear_extract_progress() -> void:
+		data[6].state = PB_SERVICE_STATE.UNFILLED
+		__extract_progress.value = DEFAULT_VALUES_3[PB_DATA_TYPE.FLOAT]
+	func set_extract_progress(value : float) -> void:
+		__extract_progress.value = value
+	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
 		
@@ -1553,6 +1760,109 @@ class WorldSnapshot:
 		var element = EntityState.new()
 		__entities.value.append(element)
 		return element
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class CaveLayout:
+	func _init():
+		var service
+		
+		__name = PBField.new("name", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __name
+		data[__name.tag] = service
+		
+		__bounds = PBField.new("bounds", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __bounds
+		service.func_ref = Callable(self, "new_bounds")
+		data[__bounds.tag] = service
+		
+		var __walls_default: Array[Rect] = []
+		__walls = PBField.new("walls", PB_DATA_TYPE.MESSAGE, PB_RULE.REPEATED, 3, true, __walls_default)
+		service = PBServiceField.new()
+		service.field = __walls
+		service.func_ref = Callable(self, "add_walls")
+		data[__walls.tag] = service
+		
+		__extraction = PBField.new("extraction", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __extraction
+		service.func_ref = Callable(self, "new_extraction")
+		data[__extraction.tag] = service
+		
+	var data = {}
+	
+	var __name: PBField
+	func has_name() -> bool:
+		if __name.value != null:
+			return true
+		return false
+	func get_name() -> String:
+		return __name.value
+	func clear_name() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__name.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_name(value : String) -> void:
+		__name.value = value
+	
+	var __bounds: PBField
+	func has_bounds() -> bool:
+		if __bounds.value != null:
+			return true
+		return false
+	func get_bounds() -> Rect:
+		return __bounds.value
+	func clear_bounds() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__bounds.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_bounds() -> Rect:
+		__bounds.value = Rect.new()
+		return __bounds.value
+	
+	var __walls: PBField
+	func get_walls() -> Array[Rect]:
+		return __walls.value
+	func clear_walls() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__walls.value.clear()
+	func add_walls() -> Rect:
+		var element = Rect.new()
+		__walls.value.append(element)
+		return element
+	
+	var __extraction: PBField
+	func has_extraction() -> bool:
+		if __extraction.value != null:
+			return true
+		return false
+	func get_extraction() -> Rect:
+		return __extraction.value
+	func clear_extraction() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__extraction.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_extraction() -> Rect:
+		__extraction.value = Rect.new()
+		return __extraction.value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
@@ -25,14 +26,29 @@ type harness struct {
 	enemy sim.EntityID
 }
 
+// testCave spawns players at the origin, next to one enemy, with the exit
+// far away unless a test moves it.
+func testCave() caves.Cave {
+	return caves.Cave{
+		Name:         "test",
+		Bounds:       sim.Rect{Min: sim.Vec2{X: -600, Y: -320}, Max: sim.Vec2{X: 600, Y: 320}},
+		PlayerSpawns: []sim.Vec2{{}},
+		Extraction:   sim.Rect{Min: sim.Vec2{X: 500, Y: 200}, Max: sim.Vec2{X: 600, Y: 320}},
+	}
+}
+
 func start(t *testing.T) harness {
 	t.Helper()
+	return startCave(t, testCave(), sim.DefaultConfig())
+}
+
+func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
+	t.Helper()
 	// Enemy stays put, so the only damage in these tests comes from players.
-	cfg := sim.DefaultConfig()
 	cfg.DetectRadius, cfg.PatrolSpeed = 0, 0
-	world := sim.NewWorld(cfg, sim.TestRoomWalls())
+	world := cave.NewWorld(cfg)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, 30)
-	srv := New(world, sim.Vec2{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(world, cave, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	loop := &tick.Loop{
@@ -76,11 +92,16 @@ func send(t *testing.T, conn *websocket.Conn, msg *gamev1.ClientMessage) {
 
 func join(t *testing.T, conn *websocket.Conn) uint64 {
 	t.Helper()
+	return joinAccepted(t, conn).GetPlayerId()
+}
+
+func joinAccepted(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
+	t.Helper()
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
 		Join: &gamev1.JoinRequest{Name: "tester"},
 	}})
 	msg := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil })
-	return msg.GetJoined().GetPlayerId()
+	return msg.GetJoined()
 }
 
 // waitFor reads until match returns true, or fails after two seconds.
@@ -227,4 +248,41 @@ func TestTwoClientsKillSameEnemy(t *testing.T) {
 		})
 	}
 
+}
+
+func TestJoinSendsCaveLayout(t *testing.T) {
+	cave := testCave()
+	cave.Walls = []sim.Rect{{Min: sim.Vec2{X: 100, Y: 100}, Max: sim.Vec2{X: 164, Y: 164}}}
+	cave.PlayerSpawns = []sim.Vec2{{X: 1, Y: 2}, {X: 3, Y: 4}}
+	h := startCave(t, cave, sim.DefaultConfig())
+
+	first := joinAccepted(t, dial(t, h.url))
+	second := joinAccepted(t, dial(t, h.url))
+	layout := first.GetCave()
+	if layout.GetName() != "test" || len(layout.GetWalls()) != 1 || layout.GetExtraction().GetMin().GetX() != 500 {
+		t.Fatalf("layout = %v", layout)
+	}
+	if first.GetSpawn().GetX() != 1 || second.GetSpawn().GetX() != 3 {
+		t.Fatalf("spawns = %v and %v, want each spawn point in turn", first.GetSpawn(), second.GetSpawn())
+	}
+}
+
+func TestExtractionClosesConnection(t *testing.T) {
+	cave := testCave()
+	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
+	cfg := sim.DefaultConfig()
+	cfg.ExtractTime = 100 * time.Millisecond
+	h := startCave(t, cave, cfg)
+
+	leaver := dial(t, h.url)
+	other := dial(t, h.url)
+	id := join(t, leaver)
+	join(t, other)
+
+	waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
+	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
+	_, _, err := leaver.Read(context.Background())
+	if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+		t.Fatalf("got %v, want normal close after extraction", err)
+	}
 }

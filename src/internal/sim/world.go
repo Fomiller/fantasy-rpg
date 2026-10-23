@@ -4,6 +4,7 @@ package sim
 
 import (
 	"cmp"
+	"maps"
 	"math"
 	"slices"
 	"time"
@@ -31,6 +32,8 @@ type Config struct {
 	EnemyAttackRange    float64
 	EnemyDamage         int
 	EnemyAttackCooldown time.Duration
+
+	ExtractTime time.Duration
 }
 
 // DefaultConfig matches the movement values on the Godot Player node.
@@ -56,6 +59,8 @@ func DefaultConfig() Config {
 		EnemyAttackRange:    40,
 		EnemyDamage:         10,
 		EnemyAttackCooldown: time.Second,
+
+		ExtractTime: 3 * time.Second,
 	}
 }
 
@@ -66,6 +71,9 @@ type Player struct {
 	LastInputSeq uint32
 	input        Vec2
 	cooldown     time.Duration
+	// ExtractProgress runs from 0 to 1 while the player stands in the extraction zone.
+	ExtractProgress float64
+	extracting      time.Duration
 }
 
 type Enemy struct {
@@ -99,10 +107,17 @@ type DamageEvent struct {
 	Killed         bool
 }
 
+// Events is what happened during one Step.
+type Events struct {
+	Damage    []DamageEvent
+	Extracted []EntityID
+}
+
 type World struct {
 	Tick    uint64
 	cfg     Config
 	walls   []Rect
+	exit    *Rect
 	players map[EntityID]*Player
 	enemies map[EntityID]*Enemy
 	nextID  EntityID
@@ -116,6 +131,11 @@ func NewWorld(cfg Config, walls []Rect) *World {
 		players: map[EntityID]*Player{},
 		enemies: map[EntityID]*Enemy{},
 	}
+}
+
+// SetExtraction marks the zone players stand in to leave the cave.
+func (w *World) SetExtraction(r Rect) {
+	w.exit = &r
 }
 
 func (w *World) AddPlayer(pos Vec2) EntityID {
@@ -175,15 +195,15 @@ func (w *World) Submit(cmd any) {
 	w.pending = append(w.pending, cmd)
 }
 
-func (w *World) Step(dt time.Duration) []DamageEvent {
-	var events []DamageEvent
+func (w *World) Step(dt time.Duration) Events {
+	var ev Events
 	for _, cmd := range w.pending {
 		switch c := cmd.(type) {
 		case MoveCommand:
 			w.applyMove(c)
 		case AttackCommand:
-			if ev, ok := w.applyAttack(c); ok {
-				events = append(events, ev)
+			if d, ok := w.applyAttack(c); ok {
+				ev.Damage = append(ev.Damage, d)
 			}
 		}
 	}
@@ -193,9 +213,33 @@ func (w *World) Step(dt time.Duration) []DamageEvent {
 		w.movePlayer(p, dt)
 		p.cooldown = max(p.cooldown-dt, 0)
 	}
-	events = append(events, w.stepEnemies(dt)...)
+	ev.Damage = append(ev.Damage, w.stepEnemies(dt)...)
+	ev.Extracted = w.stepExtraction(dt)
 	w.Tick++
-	return events
+	return ev
+}
+
+// stepExtraction removes players who stood in the zone long enough. Stepping
+// out resets the timer.
+func (w *World) stepExtraction(dt time.Duration) []EntityID {
+	if w.exit == nil {
+		return nil
+	}
+	var out []EntityID
+	for _, id := range slices.Sorted(maps.Keys(w.players)) {
+		p := w.players[id]
+		if p.Health <= 0 || !w.exit.Contains(p.Pos) {
+			p.extracting, p.ExtractProgress = 0, 0
+			continue
+		}
+		p.extracting += dt
+		p.ExtractProgress = min(p.extracting.Seconds()/w.cfg.ExtractTime.Seconds(), 1)
+		if p.extracting >= w.cfg.ExtractTime {
+			delete(w.players, id)
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (w *World) applyMove(c MoveCommand) {

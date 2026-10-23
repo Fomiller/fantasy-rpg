@@ -2,6 +2,7 @@ package protocol
 
 import (
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
@@ -28,9 +29,23 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 	return nil, false
 }
 
-func Joined(player sim.EntityID) *gamev1.ServerMessage {
+func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2) *gamev1.ServerMessage {
+	layout := &gamev1.CaveLayout{
+		Name:       cave.Name,
+		Bounds:     rect(cave.Bounds),
+		Extraction: rect(cave.Extraction),
+	}
+	for _, w := range cave.Walls {
+		layout.Walls = append(layout.Walls, rect(w))
+	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Joined{
-		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player)},
+		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn)},
+	}}
+}
+
+func Extracted(player sim.EntityID) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Extracted{
+		Extracted: &gamev1.Extracted{PlayerId: uint64(player)},
 	}}
 }
 
@@ -38,11 +53,12 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 	snap := &gamev1.WorldSnapshot{Tick: w.Tick}
 	for _, p := range w.Players() {
 		snap.Entities = append(snap.Entities, &gamev1.EntityState{
-			Id:       uint64(p.ID),
-			Kind:     gamev1.EntityKind_ENTITY_KIND_PLAYER,
-			Position: vec(p.Pos),
-			Velocity: vec(p.Vel),
-			Health:   int32(p.Health),
+			Id:              uint64(p.ID),
+			Kind:            gamev1.EntityKind_ENTITY_KIND_PLAYER,
+			Position:        vec(p.Pos),
+			Velocity:        vec(p.Vel),
+			Health:          int32(p.Health),
+			ExtractProgress: float32(p.ExtractProgress),
 		})
 	}
 	for _, e := range w.Enemies() {
@@ -65,6 +81,10 @@ func Damage(ev sim.DamageEvent) *gamev1.ServerMessage {
 		TargetHealth: int32(ev.TargetHealth),
 		Killed:       ev.Killed,
 	}}}
+}
+
+func rect(r sim.Rect) *gamev1.Rect {
+	return &gamev1.Rect{Min: vec(r.Min), Max: vec(r.Max)}
 }
 
 func vec(v sim.Vec2) *gamev1.Vec2 {

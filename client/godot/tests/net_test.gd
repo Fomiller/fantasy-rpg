@@ -25,9 +25,16 @@ func _run() -> void:
 	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
 	_check(await _until(func() -> bool: return latest.snapshot != null), "receives world snapshots")
 
+	var cave: Cave = main.get_node("Cave")
+	var player: Player = main.get_node("Player")
+	_check(cave.get_child_count() > 10 and connection.cave.get_walls().size() > 10, "built the cave the server sent")
+	_check(player.position.distance_to(connection.spawn) < 1.0 and connection.spawn != Vector2.ZERO, "player starts at the server spawn")
+	_check(cave.extraction.has_area(), "cave has an extraction zone")
+
 	var start_tick: int = latest.snapshot.get_tick()
+	var start_x := _server_x(latest.snapshot, connection.player_id)
 	Input.action_press("move_right")
-	var moved := await _until(func() -> bool: return _server_x(latest.snapshot, connection.player_id) > 60.0)
+	var moved := await _until(func() -> bool: return _server_x(latest.snapshot, connection.player_id) > start_x + 40.0)
 	Input.action_release("move_right")
 	_check(moved, "server moved the player after MoveInput")
 	_check(latest.snapshot.get_tick() > start_tick, "server tick advances")
@@ -36,7 +43,7 @@ func _run() -> void:
 	for e: GameV1.EntityState in latest.snapshot.get_entities():
 		if e.get_kind() == GameV1.EntityKind.ENEMY:
 			enemies += 1
-	_check(enemies == 1, "snapshot includes the enemy")
+	_check(enemies == 5, "snapshot includes all five enemies of the loop cave")
 
 	_finish()
 
