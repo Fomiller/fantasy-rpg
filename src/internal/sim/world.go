@@ -2,7 +2,12 @@
 // no Godot types, so it can be stepped and tested on its own.
 package sim
 
-import "time"
+import (
+	"cmp"
+	"math"
+	"slices"
+	"time"
+)
 
 type EntityID uint64
 
@@ -97,6 +102,29 @@ func (w *World) AddEnemy(pos Vec2, health int) EntityID {
 	return w.nextID
 }
 
+func (w *World) RemovePlayer(id EntityID) {
+	delete(w.players, id)
+}
+
+// Players returns copies sorted by ID, so snapshots are stable tick to tick.
+func (w *World) Players() []Player {
+	out := make([]Player, 0, len(w.players))
+	for _, p := range w.players {
+		out = append(out, *p)
+	}
+	slices.SortFunc(out, func(a, b Player) int { return cmp.Compare(a.ID, b.ID) })
+	return out
+}
+
+func (w *World) Enemies() []Enemy {
+	out := make([]Enemy, 0, len(w.enemies))
+	for _, e := range w.enemies {
+		out = append(out, *e)
+	}
+	slices.SortFunc(out, func(a, b Enemy) int { return cmp.Compare(a.ID, b.ID) })
+	return out
+}
+
 func (w *World) Player(id EntityID) (Player, bool) {
 	p, ok := w.players[id]
 	if !ok {
@@ -147,6 +175,10 @@ func (w *World) applyMove(c MoveCommand) {
 		return
 	}
 	dir := c.Direction
+	// Direction comes from the client. NaN or Inf would poison the position forever.
+	if !finite(dir.X) || !finite(dir.Y) {
+		return
+	}
 	if l := dir.Len(); l > 1 {
 		dir = dir.Scale(1 / l)
 	}
@@ -206,4 +238,8 @@ func (w *World) movePlayer(p *Player, dt time.Duration) {
 			p.Vel.Y = 0
 		}
 	}
+}
+
+func finite(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }

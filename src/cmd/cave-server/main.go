@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
@@ -40,11 +42,13 @@ func run() error {
 
 	world := sim.NewWorld(sim.DefaultConfig(), sim.TestRoomWalls())
 	world.AddEnemy(sim.Vec2{X: 0, Y: -150}, 30)
+	game := server.New(world, sim.Vec2{}, slog.Default())
+	defer game.Close()
 
 	loop := &tick.Loop{
 		Interval: time.Second / time.Duration(rate),
 		Metrics:  tick.NewMetrics(reg, "cave-server"),
-		Step:     func(dt time.Duration) { world.Step(dt) },
+		Step:     game.Step,
 	}
 
 	mux := http.NewServeMux()
@@ -52,7 +56,14 @@ func run() error {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	srv := &http.Server{Addr: ":8080", Handler: mux}
+	mux.HandleFunc("GET /ws", game.HandleWS)
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+		// Shutdown does not reach hijacked WebSocket connections. Tying request
+		// contexts to the signal closes them when the server stops.
+		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
 
 	errc := make(chan error, 1)
 	go func() {

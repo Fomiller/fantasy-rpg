@@ -32,6 +32,7 @@
     "fmt:\n    gofmt -w src"
     "deps:\n    {{compose}} up -d --wait postgres nats"
     "dev: deps\n    go run ./src/cmd/world-server"
+    "cave:\n    go run ./src/cmd/cave-server"
     "up:\n    {{compose}} --profile full up -d --build --wait"
     "down:\n    {{compose}} --profile full down"
     "images:\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=cave-server -t fantasy-rpg/cave-server:dev ."
@@ -45,6 +46,7 @@
     "client-run:\n    {{godot}} --path client/godot"
     "client-check:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --quit-after 5"
     "client-test:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --script res://tests/player_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/proto_test.gd"
+    "net-test: build\n    #!/usr/bin/env bash\n    set -euo pipefail\n    ./bin/cave-server & pid=$!\n    trap 'kill $pid' EXIT\n    for i in $(seq 50); do curl -sf localhost:8080/healthz >/dev/null && break; sleep 0.1; done\n    {{godot}} --headless --path client/godot --script res://tests/net_test.gd"
     "proto:\n    buf lint\n    buf generate\n    {{godot}} --headless --path client/godot -s res://addons/godobuf/godobuf_cmdln.gd --input={{justfile_directory()}}/proto/game/v1/game.proto --output={{justfile_directory()}}/client/godot/gen/game_v1.gd --class_name=GameV1"
     "proto-fixtures:\n    go test ./src/internal/protocol -run TestServerSnapshotFixture -update\n    UPDATE=1 {{godot}} --headless --path client/godot --script res://tests/proto_test.gd"
   ];

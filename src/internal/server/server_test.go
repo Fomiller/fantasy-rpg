@@ -1,0 +1,186 @@
+package server
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/proto"
+
+	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
+	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
+	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
+)
+
+type harness struct {
+	url   string
+	enemy sim.EntityID
+}
+
+func start(t *testing.T) harness {
+	t.Helper()
+	world := sim.NewWorld(sim.DefaultConfig(), sim.TestRoomWalls())
+	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, 30)
+	srv := New(world, sim.Vec2{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	loop := &tick.Loop{
+		Interval: 10 * time.Millisecond,
+		Metrics:  tick.NewMetrics(prometheus.NewRegistry(), "test"),
+		Step:     srv.Step,
+	}
+	go loop.Run(ctx)
+
+	hs := httptest.NewServer(http.HandlerFunc(srv.HandleWS))
+	t.Cleanup(func() {
+		hs.Close()
+		cancel()
+		srv.Close()
+	})
+	return harness{url: "ws" + strings.TrimPrefix(hs.URL, "http"), enemy: enemy}
+}
+
+func dial(t *testing.T, url string) *websocket.Conn {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	return conn
+}
+
+func send(t *testing.T, conn *websocket.Conn, msg *gamev1.ClientMessage) {
+	t.Helper()
+	b, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Write(context.Background(), websocket.MessageBinary, b); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func join(t *testing.T, conn *websocket.Conn) uint64 {
+	t.Helper()
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
+		Join: &gamev1.JoinRequest{Name: "tester"},
+	}})
+	msg := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil })
+	return msg.GetJoined().GetPlayerId()
+}
+
+// waitFor reads until match returns true, or fails after two seconds.
+func waitFor(t *testing.T, conn *websocket.Conn, match func(*gamev1.ServerMessage) bool) *gamev1.ServerMessage {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for {
+		_, b, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("no matching message: %v", err)
+		}
+		var msg gamev1.ServerMessage
+		if err := proto.Unmarshal(b, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if match(&msg) {
+			return &msg
+		}
+	}
+}
+
+func entity(snap *gamev1.WorldSnapshot, id uint64) *gamev1.EntityState {
+	for _, e := range snap.GetEntities() {
+		if e.GetId() == id {
+			return e
+		}
+	}
+	return nil
+}
+
+func TestJoinThenMoveShowsInSnapshot(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	id := join(t, conn)
+
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Move{
+		Move: &gamev1.MoveInput{Seq: 1, Direction: &gamev1.Vec2{X: 0, Y: 1}},
+	}})
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		e := entity(m.GetSnapshot(), id)
+		return e != nil && e.GetPosition().GetY() > 20
+	})
+}
+
+func TestAttackBroadcastsDamage(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	id := join(t, conn)
+
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
+		Attack: &gamev1.AttackRequest{Seq: 1, TargetId: uint64(h.enemy), AbilityId: "basic"},
+	}})
+	msg := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetDamage() != nil })
+	if d := msg.GetDamage(); d.GetSourceId() != id || d.GetTargetHealth() != 20 {
+		t.Fatalf("damage = %v, want from player %d leaving 20 health", d, id)
+	}
+}
+
+func TestBothClientsSeeEachOther(t *testing.T) {
+	h := start(t)
+	a := dial(t, h.url)
+	b := dial(t, h.url)
+	idA := join(t, a)
+	idB := join(t, b)
+
+	waitFor(t, a, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), idB) != nil })
+	waitFor(t, b, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), idA) != nil })
+}
+
+func TestDisconnectRemovesPlayer(t *testing.T) {
+	h := start(t)
+	a := dial(t, h.url)
+	b := dial(t, h.url)
+	idA := join(t, a)
+	join(t, b)
+
+	a.Close(websocket.StatusNormalClosure, "")
+	waitFor(t, b, func(m *gamev1.ServerMessage) bool {
+		return m.GetSnapshot() != nil && entity(m.GetSnapshot(), idA) == nil
+	})
+}
+
+func TestFirstMessageMustBeJoin(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Move{
+		Move: &gamev1.MoveInput{Seq: 1},
+	}})
+	_, _, err := conn.Read(context.Background())
+	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("got %v, want policy violation close", err)
+	}
+}
+
+func TestWrongProtocolVersionIsClosed(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version + 1, Payload: &gamev1.ClientMessage_Join{
+		Join: &gamev1.JoinRequest{Name: "old client"},
+	}})
+	_, _, err := conn.Read(context.Background())
+	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("got %v, want policy violation close", err)
+	}
+}

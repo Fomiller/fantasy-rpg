@@ -172,3 +172,34 @@ func TestStepAdvancesTick(t *testing.T) {
 		t.Fatalf("tick = %d, want 3", w.Tick)
 	}
 }
+
+func TestNonFiniteMoveIsIgnored(t *testing.T) {
+	for _, dir := range []Vec2{{math.NaN(), 0}, {0, math.Inf(1)}} {
+		w := NewWorld(DefaultConfig(), nil)
+		id := w.AddPlayer(Vec2{})
+		w.Submit(MoveCommand{Player: id, Seq: 1, Direction: dir})
+		steps(w, 5)
+		p, _ := w.Player(id)
+		if p.Pos != (Vec2{}) || p.LastInputSeq != 0 {
+			t.Fatalf("direction %v moved the player to %v", dir, p.Pos)
+		}
+	}
+}
+
+func TestRemovePlayerAndSortedLists(t *testing.T) {
+	w := NewWorld(DefaultConfig(), nil)
+	a := w.AddPlayer(Vec2{})
+	b := w.AddPlayer(Vec2{})
+	w.AddEnemy(Vec2{}, 30)
+	w.AddEnemy(Vec2{}, 30)
+	w.RemovePlayer(a)
+
+	players := w.Players()
+	if len(players) != 1 || players[0].ID != b {
+		t.Fatalf("players = %+v, want only %d", players, b)
+	}
+	enemies := w.Enemies()
+	if len(enemies) != 2 || enemies[0].ID > enemies[1].ID {
+		t.Fatalf("enemies = %+v, want two sorted by ID", enemies)
+	}
+}
