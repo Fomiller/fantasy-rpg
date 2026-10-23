@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
@@ -26,14 +27,20 @@ type Cave struct {
 	Walls        []sim.Rect
 	PlayerSpawns []sim.Vec2
 	Enemies      []EnemySpawn
+	Chests       []sim.Vec2
 	Extraction   sim.Rect
 }
 
-// NewWorld builds a sim world with this cave's walls, enemies and exit.
-func (c Cave) NewWorld(cfg sim.Config) *sim.World {
+// NewWorld builds a sim world with this cave's walls, enemies, chests and
+// exit. loot rolls drops and chest contents, and may be nil.
+func (c Cave) NewWorld(cfg sim.Config, loot *items.Roller) *sim.World {
 	w := sim.NewWorld(cfg, c.Walls)
+	w.SetLoot(loot)
 	for _, e := range c.Enemies {
 		w.AddEnemy(e.Pos, e.Health)
+	}
+	for _, pos := range c.Chests {
+		w.AddChest(pos)
 	}
 	w.SetExtraction(c.Extraction)
 	return w
@@ -47,18 +54,18 @@ func Loop() Cave {
 
 const loopArt = `
 ###############################
-#.......#############...XXX...#
+#c......#############...XXX...#
 #.......#############...XXX...#
 #..........m..................#
 #.......#############......m..#
 ###.#####...........######.####
-###.####..............####.####
+###.####......c.......####.####
 ###.###.....######.....###.####
 ###.......########...m........#
 ###.###.....######.....###.####
 ###.####..............####.####
 ###.#####...........######.####
-#.......#############.........#
+#.......#############........c#
 #..SS..........m...........m..#
 #.......#############.........#
 ###############################
@@ -78,6 +85,7 @@ func mustParse(name, art string) Cave {
 //	.  floor
 //	S  player spawn
 //	m  enemy spawn
+//	c  chest
 //	X  extraction zone, which must be one solid rectangle
 func Parse(name, art string) (Cave, error) {
 	rows := splitArt(art)
@@ -101,6 +109,8 @@ func Parse(name, art string) (Cave, error) {
 				c.PlayerSpawns = append(c.PlayerSpawns, center)
 			case 'm':
 				c.Enemies = append(c.Enemies, EnemySpawn{Pos: center, Health: EnemyHealth})
+			case 'c':
+				c.Chests = append(c.Chests, center)
 			case 'X':
 				minX, minY, maxX, maxY = min(minX, x), min(minY, y), max(maxX, x), max(maxY, y)
 			default:

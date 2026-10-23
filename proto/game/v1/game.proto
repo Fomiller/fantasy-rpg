@@ -11,6 +11,11 @@ message ClientMessage {
     JoinRequest join = 10;
     MoveInput move = 11;
     AttackRequest attack = 12;
+    PickupRequest pickup = 13;
+    EquipRequest equip = 14;
+    UnequipRequest unequip = 15;
+    DropRequest drop = 16;
+    UseRequest use = 17;
   }
 }
 
@@ -84,6 +89,9 @@ enum EntityKind {
   ENTITY_KIND_UNSPECIFIED = 0;
   ENTITY_KIND_PLAYER = 1;
   ENTITY_KIND_ENEMY = 2;
+  ENTITY_KIND_CHEST = 3;
+  // Loot on the ground. It goes away once someone picks all of it up.
+  ENTITY_KIND_LOOT = 4;
 }
 
 message EntityState {
@@ -99,6 +107,8 @@ message EntityState {
   // knows which of its predicted inputs to replay.
   uint32 last_input_seq = 8;
   float max_speed = 9;
+  // Chests and loot only.
+  uint32 item_count = 10;
 }
 
 message WorldSnapshot {
@@ -160,6 +170,37 @@ message EquipmentUpdated {
   repeated Item items = 1;
 }
 
+// InventoryUpdated is everything in the player's bag, sent to that player
+// whenever it changes.
 message InventoryUpdated {
   repeated Item items = 1;
+  uint32 capacity = 2;
+}
+
+// Item requests. The server ignores one it cannot do, like a pickup from too
+// far away, and the next InventoryUpdated shows what really happened.
+
+// PickupRequest takes everything that fits from a chest or loot entity.
+message PickupRequest {
+  uint64 target_id = 1;
+}
+
+// EquipRequest moves an item from the bag to its slot. Whatever was in the
+// slot goes back to the bag.
+message EquipRequest {
+  string item_id = 1;
+}
+
+message UnequipRequest {
+  string slot = 1;
+}
+
+// DropRequest puts a whole bag entry on the ground at the player's feet.
+message DropRequest {
+  string item_id = 1;
+}
+
+// UseRequest uses one of a consumable, like drinking a potion.
+message UseRequest {
+  string item_id = 1;
 }

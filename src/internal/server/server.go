@@ -17,6 +17,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
@@ -30,18 +31,21 @@ const (
 type Server struct {
 	// TickRate is sent to clients on join. It must match the tick loop.
 	TickRate int
-	world    *sim.World
-	cave     caves.Cave
-	spawns   int
-	loot     *items.Roller
-	log      *slog.Logger
-	inbox    chan func()
-	done     chan struct{}
-	stop     sync.Once
-	clients  map[sim.EntityID]*client
+	// Store keeps loadouts by player name. Set it before serving.
+	Store   inventory.Store
+	world   *sim.World
+	cave    caves.Cave
+	spawns  int
+	loot    *items.Roller
+	log     *slog.Logger
+	inbox   chan func()
+	done    chan struct{}
+	stop    sync.Once
+	clients map[sim.EntityID]*client
 }
 
 type client struct {
+	name   string
 	out    chan []byte
 	cancel context.CancelFunc
 }
@@ -49,6 +53,7 @@ type client struct {
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
 	return &Server{
 		TickRate: 20,
+		Store:    inventory.NewMemory(),
 		world:    world,
 		cave:     cave,
 		loot:     loot,
@@ -90,6 +95,44 @@ func (s *Server) Step(dt time.Duration) {
 		}
 		s.log.Info("player extracted", "player", id)
 	}
+	for _, id := range events.Inventory {
+		s.sendItems(id)
+	}
+}
+
+// sendItems tells the player what they carry and saves it. Saving on every
+// change means a disconnect or extraction never loses anything.
+func (s *Server) sendItems(id sim.EntityID) {
+	c, ok := s.clients[id]
+	p, alive := s.world.Player(id)
+	if !ok || !alive {
+		return
+	}
+	for _, msg := range []*gamev1.ServerMessage{protocol.Equipment(p), protocol.Inventory(p)} {
+		if b, err := protocol.EncodeServer(msg); err == nil {
+			c.send(b)
+		}
+	}
+	ctx := context.Background()
+	var err error
+	// A player who lost everything starts over with the starter kit.
+	if l := p.Loadout(); l.Empty() {
+		err = s.Store.Delete(ctx, c.name)
+	} else {
+		err = s.Store.Save(ctx, c.name, l)
+	}
+	if err != nil {
+		s.log.Error("save loadout", "player", id, "name", c.name, "err", err)
+	}
+}
+
+func (s *Server) nameInUse(name string) bool {
+	for _, c := range s.clients {
+		if c.name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) broadcast(msg *gamev1.ServerMessage) {
@@ -116,16 +159,31 @@ func (c *client) send(b []byte) {
 	}
 }
 
-func (s *Server) equipStarterKit(id sim.EntityID) {
+// giveLoadout restores what the player had last time, or the starter kit.
+func (s *Server) giveLoadout(id sim.EntityID, name string) {
+	l, ok, err := s.Store.Load(context.Background(), name)
+	if err != nil {
+		s.log.Error("load loadout", "name", name, "err", err)
+	}
+	if !ok {
+		l = s.starterKit()
+	}
+	if err := s.world.Restore(id, l); err != nil {
+		s.log.Error("restore loadout", "player", id, "err", err)
+	}
+}
+
+func (s *Server) starterKit() inventory.Loadout {
+	var l inventory.Loadout
 	for _, def := range items.StarterKit {
 		inst, err := s.loot.Make(def, 1, items.Common)
-		if err == nil {
-			_, _, err = s.world.Equip(id, inst)
-		}
 		if err != nil {
 			s.log.Error("starter kit", "item", def, "err", err)
+			continue
 		}
+		l.Equipment = append(l.Equipment, inst)
 	}
+	return l
 }
 
 // finish closes the connection once everything already queued is written.
@@ -163,9 +221,15 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := &client{out: make(chan []byte, outboxSize), cancel: cancel}
+	c := &client{name: name, out: make(chan []byte, outboxSize), cancel: cancel}
 	joined := make(chan sim.EntityID, 1)
 	ok := s.enqueue(func() {
+		// One connection per name, or two copies of a player could load and
+		// save the same items.
+		if s.nameInUse(name) {
+			joined <- 0
+			return
+		}
 		spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
 		s.spawns++
 		id := s.world.AddPlayer(spawn)
@@ -173,12 +237,8 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn, s.TickRate)); err == nil {
 			c.send(b)
 		}
-		s.equipStarterKit(id)
-		if p, ok := s.world.Player(id); ok {
-			if b, err := protocol.EncodeServer(protocol.Equipment(p)); err == nil {
-				c.send(b)
-			}
-		}
+		s.giveLoadout(id, name)
+		s.sendItems(id)
 		joined <- id
 	})
 	if !ok {
@@ -190,6 +250,10 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	select {
 	case id = <-joined:
 	case <-ctx.Done():
+		return
+	}
+	if id == 0 {
+		conn.Close(websocket.StatusPolicyViolation, "name already playing")
 		return
 	}
 	log := s.log.With("player", id, "name", name)
@@ -257,6 +321,9 @@ func readJoin(ctx context.Context, conn *websocket.Conn) (string, error) {
 	join := msg.GetJoin()
 	if join == nil {
 		return "", errors.New("first message must be join")
+	}
+	if join.GetName() == "" {
+		return "", errors.New("join needs a name")
 	}
 	return join.GetName(), nil
 }

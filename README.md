@@ -72,7 +72,9 @@ just client-test    # headless player tests: movement, walls, interact
 just net-test       # start cave-server and check a real client can join and move
 ```
 
-Controls: WASD or arrow keys to move, E to interact.
+Controls: WASD or arrow keys to move, Space or left click to attack, E to loot a chest or pile, I or Tab for the inventory.
+
+The server keeps your items by player name. Reconnect with the same name to get them back. Set one with `-- --name=ann`; without it the client picks a random name each launch.
 
 To play against the server, start it with `just cave`, then run `just client-run`. The client joins `ws://127.0.0.1:8080/ws`. The top-left label shows your player ID and the server tick. A white outline marks where the server thinks you are. Without a server the label says "offline", the game still runs, and the client retries every 2 seconds. Point at another server with `/Applications/Godot.app/Contents/MacOS/Godot --path client/godot -- --server=ws://host:port/ws`.
 

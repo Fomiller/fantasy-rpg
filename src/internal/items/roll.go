@@ -25,6 +25,8 @@ type Instance struct {
 	Base     map[Stat]int
 	Affixes  []Affix
 	Quantity int
+	// Stack is the most of this item one inventory slot holds.
+	Stack int
 }
 
 type Affix struct {
@@ -130,7 +132,7 @@ func (r *Roller) rarity(def Def, boost int) Rarity {
 }
 
 func (r *Roller) roll(def Def, level int, rarity Rarity) Instance {
-	inst := Instance{ID: newID(), DefID: def.ID, Name: def.Name, Slot: def.Slot, Rarity: rarity, Level: level, Base: map[Stat]int{}, Quantity: 1}
+	inst := Instance{ID: newID(), DefID: def.ID, Name: def.Name, Slot: def.Slot, Rarity: rarity, Level: level, Base: map[Stat]int{}, Quantity: 1, Stack: def.Stack}
 	// Sorted so the same seed rolls stats in the same order.
 	for _, s := range sortedStats(def.Base) {
 		inst.Base[s] = r.between(def.Base[s])

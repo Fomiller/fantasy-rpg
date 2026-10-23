@@ -7,11 +7,13 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
+var errNoPlayer = errors.New("no such player")
+
 // Equip puts an item in its slot. It returns whatever was there before.
 func (w *World) Equip(id EntityID, inst items.Instance) (items.Instance, bool, error) {
 	p, ok := w.players[id]
 	if !ok {
-		return items.Instance{}, false, errors.New("no such player")
+		return items.Instance{}, false, errNoPlayer
 	}
 	if p.Health <= 0 {
 		return items.Instance{}, false, errors.New("dead players cannot equip")
