@@ -58,3 +58,33 @@ just k8s-down       # delete the cluster
 Local Postgres login is `fantasy` / `fantasy`, database `fantasy`. It is for local use only.
 
 Other recipes: `just build`, `just test`, `just lint`, `just fmt`.
+
+## Godot client
+
+The client is a 2D Godot 4.7 project in `client/godot`, written in GDScript. It uses the Compatibility renderer.
+
+```sh
+just client         # open the editor
+just client-run     # run the game
+just client-check   # import and run headless; prints "main scene loaded"
+```
+
+The recipes use `/Applications/Godot.app`. For another install, pass the path: `just godot=/path/to/godot client`.
+
+Commit the `*.uid` files Godot writes next to scripts. Godot uses them to keep references working when a file moves. `.godot/` is a cache and is ignored.
+
+### Editing GDScript in Neovim
+
+The Godot editor runs a GDScript language server on port 6005 while it is open.
+
+1. Open the editor with `just client`.
+2. Start Neovim with a server socket, so Godot can open files in it:
+
+   ```sh
+   nvim --listen /tmp/godot.pipe
+   ```
+
+3. In Godot, open Editor Settings > Text Editor > External. Turn on "Use External Editor". Set the path to `nvim` and the flags to `--server /tmp/godot.pipe --remote-send "<C-\><C-N>:e {file}<CR>:call cursor({line},{col})<CR>"`.
+4. In Neovim, turn on the `gdscript` LSP config from nvim-lspconfig (`vim.lsp.enable("gdscript")`), and install the `gdscript` treesitter parser.
+
+Use Neovim for code. Use the Godot editor for scenes, nodes and the debugger.

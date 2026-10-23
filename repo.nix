@@ -20,6 +20,8 @@
     { name = "compose"; value = "docker compose -f deploy/compose/compose.yaml"; }
     # Pinned so a recipe can never reach the homelab cluster by accident.
     { name = "kube"; value = "kubectl --context k3d-fantasy-rpg"; }
+    # Godot is not in the dev shell, so point at the installed app. Override with `just godot=<path> ...`.
+    { name = "godot"; value = "/Applications/Godot.app/Contents/MacOS/Godot"; }
   ];
 
   # Setting this list here replaces the pack recipes, so build and test are restated.
@@ -39,5 +41,8 @@
     "cave-start id:\n    sed 's/CAVE_ID/{{id}}/g' deploy/kubernetes/cave-pod.yaml | {{kube}} apply -f -\n    {{kube}} -n fantasy-rpg wait --for=condition=Ready pod/cave-{{id}} --timeout=60s"
     "cave-stop id:\n    {{kube}} -n fantasy-rpg delete pod cave-{{id}}"
     "caves:\n    {{kube}} -n fantasy-rpg get pods -l app=cave-server"
+    "client:\n    {{godot}} --path client/godot --editor"
+    "client-run:\n    {{godot}} --path client/godot"
+    "client-check:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --quit-after 5"
   ];
 }

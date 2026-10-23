@@ -9,6 +9,7 @@ import? 'just/base.just'
 project := "fantasy-rpg"
 compose := "docker compose -f deploy/compose/compose.yaml"
 kube := "kubectl --context k3d-fantasy-rpg"
+godot := "/Applications/Godot.app/Contents/MacOS/Godot"
 
 fetch:
     curl -sSfL https://raw.githubusercontent.com/Fomiller/justfiles/refs/heads/main/base.just > just/base.just
@@ -65,3 +66,13 @@ cave-stop id:
 
 caves:
     {{kube}} -n fantasy-rpg get pods -l app=cave-server
+
+client:
+    {{godot}} --path client/godot --editor
+
+client-run:
+    {{godot}} --path client/godot
+
+client-check:
+    {{godot}} --headless --path client/godot --import
+    {{godot}} --headless --path client/godot --quit-after 5
