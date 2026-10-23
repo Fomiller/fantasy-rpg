@@ -99,6 +99,7 @@ client-test:
     {{godot}} --headless --path client/godot --script res://tests/player_test.gd
     {{godot}} --headless --path client/godot --script res://tests/proto_test.gd
     {{godot}} --headless --path client/godot --script res://tests/movement_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/enemy_view_test.gd
 
 net-test: build
     #!/usr/bin/env bash

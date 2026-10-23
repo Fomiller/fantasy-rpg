@@ -28,8 +28,8 @@ func _test_decode_server_snapshot(path: String) -> void:
 	var snapshot: GameV1.WorldSnapshot = msg.get_snapshot()
 	_check(snapshot.get_tick() == 42, "tick is 42")
 	var entities: Array = snapshot.get_entities()
-	_check(entities.size() == 2, "two entities")
-	if entities.size() != 2:
+	_check(entities.size() == 3, "three entities")
+	if entities.size() != 3:
 		return
 
 	var player: GameV1.EntityState = entities[0]
@@ -39,6 +39,11 @@ func _test_decode_server_snapshot(path: String) -> void:
 
 	var enemy: GameV1.EntityState = entities[1]
 	_check(enemy.get_id() == 9 and enemy.get_kind() == GameV1.EntityKind.ENEMY and enemy.get_health() == 30, "second entity is enemy 9 with 30 health")
+	_check(enemy.get_max_health() == 90 and enemy.get_archetype() == "elite", "enemy is an elite with 90 max health")
+	_check(enemy.get_enemy_state() == GameV1.EnemyState.CHARGE and is_equal_approx(enemy.get_aim().get_y(), -1.0), "enemy is charging upward")
+
+	var shot: GameV1.EntityState = entities[2]
+	_check(shot.get_kind() == GameV1.EntityKind.PROJECTILE and is_equal_approx(shot.get_velocity().get_x(), 320.0), "third entity is a projectile moving right")
 
 
 func _test_encode_client_move(path: String, update: bool) -> void:

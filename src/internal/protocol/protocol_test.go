@@ -24,7 +24,11 @@ func TestServerSnapshotFixture(t *testing.T) {
 			Tick: 42,
 			Entities: []*gamev1.EntityState{
 				{Id: 7, Kind: gamev1.EntityKind_ENTITY_KIND_PLAYER, Position: &gamev1.Vec2{X: 1.5, Y: -2}, Health: 100},
-				{Id: 9, Kind: gamev1.EntityKind_ENTITY_KIND_ENEMY, Position: &gamev1.Vec2{X: 10, Y: 4}, Health: 30},
+				{
+					Id: 9, Kind: gamev1.EntityKind_ENTITY_KIND_ENEMY, Position: &gamev1.Vec2{X: 10, Y: 4}, Health: 30, MaxHealth: 90,
+					Archetype: "elite", EnemyState: gamev1.EnemyState_ENEMY_STATE_CHARGE, Aim: &gamev1.Vec2{X: 0, Y: -1},
+				},
+				{Id: 12, Kind: gamev1.EntityKind_ENTITY_KIND_PROJECTILE, Position: &gamev1.Vec2{X: 3, Y: 3}, Velocity: &gamev1.Vec2{X: 320}},
 			},
 		}},
 	})

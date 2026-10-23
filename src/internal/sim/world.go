@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"maps"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"time"
 
@@ -25,16 +26,8 @@ type Config struct {
 	AttackDamage   int
 	AttackCooldown time.Duration
 
-	EnemyHalfSize       float64
-	EnemySpeed          float64
-	PatrolSpeed         float64
-	PatrolRadius        float64
-	DetectRadius        float64
-	LoseRadius          float64
-	LeashRadius         float64
-	EnemyAttackRange    float64
-	EnemyDamage         int
-	EnemyAttackCooldown time.Duration
+	EnemyHalfSize float64
+	Archetypes    map[ArchetypeID]Archetype
 
 	ExtractTime time.Duration
 
@@ -44,7 +37,6 @@ type Config struct {
 	InventorySize int
 	PickupRange   float64
 	LootLevel     int
-	EnemyLoot     string
 	ChestLoot     string
 }
 
@@ -60,17 +52,8 @@ func DefaultConfig() Config {
 		AttackDamage:   10,
 		AttackCooldown: 500 * time.Millisecond,
 
-		// Slower than players, so a player can always run away.
-		EnemyHalfSize:       16,
-		EnemySpeed:          140,
-		PatrolSpeed:         60,
-		PatrolRadius:        80,
-		DetectRadius:        200,
-		LoseRadius:          320,
-		LeashRadius:         450,
-		EnemyAttackRange:    40,
-		EnemyDamage:         10,
-		EnemyAttackCooldown: time.Second,
+		EnemyHalfSize: 16,
+		Archetypes:    defaultArchetypes(),
 
 		ExtractTime: 3 * time.Second,
 
@@ -80,7 +63,6 @@ func DefaultConfig() Config {
 		InventorySize: 20,
 		PickupRange:   48,
 		LootLevel:     1,
-		EnemyLoot:     "cave1_grunt",
 		ChestLoot:     "cave1_chest",
 	}
 }
@@ -104,14 +86,30 @@ type Player struct {
 }
 
 type Enemy struct {
-	ID         EntityID
-	Pos, Vel   Vec2
-	Health     int
-	State      EnemyState
-	Target     EntityID
-	home       Vec2
-	patrolLeft bool
-	cooldown   time.Duration
+	ID        EntityID
+	Archetype ArchetypeID
+	Pos, Vel  Vec2
+	Health    int
+	MaxHealth int
+	State     EnemyState
+	Target    EntityID
+	// Aim is a unit vector toward the target, locked for the length of a charge.
+	Aim             Vec2
+	home            Vec2
+	patrolLeft      bool
+	timer           time.Duration
+	swung           bool
+	cooldown        time.Duration
+	specialCooldown time.Duration
+	lastSeen        Vec2
+	searching       bool
+	looks           []Vec2
+	// trail holds points that each have line of sight to the one before,
+	// so Return can walk home around corners.
+	trail   []Vec2
+	hitBy   EntityID
+	charged map[EntityID]bool
+	blocked bool
 }
 
 type MoveCommand struct {
@@ -150,7 +148,9 @@ type World struct {
 	players map[EntityID]*Player
 	enemies map[EntityID]*Enemy
 	piles   map[EntityID]*Pile
+	shots   map[EntityID]*Projectile
 	loot    *items.Roller
+	ai      *rand.Rand
 	nextID  EntityID
 	pending []any
 }
@@ -162,7 +162,22 @@ func NewWorld(cfg Config, walls []Rect) *World {
 		players: map[EntityID]*Player{},
 		enemies: map[EntityID]*Enemy{},
 		piles:   map[EntityID]*Pile{},
+		shots:   map[EntityID]*Projectile{},
+		ai:      newAI(0),
 	}
+}
+
+// aiStream keeps AI rolls on their own stream, so they never change which
+// loot the same seed drops.
+const aiStream = 0xa1
+
+func newAI(seed uint64) *rand.Rand {
+	return rand.New(rand.NewPCG(seed, aiStream))
+}
+
+// SeedAI seeds enemy AI from the run seed, so a run can be replayed.
+func (w *World) SeedAI(seed uint64) {
+	w.ai = newAI(seed)
 }
 
 // SetExtraction marks the zone players stand in to leave the cave.
@@ -184,9 +199,10 @@ func (w *World) AddPlayer(pos Vec2) EntityID {
 	return w.nextID
 }
 
-func (w *World) AddEnemy(pos Vec2, health int) EntityID {
+func (w *World) AddEnemy(pos Vec2, archetype ArchetypeID) EntityID {
 	w.nextID++
-	w.enemies[w.nextID] = &Enemy{ID: w.nextID, Pos: pos, Health: health, home: pos}
+	health := w.cfg.Archetypes[archetype].Health
+	w.enemies[w.nextID] = &Enemy{ID: w.nextID, Archetype: archetype, Pos: pos, Health: health, MaxHealth: health, home: pos}
 	return w.nextID
 }
 
@@ -258,6 +274,7 @@ func (w *World) Step(dt time.Duration) Events {
 		p.cooldown = max(p.cooldown-dt, 0)
 	}
 	ev.Damage = append(ev.Damage, w.stepEnemies(dt)...)
+	ev.Damage = append(ev.Damage, w.stepProjectiles(dt)...)
 	w.dropOnKill(&ev)
 	ev.Extracted = w.stepExtraction(dt)
 	w.Tick++
@@ -335,6 +352,7 @@ func (w *World) applyAttack(c AttackCommand) (DamageEvent, bool) {
 	}
 	dmg := w.attackDamage(p)
 	e.Health = max(e.Health-dmg, 0)
+	e.hitBy = p.ID
 	p.cooldown = w.attackCooldown(p)
 	return DamageEvent{
 		Source:       p.ID,

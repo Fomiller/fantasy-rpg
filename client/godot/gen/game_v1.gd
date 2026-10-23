@@ -1843,7 +1843,22 @@ enum EntityKind {
 	PLAYER = 1,
 	ENEMY = 2,
 	CHEST = 3,
-	LOOT = 4
+	LOOT = 4,
+	PROJECTILE = 5
+}
+
+enum EnemyState {
+	UNSPECIFIED = 0,
+	IDLE = 1,
+	PATROL = 2,
+	DETECT = 3,
+	CHASE = 4,
+	ATTACK = 5,
+	SEARCH = 6,
+	RETREAT = 7,
+	RETURN = 8,
+	CHARGE = 9,
+	DEAD = 10
 }
 
 class EntityState:
@@ -1901,6 +1916,22 @@ class EntityState:
 		service = PBServiceField.new()
 		service.field = __item_count
 		data[__item_count.tag] = service
+		
+		__archetype = PBField.new("archetype", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 11, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __archetype
+		data[__archetype.tag] = service
+		
+		__enemy_state = PBField.new("enemy_state", PB_DATA_TYPE.ENUM, PB_RULE.OPTIONAL, 12, true, DEFAULT_VALUES_3[PB_DATA_TYPE.ENUM])
+		service = PBServiceField.new()
+		service.field = __enemy_state
+		data[__enemy_state.tag] = service
+		
+		__aim = PBField.new("aim", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 13, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __aim
+		service.func_ref = Callable(self, "new_aim")
+		data[__aim.tag] = service
 		
 	var data = {}
 	
@@ -2035,6 +2066,46 @@ class EntityState:
 		__item_count.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
 	func set_item_count(value : int) -> void:
 		__item_count.value = value
+	
+	var __archetype: PBField
+	func has_archetype() -> bool:
+		if __archetype.value != null:
+			return true
+		return false
+	func get_archetype() -> String:
+		return __archetype.value
+	func clear_archetype() -> void:
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__archetype.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_archetype(value : String) -> void:
+		__archetype.value = value
+	
+	var __enemy_state: PBField
+	func has_enemy_state() -> bool:
+		if __enemy_state.value != null:
+			return true
+		return false
+	func get_enemy_state():
+		return __enemy_state.value
+	func clear_enemy_state() -> void:
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__enemy_state.value = DEFAULT_VALUES_3[PB_DATA_TYPE.ENUM]
+	func set_enemy_state(value) -> void:
+		__enemy_state.value = value
+	
+	var __aim: PBField
+	func has_aim() -> bool:
+		if __aim.value != null:
+			return true
+		return false
+	func get_aim() -> Vec2:
+		return __aim.value
+	func clear_aim() -> void:
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__aim.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_aim() -> Vec2:
+		__aim.value = Vec2.new()
+		return __aim.value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

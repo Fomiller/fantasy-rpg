@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"testing"
+	"time"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
@@ -31,10 +32,8 @@ func TestCommandUsesConnectionPlayer(t *testing.T) {
 }
 
 func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
-	cfg := sim.DefaultConfig()
-	cfg.DetectRadius = 0
-	w := sim.NewWorld(cfg, nil)
-	enemy := w.AddEnemy(sim.Vec2{X: 5, Y: 6}, 30)
+	w := sim.NewWorld(sim.DefaultConfig(), nil)
+	enemy := w.AddEnemy(sim.Vec2{X: -149, Y: 2}, sim.Ranged)
 	player := w.AddPlayer(sim.Vec2{X: 1, Y: 2})
 	w.Submit(sim.MoveCommand{Player: player, Seq: 3})
 	w.Step(0)
@@ -50,9 +49,30 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 	if p.GetLastInputSeq() != 3 || p.GetMaxSpeed() != 220 {
 		t.Fatalf("player prediction fields = %v", p)
 	}
-	if e.GetId() != uint64(enemy) || e.GetKind() != gamev1.EntityKind_ENTITY_KIND_ENEMY || e.GetHealth() != 30 {
+	if e.GetId() != uint64(enemy) || e.GetKind() != gamev1.EntityKind_ENTITY_KIND_ENEMY || e.GetHealth() != 20 || e.GetMaxHealth() != 20 {
 		t.Fatalf("enemy entity = %v", e)
 	}
+	if e.GetArchetype() != "ranged" || e.GetEnemyState() != gamev1.EnemyState_ENEMY_STATE_DETECT || e.GetAim().GetX() != 1 {
+		t.Fatalf("enemy AI fields = %v", e)
+	}
+}
+
+func TestSnapshotHasProjectiles(t *testing.T) {
+	w := sim.NewWorld(sim.DefaultConfig(), nil)
+	w.AddEnemy(sim.Vec2{}, sim.Ranged)
+	w.AddPlayer(sim.Vec2{X: 200})
+	for range 40 {
+		w.Step(50 * time.Millisecond)
+		for _, e := range Snapshot(w).GetSnapshot().GetEntities() {
+			if e.GetKind() == gamev1.EntityKind_ENTITY_KIND_PROJECTILE {
+				if e.GetVelocity().GetX() <= 0 || e.GetPosition().GetX() <= 0 {
+					t.Fatalf("projectile = %v, want flying toward the player", e)
+				}
+				return
+			}
+		}
+	}
+	t.Fatal("no projectile in any snapshot")
 }
 
 func TestDamageAndJoined(t *testing.T) {

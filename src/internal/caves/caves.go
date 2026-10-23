@@ -11,15 +11,14 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
-const (
-	TileSize    = 64
-	EnemyHealth = 30
-)
+const TileSize = 64
 
 type EnemySpawn struct {
-	Pos    sim.Vec2
-	Health int
+	Pos       sim.Vec2
+	Archetype sim.ArchetypeID
 }
+
+var enemyTiles = map[rune]sim.ArchetypeID{'m': sim.Melee, 'r': sim.Ranged, 'E': sim.Elite}
 
 type Cave struct {
 	Name         string
@@ -37,7 +36,7 @@ func (c Cave) NewWorld(cfg sim.Config, loot *items.Roller) *sim.World {
 	w := sim.NewWorld(cfg, c.Walls)
 	w.SetLoot(loot)
 	for _, e := range c.Enemies {
-		w.AddEnemy(e.Pos, e.Health)
+		w.AddEnemy(e.Pos, e.Archetype)
 	}
 	for _, pos := range c.Chests {
 		w.AddChest(pos)
@@ -47,7 +46,8 @@ func (c Cave) NewWorld(cfg sim.Config, loot *items.Roller) *sim.World {
 }
 
 // Loop is the first gray box cave: two rooms on each side, joined by
-// corridors around a central chamber, with the exit in the top right.
+// corridors around a central chamber, with the exit in the top right. An
+// elite guards the exit, and ranged enemies hold the long corridors.
 func Loop() Cave {
 	return mustParse("loop", loopArt)
 }
@@ -56,8 +56,8 @@ const loopArt = `
 ###############################
 #c......#############...XXX...#
 #.......#############...XXX...#
-#..........m..................#
-#.......#############......m..#
+#..........r..................#
+#.......#############......E..#
 ###.#####...........######.####
 ###.####......c.......####.####
 ###.###.....######.....###.####
@@ -66,7 +66,7 @@ const loopArt = `
 ###.####..............####.####
 ###.#####...........######.####
 #.......#############........c#
-#..SS..........m...........m..#
+#..SS..........m...........r..#
 #.......#############.........#
 ###############################
 `
@@ -84,7 +84,9 @@ func mustParse(name, art string) Cave {
 //	#  wall
 //	.  floor
 //	S  player spawn
-//	m  enemy spawn
+//	m  melee enemy
+//	r  ranged enemy
+//	E  elite enemy
 //	c  chest
 //	X  extraction zone, which must be one solid rectangle
 func Parse(name, art string) (Cave, error) {
@@ -107,8 +109,8 @@ func Parse(name, art string) (Cave, error) {
 			case '.':
 			case 'S':
 				c.PlayerSpawns = append(c.PlayerSpawns, center)
-			case 'm':
-				c.Enemies = append(c.Enemies, EnemySpawn{Pos: center, Health: EnemyHealth})
+			case 'm', 'r', 'E':
+				c.Enemies = append(c.Enemies, EnemySpawn{Pos: center, Archetype: enemyTiles[ch]})
 			case 'c':
 				c.Chests = append(c.Chests, center)
 			case 'X':

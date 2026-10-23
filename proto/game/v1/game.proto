@@ -92,6 +92,22 @@ enum EntityKind {
   ENTITY_KIND_CHEST = 3;
   // Loot on the ground. It goes away once someone picks all of it up.
   ENTITY_KIND_LOOT = 4;
+  // An enemy's shot. The client moves it by velocity between snapshots.
+  ENTITY_KIND_PROJECTILE = 5;
+}
+
+enum EnemyState {
+  ENEMY_STATE_UNSPECIFIED = 0;
+  ENEMY_STATE_IDLE = 1;
+  ENEMY_STATE_PATROL = 2;
+  ENEMY_STATE_DETECT = 3;
+  ENEMY_STATE_CHASE = 4;
+  ENEMY_STATE_ATTACK = 5;
+  ENEMY_STATE_SEARCH = 6;
+  ENEMY_STATE_RETREAT = 7;
+  ENEMY_STATE_RETURN = 8;
+  ENEMY_STATE_CHARGE = 9;
+  ENEMY_STATE_DEAD = 10;
 }
 
 message EntityState {
@@ -109,6 +125,12 @@ message EntityState {
   float max_speed = 9;
   // Chests and loot only.
   uint32 item_count = 10;
+  // Enemies only. archetype is data, like an item def id, so it is a string.
+  string archetype = 11;
+  EnemyState enemy_state = 12;
+  // Where the enemy faces during detect, attack and charge. The client draws
+  // the telegraph from it.
+  Vec2 aim = 13;
 }
 
 message WorldSnapshot {

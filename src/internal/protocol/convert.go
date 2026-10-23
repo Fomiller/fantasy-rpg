@@ -80,11 +80,23 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 	}
 	for _, e := range w.Enemies() {
 		snap.Entities = append(snap.Entities, &gamev1.EntityState{
-			Id:       uint64(e.ID),
-			Kind:     gamev1.EntityKind_ENTITY_KIND_ENEMY,
-			Position: vec(e.Pos),
-			Velocity: vec(e.Vel),
-			Health:   int32(e.Health),
+			Id:         uint64(e.ID),
+			Kind:       gamev1.EntityKind_ENTITY_KIND_ENEMY,
+			Position:   vec(e.Pos),
+			Velocity:   vec(e.Vel),
+			Health:     int32(e.Health),
+			MaxHealth:  int32(e.MaxHealth),
+			Archetype:  string(e.Archetype),
+			EnemyState: enemyStates[e.State],
+			Aim:        vec(e.Aim),
+		})
+	}
+	for _, s := range w.Projectiles() {
+		snap.Entities = append(snap.Entities, &gamev1.EntityState{
+			Id:       uint64(s.ID),
+			Kind:     gamev1.EntityKind_ENTITY_KIND_PROJECTILE,
+			Position: vec(s.Pos),
+			Velocity: vec(s.Vel),
 		})
 	}
 	for _, p := range w.Piles() {
@@ -100,6 +112,19 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 		})
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Snapshot{Snapshot: snap}}
+}
+
+var enemyStates = map[sim.EnemyState]gamev1.EnemyState{
+	sim.EnemyIdle:    gamev1.EnemyState_ENEMY_STATE_IDLE,
+	sim.EnemyPatrol:  gamev1.EnemyState_ENEMY_STATE_PATROL,
+	sim.EnemyDetect:  gamev1.EnemyState_ENEMY_STATE_DETECT,
+	sim.EnemyChase:   gamev1.EnemyState_ENEMY_STATE_CHASE,
+	sim.EnemyAttack:  gamev1.EnemyState_ENEMY_STATE_ATTACK,
+	sim.EnemySearch:  gamev1.EnemyState_ENEMY_STATE_SEARCH,
+	sim.EnemyRetreat: gamev1.EnemyState_ENEMY_STATE_RETREAT,
+	sim.EnemyReturn:  gamev1.EnemyState_ENEMY_STATE_RETURN,
+	sim.EnemyCharge:  gamev1.EnemyState_ENEMY_STATE_CHARGE,
+	sim.EnemyDead:    gamev1.EnemyState_ENEMY_STATE_DEAD,
 }
 
 func Damage(ev sim.DamageEvent) *gamev1.ServerMessage {

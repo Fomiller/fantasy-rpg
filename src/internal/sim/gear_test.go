@@ -21,7 +21,7 @@ func equip(t *testing.T, w *World, id EntityID, inst items.Instance) {
 func TestWeaponSetsAttackDamage(t *testing.T) {
 	w := NewWorld(passive(), nil)
 	player := w.AddPlayer(Vec2{})
-	enemy := w.AddEnemy(Vec2{40, 0}, 100)
+	enemy := w.AddEnemy(Vec2{40, 0}, Melee)
 
 	w.Submit(AttackCommand{Player: player, Seq: 1, Target: enemy})
 	if ev := w.Step(dt).Damage; len(ev) != 1 || ev[0].Amount != DefaultConfig().AttackDamage {
@@ -103,7 +103,7 @@ func TestGearStats(t *testing.T) {
 	if got := w.extractTime(p); got != 1500*time.Millisecond {
 		t.Errorf("extract time = %v, want 1.5s", got)
 	}
-	if got := w.detectRadius(p); got != 300 {
+	if got := w.detectRadius(DefaultConfig().Archetypes[Melee], p); got != 300 {
 		t.Errorf("detect radius = %v, want 300", got)
 	}
 }
@@ -120,14 +120,14 @@ func TestArmorNeverBlocksAllDamage(t *testing.T) {
 func TestLoudGearIsSpottedFarther(t *testing.T) {
 	w := NewWorld(DefaultConfig(), nil)
 	id := w.AddPlayer(Vec2{250, 0})
-	enemy := w.AddEnemy(Vec2{}, 30)
+	enemy := w.AddEnemy(Vec2{}, Melee)
 	w.Step(dt)
 	if e, _ := w.Enemy(enemy); e.State != EnemyPatrol {
 		t.Fatal("enemy saw a player outside its radius")
 	}
 	equip(t, w, id, gear(items.Trinket, map[items.Stat]int{items.DetectRadius: 50}))
 	w.Step(dt)
-	if e, _ := w.Enemy(enemy); e.State != EnemyChase {
+	if e, _ := w.Enemy(enemy); e.State != EnemyDetect {
 		t.Fatal("enemy missed a player wearing a beacon")
 	}
 }

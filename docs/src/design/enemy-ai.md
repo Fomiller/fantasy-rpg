@@ -15,25 +15,16 @@ Enemies give the cave its danger. This page sets how they think. FOM-97
   except from a telegraphed elite charge.
 - The same seed and the same player actions give the same enemy behavior.
 
-## What the code does today
+## Where the code is
 
-FOM-96 added a basic AI in `src/internal/sim/enemy.go`. It has three states:
-`EnemyPatrol`, `EnemyChase` and `EnemyReturn`. All numbers come from
-`sim.Config`, so every enemy is the same.
+FOM-97 built this design. It lives in `src/internal/sim`:
 
-| Ticket state | Today |
-| -- | -- |
-| Idle | None. Patrol never pauses |
-| Patrol | `EnemyPatrol`. Walks between home and `PatrolRadius` to the left and right |
-| Detect | None as a state. `spot()` picks the nearest live player in `DetectRadius` with line of sight, and the enemy chases on the same tick |
-| Chase | `EnemyChase`. Walks straight at the player and stops when touching |
-| Attack | Inside chase. Hits instantly when in `EnemyAttackRange` and off cooldown. No windup |
-| Search | None. Losing the player goes straight to return |
-| Retreat | None |
-| Return | `EnemyReturn`. Walks home and ignores players until it gets there. Not in the ticket list, but it is the leash, so it stays |
-| Dead | Not a state. `Health <= 0` skips the enemy |
+- `archetype.go`: the `Archetype` table.
+- `enemy.go`: states, the transition table (`next`), what each state does
+  (`act`), and the charge.
+- `projectile.go`: ranged shots.
 
-Other facts the design keeps:
+Facts the design keeps from the first AI (FOM-96):
 
 - Line of sight is a segment test against every wall rect (`canSee`).
 - Movement is a straight line at a capped speed, then `slide` against walls.
@@ -41,8 +32,6 @@ Other facts the design keeps:
 - Enemies step in sorted ID order. Ties in `spot()` go to the lower player
   ID. Damage events come out in the same order every run.
 - The player's `detect_radius` stat scales the detect range.
-- A chase ends when the player dies, leaves `LoseRadius`, breaks line of
-  sight, or the enemy goes past `LeashRadius` from home.
 
 ## States
 
@@ -51,14 +40,13 @@ Other facts the design keeps:
 | Idle | Stands still at a patrol end for `IdleTime` | Patrol, Detect |
 | Patrol | Walks its patrol route at `PatrolSpeed` | Idle, Detect |
 | Detect | Stops and faces the player for `ReactTime`. This is the "!" moment | Chase, Search |
-| Chase | Moves toward the target at `Speed` until in attack range | Attack, Search, Retreat, Return, Special |
+| Chase | Moves toward the target at `Speed`. Melee closes to touching. A shooter stops once in `AttackRange` | Attack, Search, Retreat, Return, Charge |
 | Attack | Winds up for `Windup`, then hits or fires. Does not move | Chase, Search, Return |
-| Search | Walks to where it last saw the target, then waits `SearchTime` | Chase, Return |
+| Search | Walks to where it last saw the target, then looks around for `SearchTime` | Chase, Return |
 | Retreat | Moves straight away from the target at `Speed` | Chase, Search, Return |
-| Return | Walks home. Ignores players. Heals to full on arrival | Patrol |
+| Return | Walks home along its trail. Ignores players. Heals to full on arrival | Patrol |
+| Charge | Elite only. Winds up, then dashes. See archetypes below | Chase |
 | Dead | Nothing. Final | none |
-
-Special is the elite's extra state. See archetypes below.
 
 ## Transitions
 
@@ -78,13 +66,14 @@ Checked top to bottom each tick. The first match wins.
 | Chase, Attack, Retreat | target lost: dead, past `LoseRadius`, or no line of sight | Search |
 | Chase | health at or below `RetreatHealth` | Retreat |
 | Chase | target closer than `KeepAway` | Retreat |
-| Chase | special is ready and its trigger holds | Special |
+| Chase | special is ready and its trigger holds | Charge |
 | Chase | in `AttackRange`, line of sight, off cooldown | Attack |
-| Attack | windup done | Chase |
+| Attack | windup done and the swing made | Chase |
 | Retreat | target farther than `KeepAway`, and not low health | Chase |
 | Search | `spot()` finds a player | Chase. It is already alert, so no Detect |
 | Search | `SearchTime` is up after arriving | Return |
 | Return | home within `arriveDistance` | Patrol |
+| Charge | dash done, or the dash hit a wall | Chase |
 
 Notes on the rules:
 
@@ -97,9 +86,13 @@ Notes on the rules:
 - Search only walks to the last seen spot. It was in line of sight when it
   was seen, so a straight line gets there. This is why no pathfinding is
   needed yet.
-- Return can snag on a corner, because home may be out of sight. If
-  playtests show this, add tile A* in the `caves` package. Until then,
-  caves are open enough that `slide` gets around.
+- Home may be out of sight by the time the enemy gives up. So while it is
+  away from home, the enemy drops a trail point each time it loses sight
+  of the last one. Return walks the trail back, newest point first. Each
+  leg is a straight line that was walked, so it gets home without A*.
+- A wall in the way counts as arriving. A patrol end, a search point or a
+  dash that runs into a wall ends there, so an enemy never stands pushing
+  into one.
 - Low health Retreat is a flee. The enemy does not come back to Chase until
   it has gone home and healed.
 
@@ -117,26 +110,30 @@ For each live enemy, in ID order:
    every state for at least one snapshot.
 3. Run the state's action. It sets `Vel`, and may make a `DamageEvent` or a
    projectile.
-4. `slide` moves the enemy against walls.
+4. `slide` moves the enemy against walls. A dashing elite then hits each
+   player it overlaps.
+5. Drop a trail point if needed.
 
 Then each projectile moves, and hits the first wall or player in its path.
-Players are checked in ID order.
+Walls use the same segment test as line of sight. Players count as their
+box grown by the projectile radius. On a tie the lower player ID is hit.
 
 Timers are `time.Duration`, counted down by `dt`, like the code today. The
 tick rate is fixed for a run (20 by default, `TICK_RATE`).
 
 ## Randomness
 
-- AI gets its own generator, `w.ai`, a `math/rand/v2` PCG. It is seeded
-  from the run seed with a fixed second word, so it never shares a stream
-  with the loot roller. Adding an AI roll does not change which loot drops.
+- AI gets its own generator, `w.ai`, a `math/rand/v2` PCG. `World.SeedAI`
+  seeds it from the run seed with a fixed second word (`aiStream`), so it
+  never shares a stream with the loot roller. Adding an AI roll does not
+  change which loot drops.
 - The run seed is the one `cave-server` already logs. `LOOT_SEED` replays
   both loot and AI.
 - AI rolls only happen in the tick loop, in enemy ID order.
 - What uses it, for now: `IdleTime` jitter (plus or minus 25%), and the
-  look-around points during Search (up to 2 points within 64 px of the
-  last seen spot). Combat never rolls. Hits and damage are fixed so fights
-  read clearly.
+  look-around points during Search (0 to 2 points within 64 px of the
+  last seen spot, walked at `PatrolSpeed`). Combat never rolls. Hits and
+  damage are fixed so fights read clearly.
 
 ## Where the data lives
 
@@ -168,6 +165,13 @@ type Archetype struct {
 	Projectile    *ProjectileSpec
 	Special       Special // SpecialNone or SpecialCharge
 	Loot          string  // drop table id
+
+	ChargeMin, ChargeMax float64 // the range band that starts a charge
+	ChargeWindup         time.Duration
+	ChargeTime           time.Duration
+	ChargeSpeed          float64
+	ChargeDamage         int
+	ChargeCooldown       time.Duration
 }
 
 type ProjectileSpec struct {
@@ -181,17 +185,18 @@ type ProjectileSpec struct {
   `DefaultConfig` fills it. The `Enemy*`, `PatrolSpeed`, `DetectRadius`,
   `LoseRadius`, `LeashRadius` and `EnemyLoot` fields on `Config` move into
   the melee row and go away.
-- `Enemy` gets `Archetype ArchetypeID`, `MaxHealth`, `stateTime`,
-  `specialCooldown`, `lastSeen Vec2`, and `aim Vec2` for windups and
-  charges.
+- `Enemy` gets `Archetype ArchetypeID`, `MaxHealth`, a state `timer`,
+  `specialCooldown`, `lastSeen`, the Return `trail`, and `Aim` for windups
+  and charges. `Aim` is exported because the snapshot sends it.
 - `EnemyState` gets the full list: `EnemyIdle`, `EnemyPatrol`,
   `EnemyDetect`, `EnemyChase`, `EnemyAttack`, `EnemySearch`,
   `EnemyRetreat`, `EnemyReturn`, `EnemyCharge`, `EnemyDead`. Keep
   `EnemyPatrol` as the zero value, so a new enemy starts patrolling.
 - `AddEnemy(pos, archetype)` takes the archetype and reads health from it.
-- `think` stays one switch on state. Archetype numbers come from
+- Two switches on state: `next` holds the transition table and `act` holds
+  what each state does. Archetype numbers come from
   `w.cfg.Archetypes[e.Archetype]`. Code that only one archetype needs,
-  like the charge, goes in its own function.
+  like the charge hits, goes in its own function.
 - Cave maps: `m` melee, `r` ranged, `E` elite. `caves.EnemySpawn` swaps
   `Health` for `Archetype`.
 
@@ -199,7 +204,8 @@ type ProjectileSpec struct {
 
 **Melee.** Today's enemy with a windup. Walks up and swings.
 
-**Ranged.** Keeps distance and shoots. Backs off when a player gets close.
+**Ranged.** Keeps distance and shoots. Backs off when a player gets close,
+and stands still while it has a shot.
 
 Ranged uses projectiles, not hitscan:
 
@@ -224,16 +230,22 @@ Projectile rules:
 
 **Elite.** A stronger melee enemy with one special: a charge.
 
-- Triggers from Chase when the target is between 100 and 260 px away, in
-  line of sight, and the special is off cooldown.
-- Charge state: stands still for `ChargeWindup` and locks `aim` at the
-  target. Then dashes along `aim` at `ChargeSpeed` for `ChargeTime`.
+- Triggers from Chase when the target is between `ChargeMin` (100) and
+  `ChargeMax` (260) px away, in line of sight, and the special is off
+  cooldown.
+- Charge state: locks `Aim` at the target as it starts, then stands still
+  for `ChargeWindup`. Then dashes along `Aim` at `ChargeSpeed` for
+  `ChargeTime`.
 - The dash does not steer. It stops early on a wall.
 - It hits each player it touches at most once per charge, for
   `ChargeDamage`.
-- After the dash it goes back to Chase, and the special goes on cooldown.
+- After the dash it goes back to Chase, and the special goes on
+  `ChargeCooldown`.
 - The elite never retreats and has a longer leash. It drops from
-  `cave1_elite`, which already exists in the loot data.
+  `cave1_elite` in the loot data.
+
+The Loop cave has two of each common archetype and one elite. Map tiles:
+`m` melee, `r` ranged, `E` elite.
 
 ## Tunables
 
@@ -261,7 +273,8 @@ Starting numbers. Player top speed is 220 and a player has 100 health.
 | Special | none | none | charge |
 | `ChargeWindup` / `ChargeTime` | | | 600 ms / 400 ms |
 | `ChargeSpeed` / `ChargeDamage` | | | 420 / 25 |
-| Special cooldown | | | 6 s |
+| `ChargeMin` / `ChargeMax` | | | 100 / 260 |
+| `ChargeCooldown` | | | 6 s |
 | `Loot` | `cave1_grunt` | `cave1_grunt` | `cave1_elite` |
 
 Why some numbers are where they are:
@@ -278,29 +291,30 @@ Why some numbers are where they are:
 The charge fields live on `Archetype` next to `Special`. They are zero for
 the other two.
 
-## What the client needs
+## What the client gets
 
-A proposal. FOM-97 or the next client ticket changes the proto. This
-ticket does not.
-
-Add to `EntityState` in `proto/game/v1/game.proto`:
+`EntityState` in `proto/game/v1/game.proto` carries, for enemies:
 
 | Field | Type | For |
 | -- | -- | -- |
-| `archetype` | `string` | Picks the sprite. A string, like item `def_id`, since archetypes are data |
+| `archetype` | `string` | Picks the look. A string, like item `def_id`, since archetypes are data |
 | `enemy_state` | `EnemyState` enum | Picks the animation: walk, alert "!", windup, charge, dead |
 | `aim` | `Vec2` | Facing during Detect, Attack and Charge. The client draws the telegraph line from it |
+| `max_health` | `int32` | The health bar. Players already sent it |
 
 Also:
 
 - `ENTITY_KIND_PROJECTILE` in `EntityKind`. A projectile sends `id`,
   `position` and `velocity`. The client moves it between snapshots from
   velocity and removes it when it leaves the snapshot.
-- `max_health` for enemies too. The field exists but enemies leave it 0.
-- No new events. `DamageEvent` already covers hits from enemies and
-  projectiles.
+- No new events. `DamageEvent` covers hits from enemies and projectiles.
+  Its source is the enemy, even for a projectile.
+- The client tells a charge windup from the dash by velocity. The elite
+  stands still during the windup.
 
-The client never runs AI. It only animates the state it is given.
+The client never runs AI. It only draws the state it is given
+(`client/godot/scripts/enemy_view.gd`). The looks are placeholders until
+FOM-94.
 
 ## When behavior trees are worth it
 
@@ -308,7 +322,7 @@ Not yet. An FSM with a data table covers melee, ranged and elite. Switch
 when one of these shows up:
 
 - A new archetype needs a new state, not new numbers, for the second time.
-  That means the switch in `think` is growing per archetype.
+  That means the switches in `next` and `act` are growing per archetype.
 - A boss with phases, where each phase is its own sequence of moves.
 - Group behavior: flanking, calling for help, taking turns to attack.
 - The transitions table stops fitting on one screen.

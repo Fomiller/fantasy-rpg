@@ -70,8 +70,8 @@ func (w *World) damageTaken(p *Player, dmg int) int {
 	return max(dmg*w.cfg.ArmorScale/(w.cfg.ArmorScale+p.stats[items.Armor]), 1)
 }
 
-func (w *World) detectRadius(p *Player) float64 {
-	return w.cfg.DetectRadius * float64(100+p.stats[items.DetectRadius]) / 100
+func (w *World) detectRadius(a Archetype, p *Player) float64 {
+	return a.DetectRadius * float64(100+p.stats[items.DetectRadius]) / 100
 }
 
 // percentFaster turns "+N% speed" into a shorter duration: +100% halves it.

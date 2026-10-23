@@ -32,6 +32,8 @@ const (
 	EntityKind_ENTITY_KIND_CHEST       EntityKind = 3
 	// Loot on the ground. It goes away once someone picks all of it up.
 	EntityKind_ENTITY_KIND_LOOT EntityKind = 4
+	// An enemy's shot. The client moves it by velocity between snapshots.
+	EntityKind_ENTITY_KIND_PROJECTILE EntityKind = 5
 )
 
 // Enum value maps for EntityKind.
@@ -42,6 +44,7 @@ var (
 		2: "ENTITY_KIND_ENEMY",
 		3: "ENTITY_KIND_CHEST",
 		4: "ENTITY_KIND_LOOT",
+		5: "ENTITY_KIND_PROJECTILE",
 	}
 	EntityKind_value = map[string]int32{
 		"ENTITY_KIND_UNSPECIFIED": 0,
@@ -49,6 +52,7 @@ var (
 		"ENTITY_KIND_ENEMY":       2,
 		"ENTITY_KIND_CHEST":       3,
 		"ENTITY_KIND_LOOT":        4,
+		"ENTITY_KIND_PROJECTILE":  5,
 	}
 )
 
@@ -77,6 +81,79 @@ func (x EntityKind) Number() protoreflect.EnumNumber {
 // Deprecated: Use EntityKind.Descriptor instead.
 func (EntityKind) EnumDescriptor() ([]byte, []int) {
 	return file_game_v1_game_proto_rawDescGZIP(), []int{0}
+}
+
+type EnemyState int32
+
+const (
+	EnemyState_ENEMY_STATE_UNSPECIFIED EnemyState = 0
+	EnemyState_ENEMY_STATE_IDLE        EnemyState = 1
+	EnemyState_ENEMY_STATE_PATROL      EnemyState = 2
+	EnemyState_ENEMY_STATE_DETECT      EnemyState = 3
+	EnemyState_ENEMY_STATE_CHASE       EnemyState = 4
+	EnemyState_ENEMY_STATE_ATTACK      EnemyState = 5
+	EnemyState_ENEMY_STATE_SEARCH      EnemyState = 6
+	EnemyState_ENEMY_STATE_RETREAT     EnemyState = 7
+	EnemyState_ENEMY_STATE_RETURN      EnemyState = 8
+	EnemyState_ENEMY_STATE_CHARGE      EnemyState = 9
+	EnemyState_ENEMY_STATE_DEAD        EnemyState = 10
+)
+
+// Enum value maps for EnemyState.
+var (
+	EnemyState_name = map[int32]string{
+		0:  "ENEMY_STATE_UNSPECIFIED",
+		1:  "ENEMY_STATE_IDLE",
+		2:  "ENEMY_STATE_PATROL",
+		3:  "ENEMY_STATE_DETECT",
+		4:  "ENEMY_STATE_CHASE",
+		5:  "ENEMY_STATE_ATTACK",
+		6:  "ENEMY_STATE_SEARCH",
+		7:  "ENEMY_STATE_RETREAT",
+		8:  "ENEMY_STATE_RETURN",
+		9:  "ENEMY_STATE_CHARGE",
+		10: "ENEMY_STATE_DEAD",
+	}
+	EnemyState_value = map[string]int32{
+		"ENEMY_STATE_UNSPECIFIED": 0,
+		"ENEMY_STATE_IDLE":        1,
+		"ENEMY_STATE_PATROL":      2,
+		"ENEMY_STATE_DETECT":      3,
+		"ENEMY_STATE_CHASE":       4,
+		"ENEMY_STATE_ATTACK":      5,
+		"ENEMY_STATE_SEARCH":      6,
+		"ENEMY_STATE_RETREAT":     7,
+		"ENEMY_STATE_RETURN":      8,
+		"ENEMY_STATE_CHARGE":      9,
+		"ENEMY_STATE_DEAD":        10,
+	}
+)
+
+func (x EnemyState) Enum() *EnemyState {
+	p := new(EnemyState)
+	*p = x
+	return p
+}
+
+func (x EnemyState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EnemyState) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_v1_game_proto_enumTypes[1].Descriptor()
+}
+
+func (EnemyState) Type() protoreflect.EnumType {
+	return &file_game_v1_game_proto_enumTypes[1]
+}
+
+func (x EnemyState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EnemyState.Descriptor instead.
+func (EnemyState) EnumDescriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{1}
 }
 
 type Rarity int32
@@ -121,11 +198,11 @@ func (x Rarity) String() string {
 }
 
 func (Rarity) Descriptor() protoreflect.EnumDescriptor {
-	return file_game_v1_game_proto_enumTypes[1].Descriptor()
+	return file_game_v1_game_proto_enumTypes[2].Descriptor()
 }
 
 func (Rarity) Type() protoreflect.EnumType {
-	return &file_game_v1_game_proto_enumTypes[1]
+	return &file_game_v1_game_proto_enumTypes[2]
 }
 
 func (x Rarity) Number() protoreflect.EnumNumber {
@@ -134,7 +211,7 @@ func (x Rarity) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Rarity.Descriptor instead.
 func (Rarity) EnumDescriptor() ([]byte, []int) {
-	return file_game_v1_game_proto_rawDescGZIP(), []int{1}
+	return file_game_v1_game_proto_rawDescGZIP(), []int{2}
 }
 
 type ClientMessage struct {
@@ -944,7 +1021,13 @@ type EntityState struct {
 	LastInputSeq uint32  `protobuf:"varint,8,opt,name=last_input_seq,json=lastInputSeq,proto3" json:"last_input_seq,omitempty"`
 	MaxSpeed     float32 `protobuf:"fixed32,9,opt,name=max_speed,json=maxSpeed,proto3" json:"max_speed,omitempty"`
 	// Chests and loot only.
-	ItemCount     uint32 `protobuf:"varint,10,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"`
+	ItemCount uint32 `protobuf:"varint,10,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"`
+	// Enemies only. archetype is data, like an item def id, so it is a string.
+	Archetype  string     `protobuf:"bytes,11,opt,name=archetype,proto3" json:"archetype,omitempty"`
+	EnemyState EnemyState `protobuf:"varint,12,opt,name=enemy_state,json=enemyState,proto3,enum=game.v1.EnemyState" json:"enemy_state,omitempty"`
+	// Where the enemy faces during detect, attack and charge. The client draws
+	// the telegraph from it.
+	Aim           *Vec2 `protobuf:"bytes,13,opt,name=aim,proto3" json:"aim,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1047,6 +1130,27 @@ func (x *EntityState) GetItemCount() uint32 {
 		return x.ItemCount
 	}
 	return 0
+}
+
+func (x *EntityState) GetArchetype() string {
+	if x != nil {
+		return x.Archetype
+	}
+	return ""
+}
+
+func (x *EntityState) GetEnemyState() EnemyState {
+	if x != nil {
+		return x.EnemyState
+	}
+	return EnemyState_ENEMY_STATE_UNSPECIFIED
+}
+
+func (x *EntityState) GetAim() *Vec2 {
+	if x != nil {
+		return x.Aim
+	}
+	return nil
 }
 
 type WorldSnapshot struct {
@@ -1781,7 +1885,7 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\ttarget_id\x18\x02 \x01(\x04R\btargetId\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\x05R\x06amount\x12#\n" +
 	"\rtarget_health\x18\x04 \x01(\x05R\ftargetHealth\x12\x16\n" +
-	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xe0\x02\n" +
+	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xd5\x03\n" +
 	"\vEntityState\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.game.v1.EntityKindR\x04kind\x12)\n" +
@@ -1795,7 +1899,11 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\tmax_speed\x18\t \x01(\x02R\bmaxSpeed\x12\x1d\n" +
 	"\n" +
 	"item_count\x18\n" +
-	" \x01(\rR\titemCount\"U\n" +
+	" \x01(\rR\titemCount\x12\x1c\n" +
+	"\tarchetype\x18\v \x01(\tR\tarchetype\x124\n" +
+	"\venemy_state\x18\f \x01(\x0e2\x13.game.v1.EnemyStateR\n" +
+	"enemyState\x12\x1f\n" +
+	"\x03aim\x18\r \x01(\v2\r.game.v1.Vec2R\x03aim\"U\n" +
 	"\rWorldSnapshot\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x120\n" +
 	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\x9b\x01\n" +
@@ -1840,14 +1948,29 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"%\n" +
 	"\n" +
 	"UseRequest\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\tR\x06itemId*\x85\x01\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId*\xa1\x01\n" +
 	"\n" +
 	"EntityKind\x12\x1b\n" +
 	"\x17ENTITY_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12ENTITY_KIND_PLAYER\x10\x01\x12\x15\n" +
 	"\x11ENTITY_KIND_ENEMY\x10\x02\x12\x15\n" +
 	"\x11ENTITY_KIND_CHEST\x10\x03\x12\x14\n" +
-	"\x10ENTITY_KIND_LOOT\x10\x04*}\n" +
+	"\x10ENTITY_KIND_LOOT\x10\x04\x12\x1a\n" +
+	"\x16ENTITY_KIND_PROJECTILE\x10\x05*\x95\x02\n" +
+	"\n" +
+	"EnemyState\x12\x1b\n" +
+	"\x17ENEMY_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10ENEMY_STATE_IDLE\x10\x01\x12\x16\n" +
+	"\x12ENEMY_STATE_PATROL\x10\x02\x12\x16\n" +
+	"\x12ENEMY_STATE_DETECT\x10\x03\x12\x15\n" +
+	"\x11ENEMY_STATE_CHASE\x10\x04\x12\x16\n" +
+	"\x12ENEMY_STATE_ATTACK\x10\x05\x12\x16\n" +
+	"\x12ENEMY_STATE_SEARCH\x10\x06\x12\x17\n" +
+	"\x13ENEMY_STATE_RETREAT\x10\a\x12\x16\n" +
+	"\x12ENEMY_STATE_RETURN\x10\b\x12\x16\n" +
+	"\x12ENEMY_STATE_CHARGE\x10\t\x12\x14\n" +
+	"\x10ENEMY_STATE_DEAD\x10\n" +
+	"*}\n" +
 	"\x06Rarity\x12\x16\n" +
 	"\x12RARITY_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rRARITY_COMMON\x10\x01\x12\x13\n" +
@@ -1869,72 +1992,75 @@ func file_game_v1_game_proto_rawDescGZIP() []byte {
 	return file_game_v1_game_proto_rawDescData
 }
 
-var file_game_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_game_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_game_v1_game_proto_goTypes = []any{
 	(EntityKind)(0),          // 0: game.v1.EntityKind
-	(Rarity)(0),              // 1: game.v1.Rarity
-	(*ClientMessage)(nil),    // 2: game.v1.ClientMessage
-	(*ServerMessage)(nil),    // 3: game.v1.ServerMessage
-	(*Vec2)(nil),             // 4: game.v1.Vec2
-	(*Rect)(nil),             // 5: game.v1.Rect
-	(*JoinRequest)(nil),      // 6: game.v1.JoinRequest
-	(*JoinAccepted)(nil),     // 7: game.v1.JoinAccepted
-	(*Extracted)(nil),        // 8: game.v1.Extracted
-	(*MoveInput)(nil),        // 9: game.v1.MoveInput
-	(*AttackRequest)(nil),    // 10: game.v1.AttackRequest
-	(*DamageEvent)(nil),      // 11: game.v1.DamageEvent
-	(*EntityState)(nil),      // 12: game.v1.EntityState
-	(*WorldSnapshot)(nil),    // 13: game.v1.WorldSnapshot
-	(*CaveLayout)(nil),       // 14: game.v1.CaveLayout
-	(*Item)(nil),             // 15: game.v1.Item
-	(*ItemStat)(nil),         // 16: game.v1.ItemStat
-	(*ItemAffix)(nil),        // 17: game.v1.ItemAffix
-	(*EquipmentUpdated)(nil), // 18: game.v1.EquipmentUpdated
-	(*InventoryUpdated)(nil), // 19: game.v1.InventoryUpdated
-	(*PickupRequest)(nil),    // 20: game.v1.PickupRequest
-	(*EquipRequest)(nil),     // 21: game.v1.EquipRequest
-	(*UnequipRequest)(nil),   // 22: game.v1.UnequipRequest
-	(*DropRequest)(nil),      // 23: game.v1.DropRequest
-	(*UseRequest)(nil),       // 24: game.v1.UseRequest
+	(EnemyState)(0),          // 1: game.v1.EnemyState
+	(Rarity)(0),              // 2: game.v1.Rarity
+	(*ClientMessage)(nil),    // 3: game.v1.ClientMessage
+	(*ServerMessage)(nil),    // 4: game.v1.ServerMessage
+	(*Vec2)(nil),             // 5: game.v1.Vec2
+	(*Rect)(nil),             // 6: game.v1.Rect
+	(*JoinRequest)(nil),      // 7: game.v1.JoinRequest
+	(*JoinAccepted)(nil),     // 8: game.v1.JoinAccepted
+	(*Extracted)(nil),        // 9: game.v1.Extracted
+	(*MoveInput)(nil),        // 10: game.v1.MoveInput
+	(*AttackRequest)(nil),    // 11: game.v1.AttackRequest
+	(*DamageEvent)(nil),      // 12: game.v1.DamageEvent
+	(*EntityState)(nil),      // 13: game.v1.EntityState
+	(*WorldSnapshot)(nil),    // 14: game.v1.WorldSnapshot
+	(*CaveLayout)(nil),       // 15: game.v1.CaveLayout
+	(*Item)(nil),             // 16: game.v1.Item
+	(*ItemStat)(nil),         // 17: game.v1.ItemStat
+	(*ItemAffix)(nil),        // 18: game.v1.ItemAffix
+	(*EquipmentUpdated)(nil), // 19: game.v1.EquipmentUpdated
+	(*InventoryUpdated)(nil), // 20: game.v1.InventoryUpdated
+	(*PickupRequest)(nil),    // 21: game.v1.PickupRequest
+	(*EquipRequest)(nil),     // 22: game.v1.EquipRequest
+	(*UnequipRequest)(nil),   // 23: game.v1.UnequipRequest
+	(*DropRequest)(nil),      // 24: game.v1.DropRequest
+	(*UseRequest)(nil),       // 25: game.v1.UseRequest
 }
 var file_game_v1_game_proto_depIdxs = []int32{
-	6,  // 0: game.v1.ClientMessage.join:type_name -> game.v1.JoinRequest
-	9,  // 1: game.v1.ClientMessage.move:type_name -> game.v1.MoveInput
-	10, // 2: game.v1.ClientMessage.attack:type_name -> game.v1.AttackRequest
-	20, // 3: game.v1.ClientMessage.pickup:type_name -> game.v1.PickupRequest
-	21, // 4: game.v1.ClientMessage.equip:type_name -> game.v1.EquipRequest
-	22, // 5: game.v1.ClientMessage.unequip:type_name -> game.v1.UnequipRequest
-	23, // 6: game.v1.ClientMessage.drop:type_name -> game.v1.DropRequest
-	24, // 7: game.v1.ClientMessage.use:type_name -> game.v1.UseRequest
-	7,  // 8: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
-	13, // 9: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
-	11, // 10: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
-	19, // 11: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
-	8,  // 12: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
-	18, // 13: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
-	4,  // 14: game.v1.Rect.min:type_name -> game.v1.Vec2
-	4,  // 15: game.v1.Rect.max:type_name -> game.v1.Vec2
-	14, // 16: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
-	4,  // 17: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
-	4,  // 18: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
+	7,  // 0: game.v1.ClientMessage.join:type_name -> game.v1.JoinRequest
+	10, // 1: game.v1.ClientMessage.move:type_name -> game.v1.MoveInput
+	11, // 2: game.v1.ClientMessage.attack:type_name -> game.v1.AttackRequest
+	21, // 3: game.v1.ClientMessage.pickup:type_name -> game.v1.PickupRequest
+	22, // 4: game.v1.ClientMessage.equip:type_name -> game.v1.EquipRequest
+	23, // 5: game.v1.ClientMessage.unequip:type_name -> game.v1.UnequipRequest
+	24, // 6: game.v1.ClientMessage.drop:type_name -> game.v1.DropRequest
+	25, // 7: game.v1.ClientMessage.use:type_name -> game.v1.UseRequest
+	8,  // 8: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
+	14, // 9: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
+	12, // 10: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
+	20, // 11: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
+	9,  // 12: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
+	19, // 13: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
+	5,  // 14: game.v1.Rect.min:type_name -> game.v1.Vec2
+	5,  // 15: game.v1.Rect.max:type_name -> game.v1.Vec2
+	15, // 16: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
+	5,  // 17: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
+	5,  // 18: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
 	0,  // 19: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
-	4,  // 20: game.v1.EntityState.position:type_name -> game.v1.Vec2
-	4,  // 21: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
-	12, // 22: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
-	5,  // 23: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
-	5,  // 24: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
-	5,  // 25: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
-	1,  // 26: game.v1.Item.rarity:type_name -> game.v1.Rarity
-	16, // 27: game.v1.Item.base:type_name -> game.v1.ItemStat
-	17, // 28: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
-	15, // 29: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
-	15, // 30: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	5,  // 20: game.v1.EntityState.position:type_name -> game.v1.Vec2
+	5,  // 21: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
+	1,  // 22: game.v1.EntityState.enemy_state:type_name -> game.v1.EnemyState
+	5,  // 23: game.v1.EntityState.aim:type_name -> game.v1.Vec2
+	13, // 24: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
+	6,  // 25: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
+	6,  // 26: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
+	6,  // 27: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
+	2,  // 28: game.v1.Item.rarity:type_name -> game.v1.Rarity
+	17, // 29: game.v1.Item.base:type_name -> game.v1.ItemStat
+	18, // 30: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
+	16, // 31: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
+	16, // 32: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
+	33, // [33:33] is the sub-list for method output_type
+	33, // [33:33] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_game_v1_game_proto_init() }
@@ -1965,7 +2091,7 @@ func file_game_v1_game_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_v1_game_proto_rawDesc), len(file_game_v1_game_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
