@@ -37,6 +37,9 @@
     { name = "kube"; value = "kubectl --context k3d-fantasy-rpg"; }
     # Godot is not in the dev shell, so point at the installed app. Override with `just godot=<path> ...`.
     { name = "godot"; value = "/Applications/Godot.app/Contents/MacOS/Godot"; }
+    # deploy-infra.yml runs `just infraDir=<dir> plan-all`, and setting this list
+    # here replaces golden-infra's, so it is restated.
+    { name = "infraDir"; value = "infra/live/dev"; }
   ];
 
   # Setting this list here replaces the pack recipes, so build and test are restated.
@@ -44,6 +47,8 @@
     { name = "build"; cmdFrom = "buildCmd"; }
     { name = "test"; cmdFrom = "testCmd"; }
     { name = "lint"; cmdFrom = "lintCmd"; }
+    "plan-all:\n    doppler run --name-transformer tf-var -- \\\n    terragrunt stack run --tf-path terraform --working-dir {{infraDir}} plan"
+    "apply-all:\n    doppler run --name-transformer tf-var -- \\\n    terragrunt --non-interactive stack run --tf-path terraform --working-dir {{infraDir}} apply"
     "fmt:\n    gofmt -w src"
     "deps:\n    {{compose}} up -d --wait postgres nats"
     "dev: deps\n    go run ./src/cmd/world-server"

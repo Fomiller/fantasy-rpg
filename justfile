@@ -10,6 +10,7 @@ project := "fantasy-rpg"
 compose := "docker compose -f deploy/compose/compose.yaml"
 kube := "kubectl --context k3d-fantasy-rpg"
 godot := "/Applications/Godot.app/Contents/MacOS/Godot"
+infraDir := "infra/live/dev"
 
 fetch:
     curl -sSfL https://raw.githubusercontent.com/Fomiller/justfiles/refs/heads/main/base.just > just/base.just
@@ -25,6 +26,14 @@ test:
 
 lint:
     go vet ./src/...
+
+plan-all:
+    doppler run --name-transformer tf-var -- \
+    terragrunt stack run --tf-path terraform --working-dir {{infraDir}} plan
+
+apply-all:
+    doppler run --name-transformer tf-var -- \
+    terragrunt --non-interactive stack run --tf-path terraform --working-dir {{infraDir}} apply
 
 fmt:
     gofmt -w src
