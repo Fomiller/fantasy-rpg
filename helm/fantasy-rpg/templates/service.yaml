@@ -1,0 +1,11 @@
+{{- /* Written once, then it is yours. */ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chart.fullname" . }}
+spec:
+  selector:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080

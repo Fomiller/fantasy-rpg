@@ -76,6 +76,9 @@ client:
 client-run:
     {{godot}} --path client/godot
 
+client-online:
+    {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws
+
 client-check:
     {{godot}} --headless --path client/godot --import
     {{godot}} --headless --path client/godot --quit-after 5

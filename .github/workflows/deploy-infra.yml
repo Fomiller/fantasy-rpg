@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# GENERATED FILE — managed by flake-hub (golden-infra).
+# Do not edit manually: `nix run .#generate` overwrites it.
+# To change it, edit repo.nix, or the template in the pack that owns it.
+# ---------------------------------------------------------------------------
+
+name: Terragrunt Deploy - Infra
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/deploy-infra.yml
+      - infra/**
+      - justfile
+      - just/terraform.just
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-infra.yml
+      - infra/**
+      - justfile
+      - just/terraform.just
+
+jobs:
+  plan-dev:
+    name: Plan Infra (dev)
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      id-token: write
+      contents: read
+    uses: Fomiller/gh-actions/.github/workflows/terragrunt.yaml@main
+    with:
+      environment: dev
+      infra-dir: infra/live/dev
+      doppler-project: fantasy-rpg
+      aws-default-region: us-east-1
+      tg-plan: true
+      use-oidc: true
+    secrets: inherit
+
+  apply-dev:
+    name: Apply Infra (dev)
+    if: ${{ github.event_name == 'push' }}
+    permissions:
+      id-token: write
+      contents: read
+    uses: Fomiller/gh-actions/.github/workflows/terragrunt.yaml@main
+    with:
+      environment: dev
+      infra-dir: infra/live/dev
+      doppler-project: fantasy-rpg
+      aws-default-region: us-east-1
+      use-oidc: true
+    secrets: inherit
