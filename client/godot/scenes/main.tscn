@@ -13,6 +13,8 @@ script = ExtResource("4_connection")
 
 [node name="TestRoom" parent="." instance=ExtResource("2_room")]
 
+[node name="Entities" type="Node2D" parent="."]
+
 [node name="ServerGhost" type="Line2D" parent="."]
 visible = false
 points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
