@@ -12,6 +12,8 @@ const PROJECTILE_SCENE := preload("res://scenes/projectile.tscn")
 const EXTRACTED_TEXT := "extracted · press E to go again"
 # Slot 0 is the basic attack.
 const ABILITY_ACTIONS := ["attack", "ability_1", "ability_2", "ability_3"]
+# Any Control in this group is a window that Escape closes.
+const WINDOWS_GROUP := "windows"
 
 @onready var _connection: ServerConnection = $ServerConnection
 @onready var _cave: Cave = $Cave
@@ -48,6 +50,8 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if Input.is_action_just_pressed("close_window"):
+		close_top_window()
 	if _connection.has_extracted:
 		if Input.is_action_just_pressed("interact"):
 			_connection.rejoin()
@@ -57,9 +61,24 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("interact"):
 		_pickup()
 	for i in ABILITY_ACTIONS.size():
-		# A click on the open panel is for its buttons, not an attack.
-		if Input.is_action_just_pressed(ABILITY_ACTIONS[i]) and not (i == 0 and _inventory.visible):
+		# A click on an open window is for its buttons, not an attack.
+		if Input.is_action_just_pressed(ABILITY_ACTIONS[i]) and not (i == 0 and _top_window() != null):
 			use_ability(i)
+
+
+# Closes one window per press, the one drawn on top. Does nothing when none is open.
+func close_top_window() -> void:
+	var window := _top_window()
+	if window:
+		window.visible = false
+
+
+func _top_window() -> Control:
+	var top: Control = null
+	for window: Control in get_tree().get_nodes_in_group(WINDOWS_GROUP):
+		if window.is_visible_in_tree():
+			top = window
+	return top
 
 
 # Sends the ability in a slot, aimed at the mouse. A cooldown the server
