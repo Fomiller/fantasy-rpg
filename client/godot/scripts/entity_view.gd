@@ -12,7 +12,7 @@ var health := 0
 var _target := Vector2.ZERO
 var _placed := false
 
-@onready var _body: Polygon2D = $Body
+@onready var _body: CanvasItem = $Body
 @onready var _health: Label = $Health
 
 
@@ -25,8 +25,7 @@ func apply(state: GameV1.EntityState) -> void:
 		position = _target
 		_placed = true
 	_health.text = str(health) if is_alive() else "dead"
-	if not is_alive():
-		_body.color = dead_color
+	_body.modulate = Color.WHITE if is_alive() else dead_color
 
 
 func _process(delta: float) -> void:

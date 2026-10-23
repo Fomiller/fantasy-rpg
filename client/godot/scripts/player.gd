@@ -6,6 +6,14 @@ extends CharacterBody2D
 const SNAP_DISTANCE := 64.0
 const CORRECTION_SMOOTHING := 10.0
 const MAX_PENDING := 64
+const DEAD_COLOR := Color(0.35, 0.35, 0.35)
+const WEAPONS := {
+	"rusty_sword": preload("res://assets/kenney_tiny_dungeon/tile_0107.png"),
+	"iron_sword": preload("res://assets/kenney_tiny_dungeon/tile_0104.png"),
+	"war_axe": preload("res://assets/kenney_tiny_dungeon/tile_0119.png"),
+}
+# For weapons without their own art yet.
+const DEFAULT_WEAPON := preload("res://assets/kenney_tiny_dungeon/tile_0104.png")
 
 # The server sends both. These are its defaults, used until it does.
 var max_speed := 220.0
@@ -24,8 +32,7 @@ var _pending: Array[Array] = []
 var _no_walls: Array[Rect2] = []
 
 @onready var _interact_area: Area2D = $InteractArea
-@onready var _shape: Polygon2D = $Body
-@onready var _alive_color := _shape.color
+@onready var _sprite: CharacterSprite = $Body
 
 
 # Movement runs in fixed steps of one server tick, the same steps the server
@@ -38,6 +45,7 @@ func _physics_process(delta: float) -> void:
 	_correction = _correction.lerp(Vector2.ZERO, minf(1.0, CORRECTION_SMOOTHING * delta))
 	position = _previous.lerp(_body.position, _accumulator / tick_seconds) + _correction
 	velocity = _body.velocity
+	_sprite.move(velocity)
 
 	if Input.is_action_just_pressed("interact"):
 		interact()
@@ -98,12 +106,26 @@ func _step(direction: Vector2) -> void:
 
 func die() -> void:
 	alive = false
-	_shape.color = Color(0.35, 0.35, 0.35)
+	_sprite.set_dead(true)
+	_sprite.modulate = DEAD_COLOR
 
 
 func revive() -> void:
 	alive = true
-	_shape.color = _alive_color
+	_sprite.set_dead(false)
+	_sprite.modulate = Color.WHITE
+
+
+func swing(toward: Vector2) -> void:
+	if not alive:
+		return
+	_sprite.face(toward)
+	_sprite.swing()
+
+
+# An empty id means no weapon is equipped.
+func equip_weapon(item_def_id: String) -> void:
+	_sprite.weapon = WEAPONS.get(item_def_id, DEFAULT_WEAPON) if item_def_id != "" else null
 
 
 func flash() -> void:

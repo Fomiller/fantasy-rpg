@@ -1,15 +1,17 @@
 class_name EnemyView
-extends EntityView
+extends CharacterView
 
-# Placeholder looks until real art lands. Reach mirrors sim.defaultArchetypes,
-# so the telegraph shows how far the hit or dash goes.
+# Reach mirrors sim.defaultArchetypes, so the telegraph shows how far the hit
+# or dash goes.
 const LOOKS := {
-	"melee": {"color": Color(0.8, 0.2, 0.2), "points": [Vector2(-16, -16), Vector2(16, -16), Vector2(16, 16), Vector2(-16, 16)], "reach": 40.0},
-	"ranged": {"color": Color(0.6, 0.3, 0.85), "points": [Vector2(0, -18), Vector2(16, 0), Vector2(0, 18), Vector2(-16, 0)], "reach": 240.0},
-	"elite": {"color": Color(0.95, 0.45, 0.1), "points": [Vector2(-10, -20), Vector2(10, -20), Vector2(20, 0), Vector2(10, 20), Vector2(-10, 20), Vector2(-20, 0)], "reach": 44.0},
+	"melee": {"texture": preload("res://assets/kenney_tiny_dungeon/tile_0110.png"), "scale": 2.0, "reach": 40.0},
+	"ranged": {"texture": preload("res://assets/kenney_tiny_dungeon/tile_0084.png"), "scale": 2.0, "reach": 240.0},
+	"elite": {"texture": preload("res://assets/kenney_tiny_dungeon/tile_0109.png"), "scale": 2.5, "reach": 44.0},
 }
 const CHARGE_REACH := 168.0
 const TELEGRAPH_COLOR := Color(1, 0.9, 0.3, 0.8)
+# Above 1 so the sprite glows during the windup.
+const WINDUP_TINT := Color(1.5, 1.35, 0.9)
 const BAR_SIZE := Vector2(32, 4)
 const BAR_OFFSET := Vector2(-16, -26)
 
@@ -25,13 +27,16 @@ func apply(state_msg: GameV1.EntityState) -> void:
 	max_health = state_msg.get_max_health()
 	state = state_msg.get_enemy_state()
 	aim = Vector2(state_msg.get_aim().get_x(), state_msg.get_aim().get_y()) if state_msg.has_aim() else Vector2.ZERO
-	var vel := state_msg.get_velocity()
-	moving = vel != null and Vector2(vel.get_x(), vel.get_y()).length() > 1.0
+	moving = velocity.length() > 1.0
 	if state_msg.get_archetype() != archetype:
 		archetype = state_msg.get_archetype()
 		var look: Dictionary = LOOKS.get(archetype, LOOKS.melee)
-		_body.polygon = PackedVector2Array(look.points)
-	_body.color = _color()
+		_sprite.texture = look.texture
+		_sprite.scale = Vector2.ONE * look.scale
+	if aim != Vector2.ZERO:
+		_sprite.face(aim)
+	_sprite.windup(is_telegraphing())
+	_body.modulate = _tint()
 	_health.text = _label()
 	queue_redraw()
 
@@ -40,11 +45,10 @@ func is_telegraphing() -> bool:
 	return is_alive() and (state == GameV1.EnemyState.ATTACK or (state == GameV1.EnemyState.CHARGE and not moving))
 
 
-func _color() -> Color:
+func _tint() -> Color:
 	if not is_alive():
 		return dead_color
-	var base: Color = LOOKS.get(archetype, LOOKS.melee).color
-	return base.lightened(0.45) if is_telegraphing() or state == GameV1.EnemyState.CHARGE else base
+	return WINDUP_TINT if is_telegraphing() or state == GameV1.EnemyState.CHARGE else Color.WHITE
 
 
 func _label() -> String:

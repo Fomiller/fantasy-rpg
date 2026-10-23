@@ -2,7 +2,9 @@ class_name Cave
 extends Node2D
 
 const WALL_SCENE := preload("res://scenes/wall.tscn")
-const FLOOR_COLOR := Color(0.13, 0.13, 0.16)
+const FLOOR_TEXTURE := preload("res://assets/kenney_tiny_dungeon/tile_0000.png")
+# Darkened so the art does not compete with telegraphs.
+const FLOOR_TINT := Color(0.45, 0.45, 0.5)
 const EXIT_COLOR := Color(0.2, 0.75, 0.4, 0.35)
 
 var extraction := Rect2()
@@ -15,7 +17,11 @@ func build(layout: GameV1.CaveLayout) -> void:
 		remove_child(child)
 		child.queue_free()
 
-	add_child(_box(to_rect(layout.get_bounds()), FLOOR_COLOR))
+	var ground := _box(to_rect(layout.get_bounds()), FLOOR_TINT)
+	ground.texture = FLOOR_TEXTURE
+	ground.texture_scale = Vector2(0.5, 0.5)
+	ground.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	add_child(ground)
 
 	extraction = to_rect(layout.get_extraction())
 	add_child(_box(extraction, EXIT_COLOR))

@@ -1,13 +1,14 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/projectile_view.gd" id="1_view"]
+[ext_resource type="Texture2D" path="res://assets/kenney_tiny_dungeon/tile_0131.png" id="2_bolt"]
 
 [node name="Projectile" type="Node2D"]
 script = ExtResource("1_view")
 
-[node name="Body" type="Polygon2D" parent="."]
-color = Color(1, 0.85, 0.4, 1)
-polygon = PackedVector2Array(0, -6, 4, -4, 6, 0, 4, 4, 0, 6, -4, 4, -6, 0, -4, -4)
+[node name="Body" type="Sprite2D" parent="."]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("2_bolt")
 
 [node name="Health" type="Label" parent="."]
 visible = false
