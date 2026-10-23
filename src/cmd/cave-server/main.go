@@ -41,7 +41,8 @@ func run() error {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	world := sim.NewWorld(sim.DefaultConfig(), sim.TestRoomWalls())
-	world.AddEnemy(sim.Vec2{X: 0, Y: -150}, 30)
+	// Just outside detection range of spawn, so joining does not start a fight.
+	world.AddEnemy(sim.Vec2{X: 0, Y: -220}, 30)
 	game := server.New(world, sim.Vec2{}, slog.Default())
 	defer game.Close()
 

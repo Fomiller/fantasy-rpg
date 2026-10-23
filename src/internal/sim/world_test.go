@@ -8,6 +8,14 @@ import (
 
 const dt = 50 * time.Millisecond
 
+// passive keeps enemies still and blind, for tests about players.
+func passive() Config {
+	c := DefaultConfig()
+	c.DetectRadius = 0
+	c.PatrolSpeed = 0
+	return c
+}
+
 func steps(w *World, n int) []DamageEvent {
 	var events []DamageEvent
 	for range n {
@@ -93,7 +101,7 @@ func TestWallSlideKeepsOtherAxis(t *testing.T) {
 }
 
 func TestAttackDamagesAndKills(t *testing.T) {
-	w := NewWorld(DefaultConfig(), nil)
+	w := NewWorld(passive(), nil)
 	player := w.AddPlayer(Vec2{})
 	enemy := w.AddEnemy(Vec2{40, 0}, 30)
 
@@ -148,7 +156,7 @@ func TestAttackRejected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := NewWorld(DefaultConfig(), nil)
+			w := NewWorld(passive(), nil)
 			player := w.AddPlayer(Vec2{})
 			enemy := w.AddEnemy(Vec2{40, 0}, 30)
 			tt.setup(w, player, enemy)

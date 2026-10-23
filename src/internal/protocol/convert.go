@@ -50,6 +50,7 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 			Id:       uint64(e.ID),
 			Kind:     gamev1.EntityKind_ENTITY_KIND_ENEMY,
 			Position: vec(e.Pos),
+			Velocity: vec(e.Vel),
 			Health:   int32(e.Health),
 		})
 	}

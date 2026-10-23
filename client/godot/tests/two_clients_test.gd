@@ -1,6 +1,7 @@
 extends SceneTree
 
 # Needs a fresh cave-server on 127.0.0.1:8080 with one enemy above spawn.
+# The enemy fights back, so the players must win before they run out of health.
 # `just net-test` starts one.
 const TIMEOUT_MSEC := 10000
 const ATTACK_EVERY_MSEC := 600
@@ -51,14 +52,14 @@ func _run() -> void:
 		return
 	_check(a.enemy() != null and a.enemy().get_health() > 0, "enemy is alive")
 
+	var enemy_id := a.enemy().get_id()
 	for c in clients:
 		c.connection.send_move(Vector2.UP)
-	var in_range := await _until(func() -> bool: return a.me().get_position().get_y() < -100.0 and b.me().get_position().get_y() < -100.0)
+	var in_range := await _until(func() -> bool: return _near(a) and _near(b))
 	for c in clients:
 		c.connection.send_move(Vector2.ZERO)
-	_check(in_range, "both clients walked up to the enemy")
+	_check(in_range, "both clients reached the enemy")
 
-	var enemy_id := a.enemy().get_id()
 	var next_attack := 0
 	var dead := await _until(func() -> bool:
 		if Time.get_ticks_msec() >= next_attack:
@@ -69,13 +70,26 @@ func _run() -> void:
 	_check(dead, "both clients see the enemy die")
 
 	var sources := {}
+	var on_enemy: Array[String] = []
+	var on_players := 0
 	for hit in a.hits:
-		sources[hit.get_slice("->", 0)] = true
+		if hit.get_slice("->", 1).begins_with("%d:" % enemy_id):
+			sources[hit.get_slice("->", 0)] = true
+			on_enemy.append(hit)
+		else:
+			on_players += 1
 	_check(sources.size() == 2, "both players landed hits")
+	_check(on_players > 0, "enemy hit back")
 	_check(a.hits == b.hits, "both clients saw the same hits")
-	_check(not a.hits.is_empty() and a.hits.back().ends_with("killed"), "last hit killed the enemy")
+	_check(not on_enemy.is_empty() and on_enemy.back().ends_with("killed"), "last hit on the enemy killed it")
 	print("hits: %s" % [a.hits])
 	_finish()
+
+
+func _near(c: Client) -> bool:
+	var me := c.me().get_position()
+	var enemy := c.enemy().get_position()
+	return Vector2(me.get_x(), me.get_y()).distance_to(Vector2(enemy.get_x(), enemy.get_y())) < 50.0
 
 
 func _until(condition: Callable) -> bool:

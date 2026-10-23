@@ -46,3 +46,33 @@ func TestRoomWalls() []Rect {
 		{Vec2{-220, -14}, Vec2{-180, 14}},   // chest
 	}
 }
+
+// Intersects reports whether the segment from a to b passes through r.
+func (r Rect) Intersects(a, b Vec2) bool {
+	d := b.Sub(a)
+	t0, t1 := 0.0, 1.0
+	for _, c := range [4][2]float64{
+		{-d.X, a.X - r.Min.X},
+		{d.X, r.Max.X - a.X},
+		{-d.Y, a.Y - r.Min.Y},
+		{d.Y, r.Max.Y - a.Y},
+	} {
+		p, q := c[0], c[1]
+		if p == 0 {
+			if q < 0 {
+				return false
+			}
+			continue
+		}
+		t := q / p
+		if p < 0 {
+			t0 = max(t0, t)
+		} else {
+			t1 = min(t1, t)
+		}
+		if t0 > t1 {
+			return false
+		}
+	}
+	return true
+}

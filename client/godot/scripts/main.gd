@@ -13,6 +13,7 @@ const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 @onready var _status: Label = $HUD/Status
 
 var _views: Dictionary[int, EntityView] = {}
+var _health := 0
 
 
 func _ready() -> void:
@@ -51,6 +52,7 @@ func nearest_enemy(from: Vector2) -> EntityView:
 
 
 func _on_joined(player_id: int) -> void:
+	_player.revive()
 	_status.text = "player %d" % player_id
 
 
@@ -72,6 +74,9 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			var pos := entity.get_position()
 			_ghost.position = Vector2(pos.get_x(), pos.get_y())
 			_ghost.visible = true
+			_health = entity.get_health()
+			if _health <= 0 and _player.alive:
+				_player.die()
 			continue
 		seen[id] = true
 		var view: EntityView = _views.get(id)
@@ -84,7 +89,8 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 		if not seen.has(id):
 			_views[id].queue_free()
 			_views.erase(id)
-	_status.text = "player %d · tick %d" % [_connection.player_id, snapshot.get_tick()]
+	var hp := "%d hp" % _health if _health > 0 else "dead"
+	_status.text = "player %d · %s · tick %d" % [_connection.player_id, hp, snapshot.get_tick()]
 
 
 func _spawn_view(kind: int) -> EntityView:
@@ -99,6 +105,8 @@ func _spawn_view(kind: int) -> EntityView:
 
 
 func _on_damage(event: GameV1.DamageEvent) -> void:
+	if event.get_target_id() == _connection.player_id:
+		_player.flash()
 	var view: EntityView = _views.get(event.get_target_id())
 	if view:
 		view.flash()
