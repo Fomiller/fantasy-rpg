@@ -96,11 +96,15 @@ func _test_abilities(main: Node, connection: ServerConnection) -> void:
 		_check(bar.cooldown_left("slash") > 0.0, "slash shows its cooldown")
 
 
+# Abilities are read from input events, which Input.action_press does not make.
 func _press(action: String) -> void:
-	Input.action_press(action)
-	await physics_frame
-	await physics_frame
-	Input.action_release(action)
+	for pressed in [true, false]:
+		var event := InputEventAction.new()
+		event.action = action
+		event.pressed = pressed
+		Input.parse_input_event(event)
+		await physics_frame
+		await physics_frame
 
 
 # Walk from the spawn up the left corridor to the chest in the top left room,

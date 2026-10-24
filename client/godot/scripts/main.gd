@@ -24,6 +24,9 @@ const WINDOWS_GROUP := "windows"
 @onready var _abilities: AbilityBar = $HUD/Abilities
 @onready var _loot: LootWindow = $HUD/Loot
 
+# Set by main. Tests swap it for a fake.
+var send_attack: Callable
+
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
 var _max_health := 0
@@ -50,6 +53,7 @@ func _ready() -> void:
 	_loot.send_pickup = _connection.send_pickup
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
+	send_attack = _connection.send_attack
 	_on_disconnected()
 
 
@@ -65,9 +69,15 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("interact"):
 		_open_loot()
 	_close_loot_out_of_range()
+
+
+# A click on a window is taken by its Controls and never gets here, so the
+# keys and clicks outside a window still attack.
+func _unhandled_input(event: InputEvent) -> void:
+	if _connection.has_extracted:
+		return
 	for i in ABILITY_ACTIONS.size():
-		# A click on an open window is for its buttons, not an attack.
-		if Input.is_action_just_pressed(ABILITY_ACTIONS[i]) and not (i == 0 and _top_window() != null):
+		if event.is_action_pressed(ABILITY_ACTIONS[i]):
 			use_ability(i)
 
 
@@ -94,7 +104,7 @@ func use_ability(index: int) -> void:
 		return
 	var aim := _player.facing
 	_player.cast(aim, ability.get_windup_ms() / 1000.0, ability.get_root())
-	_connection.send_attack(0, ability.get_id(), aim)
+	send_attack.call(0, ability.get_id(), aim)
 
 
 func _open_loot() -> void:
