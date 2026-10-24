@@ -28,6 +28,15 @@ func swing(w *World, cmd AttackCommand) []DamageEvent {
 
 var right = Vec2{1, 0}
 
+// veteran adds a starter player at level 3, which has the whole kit.
+func veteran(w *World) EntityID {
+	id, err := w.AddPlayerAs(Vec2{}, "", w.cfg.Classes.Progression.XPToReach(3))
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 func TestBasicIsTheClassBasic(t *testing.T) {
 	w := NewWorld(passive(), nil)
 	id := w.AddPlayer(Vec2{})
@@ -60,7 +69,7 @@ func TestAbilityRejected(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := NewWorld(passive(), nil)
-			id := w.AddPlayer(Vec2{})
+			id := veteran(w)
 			enemy := w.AddEnemy(Vec2{40, 0}, Melee)
 			p := w.players[id]
 			tt.setup(w, p)
@@ -83,6 +92,40 @@ func TestAbilityRejected(t *testing.T) {
 	}
 }
 
+func TestAbilitiesUnlockByLevel(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	p := w.players[id]
+	use := func(ability string) (Events, bool) {
+		p.Resource = 100
+		p.cooldowns = map[string]time.Duration{}
+		w.Submit(AttackCommand{Player: id, Seq: 1, Ability: ability, Aim: right})
+		ev := w.Step(dt)
+		steps(w, 10)
+		return ev, len(ev.Abilities) == 1
+	}
+	want := func(level int, usable map[string]bool) {
+		t.Helper()
+		for ability, ok := range usable {
+			ev, used := use(ability)
+			if used != ok {
+				t.Fatalf("level %d: %s used = %v, want %v: %+v", level, ability, used, ok, ev)
+			}
+			if !ok && (len(ev.Rejected) != 1 || ev.Rejected[0].Reason != RejectLocked || p.Resource != 100) {
+				t.Fatalf("level %d: %s rejected = %+v rage %v, want locked and nothing paid", level, ability, ev.Rejected, p.Resource)
+			}
+		}
+	}
+
+	want(1, map[string]bool{"slash": true, "cleave": false, "brace": false})
+	if gained, _ := w.BankXP(id, 100); gained != 1 {
+		t.Fatalf("gained %d levels, want 1", gained)
+	}
+	want(2, map[string]bool{"slash": true, "cleave": true, "brace": false})
+	w.BankXP(id, 150)
+	want(3, map[string]bool{"slash": true, "cleave": true, "brace": true})
+}
+
 func TestDeadPlayerCannotCast(t *testing.T) {
 	w := NewWorld(passive(), nil)
 	id := w.AddPlayer(Vec2{})
@@ -101,7 +144,7 @@ func TestDeadPlayerCannotCast(t *testing.T) {
 
 func TestCostAndCooldownArePaidWhenTheWindupStarts(t *testing.T) {
 	w := NewWorld(passive(), nil)
-	id := w.AddPlayer(Vec2{})
+	id := veteran(w)
 	p := w.players[id]
 	p.Resource = 70
 
@@ -163,7 +206,7 @@ func TestArcs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.ability, func(t *testing.T) {
 			w := NewWorld(passive(), nil)
-			id := w.AddPlayer(Vec2{})
+			id := veteran(w)
 			w.players[id].Resource = 100
 			var enemies []EntityID
 			for _, pos := range at {
@@ -184,7 +227,7 @@ func TestArcs(t *testing.T) {
 
 func TestCleaveRootsDuringItsWindup(t *testing.T) {
 	w := NewWorld(passive(), nil)
-	id := w.AddPlayer(Vec2{})
+	id := veteran(w)
 	p := w.players[id]
 	p.Resource = 100
 	for seq := uint32(1); seq <= 10; seq++ {
@@ -208,7 +251,7 @@ func TestCleaveRootsDuringItsWindup(t *testing.T) {
 
 func TestBraceGuardsAndSlows(t *testing.T) {
 	w := NewWorld(passive(), nil)
-	id := w.AddPlayer(Vec2{})
+	id := veteran(w)
 	p := w.players[id]
 	p.Resource = 25
 	if got := w.damageTaken(p, 25); got != 22 {
@@ -344,8 +387,8 @@ func TestClassComesFromData(t *testing.T) {
 			"abilities": ["slash", "cleave"]
 		}]`)},
 		"data/abilities.json": {Data: []byte(`[
-			{ "id": "slash", "name": "Slash", "cost": 0, "cooldown_ms": 500, "windup_ms": 0, "target": { "shape": "arc", "range": 64, "arc_deg": 90 }, "effects": [{ "type": "damage", "power": 100 }] },
-			{ "id": "cleave", "name": "Cleave", "cost": 10, "cooldown_ms": 1000, "windup_ms": 0, "target": { "shape": "arc", "range": 200, "arc_deg": 360 }, "effects": [{ "type": "damage", "power": 300 }] }
+			{ "id": "slash", "name": "Slash", "unlock_level": 1, "cost": 0, "cooldown_ms": 500, "windup_ms": 0, "target": { "shape": "arc", "range": 64, "arc_deg": 90 }, "effects": [{ "type": "damage", "power": 100 }] },
+			{ "id": "cleave", "name": "Cleave", "unlock_level": 1, "cost": 10, "cooldown_ms": 1000, "windup_ms": 0, "target": { "shape": "arc", "range": 200, "arc_deg": 360 }, "effects": [{ "type": "damage", "power": 300 }] }
 		]`)},
 		"data/progression.json": {Data: []byte(`{ "max_level": 1, "xp_to_next": [] }`)},
 	})

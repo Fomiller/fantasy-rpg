@@ -357,6 +357,9 @@ Proposal only.
 
 - Level changes only at run end. During a run, run XP shows as a second
   segment on the XP bar. `LevelUp` comes with the `RunSummary`.
+- FOM-213 added `uint32 level` to the player's `EntityState` before
+  `CharacterInfo` exists. The client compares it to `unlock_level`, so a
+  level up shows in the next snapshot.
 - No stat changes mid-run, so health never jumps in a fight. A death can
   never take away a level the player already saw.
 

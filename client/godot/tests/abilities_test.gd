@@ -12,6 +12,7 @@ func _run() -> void:
 	root.add_child(bar)
 	await process_frame
 	bar.setup(_warrior())
+	bar.set_level(3)
 	_check(bar.slot(0).get_id() == "slash" and bar.slot(1).get_id() == "cleave" and bar.slot(2).get_id() == "brace", "basic is slot 0, then the rest in order")
 	_check(bar.slot(3) == null, "an empty slot has no ability")
 
@@ -22,6 +23,17 @@ func _run() -> void:
 	_check("Cleave (30)" in bar._list.text and "rage 10/100" in bar._list.text, "bar lists abilities and rage")
 	bar.rejected("brace", "resource")
 	_check(bar.rejection() == "Brace: not enough rage", "rejection says why")
+
+	bar.set_level(1)
+	await process_frame
+	var text := bar._list.get_parsed_text()
+	_check(bar.is_locked("cleave") and bar.is_locked("brace") and not bar.is_locked("slash"), "level 1 has only slash")
+	_check("Cleave (30)  Lv 2" in text and "Brace (25)  Lv 3" in text and not "Slash  Lv" in text, "locked abilities show their level")
+	_check("[color=%s][lb]1/Q] Cleave" % AbilityBar.LOCKED_COLOR in bar._list.text, "locked abilities are dimmed")
+	bar.rejected("cleave", "locked")
+	_check(bar.rejection() == "Cleave: unlocks at Lv 2", "a locked rejection says the level")
+	bar.set_level(2)
+	_check(not bar.is_locked("cleave") and bar.is_locked("brace"), "level 2 unlocks cleave")
 
 	var sprite: CharacterSprite = load("res://scenes/character_sprite.tscn").instantiate()
 	root.add_child(sprite)
@@ -46,6 +58,10 @@ func _run() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
+	main.get_node("ServerConnection").player_id = 1
+	main.get_node("Player").send_move = func(_direction: Vector2) -> int: return 0
+	main._on_snapshot(_snapshot(1, 3))
+	_check(main.get_node("HUD/Abilities").level == 3, "the level comes from the player's snapshot")
 	var caster: Player = main.get_node("Player")
 	caster.cast(Vector2.DOWN, 0.5, true)
 	main._on_ability_rejected(_rejection("busy"))
@@ -75,13 +91,27 @@ func _warrior() -> GameV1.ClassInfo:
 	info.set_resource("rage")
 	info.set_max_resource(100)
 	info.set_basic("slash")
-	for a in [["cleave", "Cleave", 30, 4000], ["slash", "Slash", 0, 500], ["brace", "Brace", 25, 12000]]:
+	for a in [["cleave", "Cleave", 30, 4000, 2], ["slash", "Slash", 0, 500, 1], ["brace", "Brace", 25, 12000, 3]]:
 		var ability := info.add_abilities()
 		ability.set_id(a[0])
 		ability.set_name(a[1])
 		ability.set_cost(a[2])
 		ability.set_cooldown_ms(a[3])
+		ability.set_unlock_level(a[4])
 	return info
+
+
+func _snapshot(id: int, level: int) -> GameV1.WorldSnapshot:
+	var snapshot := GameV1.WorldSnapshot.new()
+	var state := snapshot.add_entities()
+	state.set_id(id)
+	state.set_kind(GameV1.EntityKind.PLAYER)
+	state.new_position()
+	state.new_velocity()
+	state.set_health(100)
+	state.set_max_health(100)
+	state.set_level(level)
+	return snapshot
 
 
 func _check(ok: bool, name: String) -> void:

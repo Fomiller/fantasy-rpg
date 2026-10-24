@@ -23,6 +23,12 @@ func TestDefaultDataLoads(t *testing.T) {
 	if !w.CanWield(items.Sword) || !w.CanWield(items.Axe) || w.CanWield(items.Staff) {
 		t.Fatalf("warrior weapons = %v", w.Weapons)
 	}
+	// Unlock levels from docs/src/design/progression.md.
+	for id, level := range map[string]int{"slash": 1, "cleave": 2, "brace": 3} {
+		if got := d.Abilities[id].UnlockLevel; got != level {
+			t.Errorf("%s unlocks at %d, want %d", id, got, level)
+		}
+	}
 	if w.PerLevel[items.MaxHealth] != 5 {
 		t.Fatalf("warrior per_level = %v", w.PerLevel)
 	}
@@ -72,8 +78,8 @@ func TestValidateCatchesBadData(t *testing.T) {
 				},
 			},
 			Abilities: map[string]Ability{
-				"hit": {ID: "hit", Name: "Hit", CooldownMS: 500, WindupMS: 100, Target: Target{Shape: Arc, Range: 64, ArcDeg: 90}, Effects: []Effect{{Type: Damage, Power: 100}}},
-				"guard": {ID: "guard", Name: "Guard", Cost: 20, Target: Target{Shape: Self}, Effects: []Effect{
+				"hit": {ID: "hit", Name: "Hit", UnlockLevel: 1, CooldownMS: 500, WindupMS: 100, Target: Target{Shape: Arc, Range: 64, ArcDeg: 90}, Effects: []Effect{{Type: Damage, Power: 100}}},
+				"guard": {ID: "guard", Name: "Guard", Cost: 20, UnlockLevel: 3, Target: Target{Shape: Self}, Effects: []Effect{
 					{Type: Status, Status: Guard, DurationMS: 1000, Amount: 50},
 				}},
 			},
@@ -118,6 +124,9 @@ func TestValidateCatchesBadData(t *testing.T) {
 		{"unknown ability", func(d *Data) { class(d, func(c *Class) { c.Abilities = append(c.Abilities, "fireball") }) }, "unknown ability"},
 		{"basic not listed", func(d *Data) { class(d, func(c *Class) { c.Basic = "kick" }) }, "basic \"kick\""},
 		{"listed twice", func(d *Data) { class(d, func(c *Class) { c.Abilities = append(c.Abilities, "hit") }) }, "twice"},
+		{"no unlock level", func(d *Data) { ability(d, "guard", func(a *Ability) { a.UnlockLevel = 0 }) }, "unlock_level must be from 1 to max_level"},
+		{"unlock past max level", func(d *Data) { ability(d, "guard", func(a *Ability) { a.UnlockLevel = 4 }) }, "unlock_level must be from 1 to max_level"},
+		{"basic locked", func(d *Data) { ability(d, "hit", func(a *Ability) { a.UnlockLevel = 2 }) }, "must unlock at level 1"},
 		{"basic costs", func(d *Data) { ability(d, "hit", func(a *Ability) { a.Cost = 5 }) }, "cost nothing"},
 		{"cost over max", func(d *Data) { ability(d, "guard", func(a *Ability) { a.Cost = 150 }) }, "costs more"},
 		{"negative cooldown", func(d *Data) { ability(d, "hit", func(a *Ability) { a.CooldownMS = -1 }) }, "negative"},
