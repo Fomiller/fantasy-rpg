@@ -15,6 +15,14 @@ func _run() -> void:
 	root.add_child(main)
 	var connection: ServerConnection = main.get_node("ServerConnection")
 
+	var lobby: LobbyWindow = main.get_node("HUD/Lobby")
+	var in_lobby := await _until(func() -> bool: return connection.in_lobby and lobby.visible)
+	_check(in_lobby and not connection.is_joined(), "joining puts the player in the lobby")
+	if not in_lobby:
+		_finish()
+		return
+	await _test_lobby(lobby)
+
 	var joined := await _until(func() -> bool: return connection.is_joined())
 	_check(joined, "joined the server")
 	if not joined:
@@ -67,6 +75,32 @@ func _run() -> void:
 
 	await _test_loot_then_equip(main, hud)
 	_finish()
+
+
+# Stash the starter sword and equip it again from the stash, then enter.
+func _test_lobby(lobby: LobbyWindow) -> void:
+	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "To stash") != null), "the lobby lists the starter sword as gear")
+	var stash := _lobby_button(lobby, "Rusty Sword", "To stash")
+	if stash:
+		stash.pressed.emit()
+	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "Equip") != null), "the server moves the sword to the stash")
+	var equip := _lobby_button(lobby, "Rusty Sword", "Equip")
+	if equip:
+		equip.pressed.emit()
+	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "To stash") != null), "the sword is equipped again from the stash")
+	_lobby_button(lobby, "", "Enter cave").pressed.emit()
+
+
+# An empty item_name finds a button that is not on an item row.
+func _lobby_button(lobby: LobbyWindow, item_name: String, text: String) -> Button:
+	for node in lobby.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button.text != text or button.is_queued_for_deletion():
+			continue
+		var label := button.get_parent().get_child(0)
+		if item_name == "" or (label is RichTextLabel and item_name in (label as RichTextLabel).get_parsed_text()):
+			return button
+	return null
 
 
 # A new player is level 1 and cleave unlocks at 2, so the server says no. The

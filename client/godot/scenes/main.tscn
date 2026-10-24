@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/xp_bar.gd" id="9_xp_bar"]
 [ext_resource type="Script" path="res://scripts/level_up_banner.gd" id="10_level_up"]
 [ext_resource type="Script" path="res://scripts/run_summary.gd" id="11_run_summary"]
+[ext_resource type="Script" path="res://scripts/lobby_window.gd" id="12_lobby"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -123,6 +124,22 @@ horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 script = ExtResource("10_level_up")
+
+[node name="Lobby" type="PanelContainer" parent="HUD"]
+visible = false
+offset_left = 340.0
+offset_top = 40.0
+offset_right = 940.0
+offset_bottom = 680.0
+script = ExtResource("12_lobby")
+
+[node name="Scroll" type="ScrollContainer" parent="HUD/Lobby"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="HUD/Lobby/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="RunSummary" type="PanelContainer" parent="HUD"]
 visible = false

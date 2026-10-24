@@ -8,6 +8,7 @@ import (
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -105,9 +106,7 @@ func RunSummary(prog classes.Progression, name string, end sim.RunEnd) *gamev1.R
 		LevelsGained: uint32(end.Levels),
 		Character:    Character(prog, name, end.Class, end.Level, end.XP, 0),
 	}
-	for _, inst := range end.Kept {
-		summary.Kept = append(summary.Kept, Item(inst))
-	}
+	summary.Kept = Items(end.Kept)
 	return summary
 }
 
@@ -271,6 +270,26 @@ func PickupRejected(r sim.PickupRejection) *gamev1.ServerMessage {
 		ItemId:   r.Item,
 		Reason:   r.Reason,
 	}}}
+}
+
+func Lobby(character *gamev1.CharacterInfo, class *gamev1.ClassInfo) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Lobby{Lobby: &gamev1.Lobby{Character: character, ClassInfo: class}}}
+}
+
+func Stash(b inventory.Bag) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Stash{Stash: &gamev1.StashContents{Items: Items(b.Items), Capacity: uint32(b.Size)}}}
+}
+
+func StashMoveRejected(item, reason string) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_StashMoveRejected{StashMoveRejected: &gamev1.StashMoveRejected{ItemId: item, Reason: reason}}}
+}
+
+func Items(insts []items.Instance) []*gamev1.Item {
+	var out []*gamev1.Item
+	for _, inst := range insts {
+		out = append(out, Item(inst))
+	}
+	return out
 }
 
 func Item(inst items.Instance) *gamev1.Item {

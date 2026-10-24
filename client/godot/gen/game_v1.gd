@@ -751,6 +751,18 @@ class ClientMessage:
 		service.func_ref = Callable(self, "new_loot_close")
 		data[__loot_close.tag] = service
 		
+		__enter_cave = PBField.new("enter_cave", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 20, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __enter_cave
+		service.func_ref = Callable(self, "new_enter_cave")
+		data[__enter_cave.tag] = service
+		
+		__stash_move = PBField.new("stash_move", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 21, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __stash_move
+		service.func_ref = Callable(self, "new_stash_move")
+		data[__stash_move.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -765,6 +777,8 @@ class ClientMessage:
 		USE = 17,
 		LOOT_OPEN = 18,
 		LOOT_CLOSE = 19,
+		ENTER_CAVE = 20,
+		STASH_MOVE = 21,
 	}
 	var _payload_case: int = 0
 
@@ -810,6 +824,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__join.value = JoinRequest.new()
 		return __join.value
 	
@@ -842,6 +860,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__move.value = MoveInput.new()
 		return __move.value
 	
@@ -874,6 +896,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__attack.value = AttackRequest.new()
 		return __attack.value
 	
@@ -906,6 +932,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__pickup.value = PickupRequest.new()
 		return __pickup.value
 	
@@ -938,6 +968,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__equip.value = EquipRequest.new()
 		return __equip.value
 	
@@ -970,6 +1004,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__unequip.value = UnequipRequest.new()
 		return __unequip.value
 	
@@ -1002,6 +1040,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__drop.value = DropRequest.new()
 		return __drop.value
 	
@@ -1034,6 +1076,10 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = UseRequest.new()
 		return __use.value
 	
@@ -1066,6 +1112,10 @@ class ClientMessage:
 		_payload_case = 18
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__loot_open.value = LootOpenRequest.new()
 		return __loot_open.value
 	
@@ -1098,8 +1148,84 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		data[19].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 19
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = LootCloseRequest.new()
 		return __loot_close.value
+	
+	var __enter_cave: PBField
+	func has_enter_cave() -> bool:
+		return data[20].state == PB_SERVICE_STATE.FILLED
+	func get_enter_cave() -> EnterCaveRequest:
+		return __enter_cave.value
+	func clear_enter_cave() -> void:
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_enter_cave() -> EnterCaveRequest:
+		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		data[20].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 20
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = EnterCaveRequest.new()
+		return __enter_cave.value
+	
+	var __stash_move: PBField
+	func has_stash_move() -> bool:
+		return data[21].state == PB_SERVICE_STATE.FILLED
+	func get_stash_move() -> StashMoveRequest:
+		return __stash_move.value
+	func clear_stash_move() -> void:
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_stash_move() -> StashMoveRequest:
+		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		data[21].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 21
+		__stash_move.value = StashMoveRequest.new()
+		return __stash_move.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -1211,6 +1337,24 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_run_ended")
 		data[__run_ended.tag] = service
 		
+		__lobby = PBField.new("lobby", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 23, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __lobby
+		service.func_ref = Callable(self, "new_lobby")
+		data[__lobby.tag] = service
+		
+		__stash = PBField.new("stash", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 24, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __stash
+		service.func_ref = Callable(self, "new_stash")
+		data[__stash.tag] = service
+		
+		__stash_move_rejected = PBField.new("stash_move_rejected", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 25, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __stash_move_rejected
+		service.func_ref = Callable(self, "new_stash_move_rejected")
+		data[__stash_move_rejected.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -1228,6 +1372,9 @@ class ServerMessage:
 		XP_GAINED = 20,
 		LEVEL_UP = 21,
 		RUN_ENDED = 22,
+		LOBBY = 23,
+		STASH = 24,
+		STASH_MOVE_REJECTED = 25,
 	}
 	var _payload_case: int = 0
 
@@ -1279,6 +1426,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
 	
@@ -1317,6 +1470,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
 	
@@ -1355,6 +1514,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
 	
@@ -1393,6 +1558,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
 	
@@ -1431,6 +1602,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__extracted.value = Extracted.new()
 		return __extracted.value
 	
@@ -1469,6 +1646,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__equipment.value = EquipmentUpdated.new()
 		return __equipment.value
 	
@@ -1507,6 +1690,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__ability_used.value = AbilityUsed.new()
 		return __ability_used.value
 	
@@ -1545,6 +1734,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = AbilityRejected.new()
 		return __ability_rejected.value
 	
@@ -1583,6 +1778,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__loot.value = LootContents.new()
 		return __loot.value
 	
@@ -1621,6 +1822,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = PickupRejected.new()
 		return __pickup_rejected.value
 	
@@ -1659,6 +1866,12 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__xp_gained.value = XpGained.new()
 		return __xp_gained.value
 	
@@ -1697,6 +1910,12 @@ class ServerMessage:
 		_payload_case = 21
 		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__level_up.value = LevelUp.new()
 		return __level_up.value
 	
@@ -1735,8 +1954,146 @@ class ServerMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		data[22].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 22
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = RunEnded.new()
 		return __run_ended.value
+	
+	var __lobby: PBField
+	func has_lobby() -> bool:
+		return data[23].state == PB_SERVICE_STATE.FILLED
+	func get_lobby() -> Lobby:
+		return __lobby.value
+	func clear_lobby() -> void:
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_lobby() -> Lobby:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		data[23].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 23
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = Lobby.new()
+		return __lobby.value
+	
+	var __stash: PBField
+	func has_stash() -> bool:
+		return data[24].state == PB_SERVICE_STATE.FILLED
+	func get_stash() -> StashContents:
+		return __stash.value
+	func clear_stash() -> void:
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_stash() -> StashContents:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		data[24].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 24
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = StashContents.new()
+		return __stash.value
+	
+	var __stash_move_rejected: PBField
+	func has_stash_move_rejected() -> bool:
+		return data[25].state == PB_SERVICE_STATE.FILLED
+	func get_stash_move_rejected() -> StashMoveRejected:
+		return __stash_move_rejected.value
+	func clear_stash_move_rejected() -> void:
+		data[25].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_stash_move_rejected() -> StashMoveRejected:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		data[25].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 25
+		__stash_move_rejected.value = StashMoveRejected.new()
+		return __stash_move_rejected.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -2687,6 +3044,13 @@ class RunSummary:
 		service.func_ref = Callable(self, "add_kept")
 		data[__kept.tag] = service
 		
+		var __overflow_default: Array[Item] = []
+		__overflow = PBField.new("overflow", PB_DATA_TYPE.MESSAGE, PB_RULE.REPEATED, 7, true, __overflow_default)
+		service = PBServiceField.new()
+		service.field = __overflow
+		service.func_ref = Callable(self, "add_overflow")
+		data[__overflow.tag] = service
+		
 	var data = {}
 	
 	var __extracted: PBField
@@ -2764,6 +3128,17 @@ class RunSummary:
 	func add_kept() -> Item:
 		var element = Item.new()
 		__kept.value.append(element)
+		return element
+	
+	var __overflow: PBField
+	func get_overflow() -> Array[Item]:
+		return __overflow.value
+	func clear_overflow() -> void:
+		data[7].state = PB_SERVICE_STATE.UNFILLED
+		__overflow.value.clear()
+	func add_overflow() -> Item:
+		var element = Item.new()
+		__overflow.value.append(element)
 		return element
 	
 	func _to_string() -> String:
@@ -4903,6 +5278,296 @@ class UseRequest:
 		__item_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
 	func set_item_id(value : String) -> void:
 		__item_id.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class Lobby:
+	func _init():
+		var service
+		
+		__character = PBField.new("character", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __character
+		service.func_ref = Callable(self, "new_character")
+		data[__character.tag] = service
+		
+		__class_info = PBField.new("class_info", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __class_info
+		service.func_ref = Callable(self, "new_class_info")
+		data[__class_info.tag] = service
+		
+	var data = {}
+	
+	var __character: PBField
+	func has_character() -> bool:
+		if __character.value != null:
+			return true
+		return false
+	func get_character() -> CharacterInfo:
+		return __character.value
+	func clear_character() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__character.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_character() -> CharacterInfo:
+		__character.value = CharacterInfo.new()
+		return __character.value
+	
+	var __class_info: PBField
+	func has_class_info() -> bool:
+		if __class_info.value != null:
+			return true
+		return false
+	func get_class_info() -> ClassInfo:
+		return __class_info.value
+	func clear_class_info() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__class_info.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_class_info() -> ClassInfo:
+		__class_info.value = ClassInfo.new()
+		return __class_info.value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class StashContents:
+	func _init():
+		var service
+		
+		var __items_default: Array[Item] = []
+		__items = PBField.new("items", PB_DATA_TYPE.MESSAGE, PB_RULE.REPEATED, 1, true, __items_default)
+		service = PBServiceField.new()
+		service.field = __items
+		service.func_ref = Callable(self, "add_items")
+		data[__items.tag] = service
+		
+		__capacity = PBField.new("capacity", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __capacity
+		data[__capacity.tag] = service
+		
+	var data = {}
+	
+	var __items: PBField
+	func get_items() -> Array[Item]:
+		return __items.value
+	func clear_items() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__items.value.clear()
+	func add_items() -> Item:
+		var element = Item.new()
+		__items.value.append(element)
+		return element
+	
+	var __capacity: PBField
+	func has_capacity() -> bool:
+		if __capacity.value != null:
+			return true
+		return false
+	func get_capacity() -> int:
+		return __capacity.value
+	func clear_capacity() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__capacity.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_capacity(value : int) -> void:
+		__capacity.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+enum ItemPlace {
+	UNSPECIFIED = 0,
+	STASH = 1,
+	BAG = 2,
+	GEAR = 3
+}
+
+class StashMoveRequest:
+	func _init():
+		var service
+		
+		__item_id = PBField.new("item_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __item_id
+		data[__item_id.tag] = service
+		
+		__to = PBField.new("to", PB_DATA_TYPE.ENUM, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.ENUM])
+		service = PBServiceField.new()
+		service.field = __to
+		data[__to.tag] = service
+		
+	var data = {}
+	
+	var __item_id: PBField
+	func has_item_id() -> bool:
+		if __item_id.value != null:
+			return true
+		return false
+	func get_item_id() -> String:
+		return __item_id.value
+	func clear_item_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__item_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_item_id(value : String) -> void:
+		__item_id.value = value
+	
+	var __to: PBField
+	func has_to() -> bool:
+		if __to.value != null:
+			return true
+		return false
+	func get_to():
+		return __to.value
+	func clear_to() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__to.value = DEFAULT_VALUES_3[PB_DATA_TYPE.ENUM]
+	func set_to(value) -> void:
+		__to.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class StashMoveRejected:
+	func _init():
+		var service
+		
+		__item_id = PBField.new("item_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __item_id
+		data[__item_id.tag] = service
+		
+		__reason = PBField.new("reason", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __reason
+		data[__reason.tag] = service
+		
+	var data = {}
+	
+	var __item_id: PBField
+	func has_item_id() -> bool:
+		if __item_id.value != null:
+			return true
+		return false
+	func get_item_id() -> String:
+		return __item_id.value
+	func clear_item_id() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__item_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_item_id(value : String) -> void:
+		__item_id.value = value
+	
+	var __reason: PBField
+	func has_reason() -> bool:
+		if __reason.value != null:
+			return true
+		return false
+	func get_reason() -> String:
+		return __reason.value
+	func clear_reason() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__reason.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_reason(value : String) -> void:
+		__reason.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class EnterCaveRequest:
+	func _init():
+		var service
+		
+	var data = {}
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

@@ -177,10 +177,11 @@ func TestExtractionBanksRunXPAndBonus(t *testing.T) {
 	w.SetExtraction(Rect{Vec2{-50, -50}, Vec2{50, 50}})
 	id := w.AddPlayer(Vec2{})
 	w.AddRunXP(id, 115)
-	w.Restore(id, inventory.Loadout{Items: []items.Instance{potion("p", 2)}})
+	helm := gear(items.Head, map[items.Stat]int{items.Armor: 2})
+	w.Restore(id, inventory.Loadout{Equipment: []items.Instance{helm}, Items: []items.Instance{potion("p", 2)}})
 
 	ev := w.Step(dt)
-	want := RunEnd{Player: id, Class: "warrior", Extracted: true, RunXP: 115, Banked: 168, XP: 168, Level: 2, Levels: 1, Kept: []items.Instance{potion("p", 2)}}
+	want := RunEnd{Player: id, Class: "warrior", Extracted: true, RunXP: 115, Banked: 168, XP: 168, Level: 2, Levels: 1, Kept: []items.Instance{potion("p", 2)}, Gear: []items.Instance{helm}}
 	if len(ev.RunEnded) != 1 || !reflect.DeepEqual(ev.RunEnded[0], want) || len(ev.Extracted) != 1 {
 		t.Fatalf("run ended = %+v, extracted %v, want %+v", ev.RunEnded, ev.Extracted, want)
 	}

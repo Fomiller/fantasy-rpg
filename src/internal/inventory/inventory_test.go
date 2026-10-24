@@ -104,3 +104,26 @@ func TestMemoryStoreXP(t *testing.T) {
 		t.Fatalf("players share xp: bob has %d", xp)
 	}
 }
+
+func TestMemoryStoreStash(t *testing.T) {
+	ctx := context.Background()
+	m := NewMemory()
+	if stash, err := m.LoadStash(ctx, "ann"); err != nil || len(stash) != 0 {
+		t.Fatalf("new player stash = %v, %v", stash, err)
+	}
+	stash := []items.Instance{sword("s"), potions("p", 3)}
+	m.SaveStash(ctx, "ann", stash)
+	stash[1].Quantity = 99
+
+	got, _ := m.LoadStash(ctx, "ann")
+	if len(got) != 2 || got[0].ID != "s" || got[1].Quantity != 3 {
+		t.Fatalf("stash = %+v", got)
+	}
+	m.Delete(ctx, "ann")
+	if got, _ := m.LoadStash(ctx, "ann"); len(got) != 2 {
+		t.Fatalf("stash = %+v, want it kept after the loadout is deleted", got)
+	}
+	if got, _ := m.LoadStash(ctx, "bob"); len(got) != 0 {
+		t.Fatalf("players share a stash: bob has %+v", got)
+	}
+}

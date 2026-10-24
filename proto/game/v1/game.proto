@@ -18,6 +18,8 @@ message ClientMessage {
     UseRequest use = 17;
     LootOpenRequest loot_open = 18;
     LootCloseRequest loot_close = 19;
+    EnterCaveRequest enter_cave = 20;
+    StashMoveRequest stash_move = 21;
   }
 }
 
@@ -37,6 +39,9 @@ message ServerMessage {
     XpGained xp_gained = 20;
     LevelUp level_up = 21;
     RunEnded run_ended = 22;
+    Lobby lobby = 23;
+    StashContents stash = 24;
+    StashMoveRejected stash_move_rejected = 25;
   }
 }
 
@@ -52,12 +57,15 @@ message Rect {
 
 // Player
 
+// JoinRequest puts the player in the lobby. EnterCaveRequest then puts them
+// in the cave.
 message JoinRequest {
   string name = 1;
   // Empty means warrior. An unknown class closes the connection.
   string class_id = 2;
 }
 
+// JoinAccepted is sent when the player enters the cave.
 message JoinAccepted {
   uint64 player_id = 1;
   CaveLayout cave = 2;
@@ -111,15 +119,15 @@ message AbilityInfo {
   uint32 unlock_level = 7;
 }
 
-// Extracted is sent to everyone in the cave. The extracting player's
-// connection closes right after.
+// Extracted is sent to everyone in the cave. The extracting player goes back
+// to the lobby right after.
 message Extracted {
   uint64 player_id = 1;
   // Only in the copy sent to the player who extracted.
   RunSummary summary = 2;
 }
 
-// RunEnded is sent to a player who died. They stay in the cave, dead.
+// RunEnded is sent to a player who died. They go back to the lobby right after.
 message RunEnded {
   RunSummary summary = 1;
 }
@@ -136,6 +144,8 @@ message RunSummary {
   CharacterInfo character = 5;
   // The bag the player left with. Empty on death, since it all drops.
   repeated Item kept = 6;
+  // Kept items the stash had no room for. They stay in the bag.
+  repeated Item overflow = 7;
 }
 
 // XpGained is sent to the player who earned it.
@@ -386,3 +396,45 @@ message DropRequest {
 message UseRequest {
   string item_id = 1;
 }
+
+// Lobby
+
+// Lobby is sent on join and after every run. The player is out of the cave
+// until they send EnterCaveRequest. EquipmentUpdated, InventoryUpdated and
+// StashContents follow it.
+message Lobby {
+  CharacterInfo character = 1;
+  ClassInfo class_info = 2;
+}
+
+// StashContents is everything in the player's stash. It is sent in the lobby
+// whenever it changes.
+message StashContents {
+  repeated Item items = 1;
+  uint32 capacity = 2;
+}
+
+enum ItemPlace {
+  ITEM_PLACE_UNSPECIFIED = 0;
+  ITEM_PLACE_STASH = 1;
+  ITEM_PLACE_BAG = 2;
+  ITEM_PLACE_GEAR = 3;
+}
+
+// StashMoveRequest moves a whole item to the stash, the bag or its gear slot.
+// Lobby only. Gear already in the slot goes where the item came from. A
+// stack that only partly fits leaves the rest where it was.
+message StashMoveRequest {
+  string item_id = 1;
+  ItemPlace to = 2;
+}
+
+// StashMoveRejected is sent to the player whose move did nothing.
+message StashMoveRejected {
+  string item_id = 1;
+  // One of not_in_lobby, unknown_item, full, cannot_equip.
+  string reason = 2;
+}
+
+// EnterCaveRequest leaves the lobby. The server answers with JoinAccepted.
+message EnterCaveRequest {}

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
@@ -157,5 +158,53 @@ func TestStatsSumClassAndGear(t *testing.T) {
 	got = w.Stats(p)
 	if got[items.Damage] != 17 || got[items.Armor] != 13 || got[items.MoveSpeed] != cfg.MoveSpeedCap {
 		t.Fatalf("geared stats = %v", got)
+	}
+}
+
+func TestCanEquip(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	staff := gear(items.Weapon, nil)
+	staff.WeaponType = items.Staff
+	for _, tc := range []struct {
+		class string
+		inst  items.Instance
+		ok    bool
+	}{
+		{"warrior", gear(items.Head, nil), true},
+		{"warrior", gear(items.Weapon, nil), true},
+		{"warrior", staff, false},
+		{"warrior", gear(items.Consumable, nil), false},
+		{"necromancer", gear(items.Head, nil), false},
+	} {
+		if err := w.CanEquip(tc.class, tc.inst); (err == nil) != tc.ok {
+			t.Errorf("CanEquip(%s, %s %s) = %v, want ok %v", tc.class, tc.inst.Slot, tc.inst.WeaponType, err, tc.ok)
+		}
+	}
+}
+
+// A preview has the stats a run would start with, and is not in the world.
+func TestPreview(t *testing.T) {
+	cfg := passive()
+	w := NewWorld(cfg, nil)
+	xp := cfg.Classes.Progression.XPToReach(2)
+	l := inventory.Loadout{
+		Equipment: []items.Instance{gear(items.Chest, map[items.Stat]int{items.Armor: 8})},
+		Items:     []items.Instance{potion("p", 2)},
+	}
+	p, err := w.Preview("warrior", xp, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Level != 2 || w.Stats(p)[items.Armor] != 13 || len(p.Inventory.Items) != 1 || p.Inventory.Size != cfg.InventorySize {
+		t.Fatalf("preview = %+v, stats %v", p, w.Stats(p))
+	}
+	if p.Health != p.MaxHealth || p.MaxHealth != w.Stats(p)[items.MaxHealth] {
+		t.Fatalf("preview health = %d/%d", p.Health, p.MaxHealth)
+	}
+	if len(w.Players()) != 0 {
+		t.Fatal("preview added a player to the world")
+	}
+	if _, err := w.Preview("necromancer", 0, l); err == nil {
+		t.Fatal("previewed an unknown class")
 	}
 }

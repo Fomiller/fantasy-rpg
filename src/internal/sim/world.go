@@ -211,6 +211,11 @@ func (w *World) SeedAI(seed uint64) {
 	w.ai = newAI(seed)
 }
 
+// BagSize is how many entries a player's bag holds.
+func (w *World) BagSize() int {
+	return w.cfg.InventorySize
+}
+
 // SetExtraction marks the zone players stand in to leave the cave.
 func (w *World) SetExtraction(r Rect) {
 	w.exit = &r
@@ -239,14 +244,32 @@ func (w *World) AddPlayerAs(pos Vec2, class string, xp int) (EntityID, error) {
 
 func (w *World) addPlayer(pos Vec2, c classes.Class, xp int) EntityID {
 	w.nextID++
+	p := w.newPlayer(c, xp)
+	p.ID = w.nextID
+	p.Pos = pos
+	w.players[p.ID] = p
+	return p.ID
+}
+
+// Preview is the player a loadout would make, without adding them to the
+// world. The lobby uses it to show stats before a run.
+func (w *World) Preview(class string, xp int, l inventory.Loadout) (Player, error) {
+	c, ok := w.cfg.Classes.Classes[class]
+	if !ok {
+		return Player{}, fmt.Errorf("unknown class %q", class)
+	}
+	p := w.newPlayer(c, xp)
+	w.restore(p, l)
+	return *p, nil
+}
+
+func (w *World) newPlayer(c classes.Class, xp int) *Player {
 	p := &Player{
-		ID:          w.nextID,
 		Class:       c.ID,
 		Level:       w.cfg.Classes.Progression.LevelFor(xp),
 		XP:          xp,
 		Resource:    float64(c.Resource.Start),
 		MaxResource: c.Resource.Max,
-		Pos:         pos,
 		Equipment:   map[items.Slot]items.Instance{},
 		Inventory:   inventory.Bag{Size: w.cfg.InventorySize},
 		class:       c,
@@ -254,8 +277,7 @@ func (w *World) addPlayer(pos Vec2, c classes.Class, xp int) EntityID {
 		statuses:    map[classes.StatusKind]status{},
 	}
 	w.applyGear(p)
-	w.players[p.ID] = p
-	return p.ID
+	return p
 }
 
 func (w *World) AddEnemy(pos Vec2, archetype ArchetypeID) EntityID {

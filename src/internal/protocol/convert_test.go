@@ -258,3 +258,25 @@ func TestProgressionMessages(t *testing.T) {
 		t.Fatalf("death summary = %v, want no items kept", got)
 	}
 }
+
+func TestLobbyMessages(t *testing.T) {
+	data := classes.Default()
+	character := Character(data.Progression, "ann", "warrior", 1, 0, 0)
+	lobby := Lobby(character, ClassInfo(data, classes.Starter)).GetLobby()
+	if lobby.GetCharacter() != character || lobby.GetClassInfo().GetId() != "warrior" {
+		t.Fatalf("lobby = %v", lobby)
+	}
+
+	r := items.NewRoller(items.Default(), 1)
+	potion, err := r.Make("health_potion", 1, items.Common)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stash := Stash(inventory.Bag{Size: inventory.StashSize, Items: []items.Instance{potion}}).GetStash()
+	if stash.GetCapacity() != 100 || len(stash.GetItems()) != 1 || !proto.Equal(stash.GetItems()[0], Item(potion)) {
+		t.Fatalf("stash = %v", stash)
+	}
+	if r := StashMoveRejected("x", "full").GetStashMoveRejected(); r.GetItemId() != "x" || r.GetReason() != "full" {
+		t.Fatalf("rejected = %v", r)
+	}
+}
