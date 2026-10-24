@@ -134,7 +134,7 @@ func (r *Roller) rarity(def Def, boost int) Rarity {
 }
 
 func (r *Roller) roll(def Def, level int, rarity Rarity) Instance {
-	inst := Instance{ID: newID(), DefID: def.ID, Name: def.Name, Slot: def.Slot, WeaponType: def.WeaponType, Rarity: rarity, Level: level, Base: map[Stat]int{}, Quantity: 1, Stack: def.Stack}
+	inst := Instance{ID: NewID(), DefID: def.ID, Name: def.Name, Slot: def.Slot, WeaponType: def.WeaponType, Rarity: rarity, Level: level, Base: map[Stat]int{}, Quantity: 1, Stack: def.Stack}
 	// Sorted so the same seed rolls stats in the same order.
 	for _, s := range sortedStats(def.Base) {
 		inst.Base[s] = r.between(def.Base[s])
@@ -203,9 +203,9 @@ func sortedStats(m map[Stat]Range) []Stat {
 	return out
 }
 
-// newID is a random UUIDv4. It comes from crypto/rand, not the run seed,
+// NewID is a random UUIDv4. It comes from crypto/rand, not the run seed,
 // because ids must stay unique across runs once items are saved.
-func newID() string {
+func NewID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	b[6] = b[6]&0x0f | 0x40

@@ -1,8 +1,6 @@
 package server
 
 import (
-	"context"
-	"fmt"
 	"slices"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
@@ -135,35 +133,16 @@ func (lb *lobby) bagAt(place gamev1.ItemPlace) *inventory.Bag {
 	return &lb.bag
 }
 
-// openLobby loads the player's items and sends them. A player with no saved
-// loadout gets the starter kit, saved right away so it is theirs to stash.
-func (s *Server) openLobby(c *client) error {
-	ctx := context.Background()
-	xp, err := s.Store.LoadXP(ctx, c.name)
-	if err != nil {
-		return fmt.Errorf("load xp: %w", err)
-	}
-	l, ok, err := s.Store.Load(ctx, c.name)
-	if err != nil {
-		return fmt.Errorf("load loadout: %w", err)
-	}
-	if !ok {
-		l = s.starterKit()
-		if err := s.Store.Save(ctx, c.name, l); err != nil {
-			return fmt.Errorf("save starter kit: %w", err)
-		}
-	}
-	stash, err := s.Store.LoadStash(ctx, c.name)
-	if err != nil {
-		return fmt.Errorf("load stash: %w", err)
-	}
-	c.lobby = newLobby(xp, s.world.BagSize(), l, stash)
+// openLobby puts the player in the lobby with ch and sends it. ch is what
+// the store has, or is about to have once the player's queued writes land.
+func (s *Server) openLobby(c *client, ch inventory.Character) {
+	c.lobby = newLobby(ch.XP, s.world.BagSize(), ch.Loadout, ch.Stash)
+	c.runID, c.stash = "", nil
 
 	prog := s.world.Classes().Progression
-	level := prog.LevelFor(xp)
-	s.sendToClient(c, protocol.Lobby(protocol.Character(prog, c.name, c.class, level, xp, 0), protocol.ClassInfo(s.world.Classes(), c.class)))
+	level := prog.LevelFor(ch.XP)
+	s.sendToClient(c, protocol.Lobby(protocol.Character(prog, c.name, c.class, level, ch.XP, 0), protocol.ClassInfo(s.world.Classes(), c.class)))
 	s.sendLobbyItems(c)
-	return nil
 }
 
 func (s *Server) sendLobbyItems(c *client) {
@@ -187,15 +166,7 @@ func (s *Server) moveItem(c *client, req *gamev1.StashMoveRequest) {
 		s.sendToClient(c, protocol.StashMoveRejected(req.GetItemId(), reason))
 		return
 	}
-	ctx := context.Background()
-	// An empty loadout is saved, not deleted, or stashing everything would
-	// hand out a new starter kit.
-	if err := s.Store.Save(ctx, c.name, c.lobby.loadout()); err != nil {
-		s.log.Error("save loadout", "name", c.name, "err", err)
-	}
-	if err := s.Store.SaveStash(ctx, c.name, c.lobby.stash.Items); err != nil {
-		s.log.Error("save stash", "name", c.name, "err", err)
-	}
+	s.saveLobby(c)
 	s.sendLobbyItems(c)
 }
 
@@ -214,7 +185,7 @@ func (s *Server) enterCave(c *client) {
 		s.log.Error("restore loadout", "player", id, "err", err)
 	}
 	s.spawns++
-	c.id, c.lobby = id, nil
+	c.id, c.runID, c.stash, c.lobby = id, items.NewID(), c.lobby.stash.Items, nil
 	s.clients[id] = c
 	p, _ := s.world.Player(id)
 	class := protocol.ClassInfo(s.world.Classes(), p.Class)
@@ -224,17 +195,10 @@ func (s *Server) enterCave(c *client) {
 	s.log.Info("player entered the cave", "player", id, "name", c.name)
 }
 
-// stashKept moves an extracted bag into the stash. What does not fit stays
-// in the bag, and is returned so the summary can say so.
-func (s *Server) stashKept(name string, kept, gear []items.Instance) []items.Instance {
-	ctx := context.Background()
-	saved, err := s.Store.LoadStash(ctx, name)
-	if err != nil {
-		// Saving over a stash that did not load would wipe it, so keep it all in the bag.
-		s.log.Error("load stash", "name", name, "err", err)
-		return kept
-	}
-	stash := inventory.Bag{Size: inventory.StashSize, Items: saved}
+// stashKept adds an extracted bag to a copy of the stash. What does not fit
+// stays in the bag, and is returned so the summary can say so.
+func stashKept(saved, kept []items.Instance) ([]items.Instance, []items.Instance) {
+	stash := inventory.Bag{Size: inventory.StashSize, Items: slices.Clone(saved)}
 	var overflow []items.Instance
 	for _, inst := range kept {
 		if left := stash.Add(inst); left > 0 {
@@ -242,26 +206,16 @@ func (s *Server) stashKept(name string, kept, gear []items.Instance) []items.Ins
 			overflow = append(overflow, inst)
 		}
 	}
-	if err := s.Store.SaveStash(ctx, name, stash.Items); err != nil {
-		s.log.Error("save stash", "name", name, "err", err)
-		return kept
-	}
-	if err := s.Store.Save(ctx, name, inventory.Loadout{Equipment: gear, Items: overflow}); err != nil {
-		s.log.Error("save loadout", "name", name, "err", err)
-	}
-	return overflow
+	return stash.Items, overflow
 }
 
 // toLobby takes a player whose run ended out of the cave.
-func (s *Server) toLobby(id sim.EntityID) {
+func (s *Server) toLobby(id sim.EntityID, ch inventory.Character) {
 	c, ok := s.clients[id]
 	if !ok {
 		return
 	}
 	delete(s.clients, id)
 	c.id = 0
-	if err := s.openLobby(c); err != nil {
-		s.log.Error("open lobby", "name", c.name, "err", err)
-		c.cancel()
-	}
+	s.openLobby(c, ch)
 }

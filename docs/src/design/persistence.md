@@ -44,9 +44,9 @@ It builds on the save model in [Progression](progression.md). FOM-114
 - Each of the later systems gets its own design note when a feature needs
   it. This page does not size or deploy them.
 
-## Where the code saves today
+## Where the code saved before FOM-220
 
-All `Store` calls run on the tick goroutine, either in `Step` or in a
+All `Store` calls ran on the tick goroutine, either in `Step` or in a
 closure from the inbox:
 
 | Call | Where | When |
@@ -59,7 +59,7 @@ closure from the inbox:
 | `LoadStash`, `SaveStash`, `Save` | `stashKept` in `lobby.go` | Extraction |
 | `Delete` | `endRun` in `server.go` | Death |
 
-With the memory store this is fine. With Postgres every one of these would
+With the memory store this was fine. With Postgres every one of these would
 block the tick. A run end is up to four separate writes, so a crash between
 them can bank the XP and lose the stash. The store changes below fix both.
 
@@ -161,7 +161,7 @@ are replaced by the JSONB columns above.
 
 ## Store interface
 
-FOM-216 replaces the seven calls with four. Each write is one call and one
+FOM-220 replaced the seven calls with four. Each write is one call and one
 transaction, and it writes whole values, never a change against what is
 stored.
 
@@ -189,7 +189,7 @@ type Store interface {
 ```
 
 - The server builds the whole result before it calls the store. On
-  extraction it adds the bag to the stash with `Bag.Add`, as `stashKept`
+  extraction it adds the bag to the stash with `Bag.Add`, in `stashKept`
   does now. On death the loadout is a fresh starter kit. Then `EndRun`
   writes the lot.
 - The server keeps the stash in memory from the lobby through the run, so
@@ -232,8 +232,13 @@ progress".
 - When a write finishes, the writer sends the result back through
   `Server.inbox`. The lobby opens from the `Character` the server already
   has, not from a fresh `Load`.
-- The join `Load` runs on the connection goroutine in `HandleWS`, before the
-  join is put on the inbox. Only the name claim in `conns` stays on the tick.
+- A join claims the name in `conns` on the tick first. Then `Load`, and
+  `Create` for a new character, run on the connection goroutine in
+  `HandleWS`. Only the starter kit is made on the tick, since the item
+  roller is not safe to share.
+- The name stays claimed until the writer has run the player's last write.
+  A rejoin before then gets "name already playing", so it can never load a
+  character that a queued `EndRun` is about to change.
 - Each call gets a 2 s timeout. Join has 5 s in total today
   (`joinTimeout`), which still fits.
 
@@ -261,6 +266,11 @@ it delays saves.
 - Metrics: `store_duration_seconds` by call, `store_errors_total` by call,
   and `store_pending_saves`. An alert on pending saves above 0 for 5 minutes
   catches an outage.
+
+FOM-220 does the join row: close code 1013 and no starter kit. `EndRun`
+retries for 10 s, then logs the error and drops the result. A failed
+`SaveLobby` is only logged. The pending save, the undo and the `saving`
+reason wait for FOM-223.
 
 The `saving` state needs two protocol changes: a `saving` field on `Lobby`
 and a new `saving` reason on `StashMoveRejected`. The client also needs to
