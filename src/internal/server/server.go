@@ -31,7 +31,7 @@ const (
 type Server struct {
 	// TickRate is sent to clients on join. It must match the tick loop.
 	TickRate int
-	// Store keeps loadouts by player name. Set it before serving.
+	// Store keeps loadouts and banked XP by player name. Set it before serving.
 	Store   inventory.Store
 	world   *sim.World
 	cave    caves.Cave
@@ -93,6 +93,9 @@ func (s *Server) Step(dt time.Duration) {
 	for _, ev := range events.Damage {
 		s.broadcast(protocol.Damage(ev))
 	}
+	for _, end := range events.RunEnded {
+		s.saveXP(end)
+	}
 	for _, id := range events.Extracted {
 		s.broadcast(protocol.Extracted(id))
 		if c, ok := s.clients[id]; ok {
@@ -135,6 +138,16 @@ func (s *Server) sendItems(id sim.EntityID) {
 	}
 	if err != nil {
 		s.log.Error("save loadout", "player", id, "name", c.name, "err", err)
+	}
+}
+
+func (s *Server) saveXP(end sim.RunEnd) {
+	c, ok := s.clients[end.Player]
+	if !ok {
+		return
+	}
+	if err := s.Store.SaveXP(context.Background(), c.name, end.XP); err != nil {
+		s.log.Error("save xp", "player", end.Player, "name", c.name, "err", err)
 	}
 }
 
@@ -257,8 +270,13 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 			joined <- result{err: errors.New("name already playing")}
 			return
 		}
+		xp, err := s.Store.LoadXP(context.Background(), name)
+		if err != nil {
+			joined <- result{err: err}
+			return
+		}
 		spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
-		id, err := s.world.AddPlayerAs(spawn, join.GetClassId(), 0)
+		id, err := s.world.AddPlayerAs(spawn, join.GetClassId(), xp)
 		if err != nil {
 			joined <- result{err: err}
 			return
@@ -294,7 +312,9 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	log.Info("player joined")
 	defer func() {
 		s.enqueue(func() {
-			s.world.RemovePlayer(id)
+			if end, ok := s.world.RemovePlayer(id); ok {
+				s.saveXP(end)
+			}
 			delete(s.clients, id)
 		})
 		log.Info("player left")

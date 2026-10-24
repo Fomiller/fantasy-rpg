@@ -92,7 +92,7 @@ wins, as the rule asks.
 | Melee kill | 10 | Every player who hit it in the last 10 s |
 | Ranged kill | 10 | Same |
 | Elite kill | 40 | Same |
-| Open a chest | 5 | The player who opens it |
+| Open a chest | 5 | The player who opens it, once per chest |
 | Extract | 25, plus 25% of run XP | The player who extracts |
 
 - Full XP to each player who helped, not a split. Co-op players should
@@ -303,8 +303,8 @@ Today a disconnect keeps all loot. That makes "pull the plug" a free escape.
 ## Data file changes
 
 FOM-100 owns the format, this adds fields. FOM-211 built `per_level` and
-`progression.json`. `unlock_level` and the `Archetype` field are still
-proposals.
+`progression.json`. FOM-212 added the `Archetype` field. `unlock_level` is
+still a proposal.
 
 `classes.json`, new fields on a class:
 

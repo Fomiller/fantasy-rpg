@@ -18,6 +18,8 @@ type Pile struct {
 	Items []items.Instance
 	// version goes up whenever Items changes, so open loot windows know to update.
 	version uint64
+	// openedBy is who has had chest XP from this chest.
+	openedBy map[EntityID]bool
 }
 
 // Why a pickup took nothing.
@@ -260,12 +262,13 @@ func (w *World) pickup(p *Player, c PickupCommand) string {
 	return ""
 }
 
-func (w *World) applyLoot(cmd any) {
+func (w *World) applyLoot(cmd any, ev *Events) {
 	switch c := cmd.(type) {
 	case OpenLootCommand:
 		if p, ok := w.players[c.Player]; ok {
 			// Zero is never a pile's version, so the next Step sends the contents.
 			p.looting, p.lootSeen = c.Target, 0
+			w.openChest(p, c.Target, ev)
 		}
 	case CloseLootCommand:
 		if p, ok := w.players[c.Player]; ok && p.looting == c.Target {
@@ -295,28 +298,53 @@ func (w *World) stepLoot(ev *Events) {
 	}
 }
 
-// dropOnKill drops loot where enemies die, and drops everything a dead
-// player carried as one bag where they fell.
-func (w *World) dropOnKill(ev *Events) {
+// openChest gives chest XP the first time each player opens a chest, so
+// opening it again gives nothing.
+func (w *World) openChest(p *Player, id EntityID, ev *Events) {
+	pile, ok := w.piles[id]
+	if !ok || !pile.Chest || p.Health <= 0 || pile.openedBy[p.ID] || p.Pos.DistanceTo(pile.Pos) > w.cfg.PickupRange {
+		return
+	}
+	if pile.openedBy == nil {
+		pile.openedBy = map[EntityID]bool{}
+	}
+	pile.openedBy[p.ID] = true
+	w.grantXP(p, w.cfg.Classes.Progression.ChestXP, XPChest, ev)
+}
+
+// onKill grants kill XP and drops loot where enemies die. A dead player
+// banks their death share of run XP and drops everything as one bag.
+func (w *World) onKill(ev *Events) {
 	for _, d := range ev.Damage {
-		if !d.Killed {
+		e, ok := w.enemies[d.Target]
+		if !ok || !d.Killed {
 			continue
 		}
-		if e, ok := w.enemies[d.Target]; ok && w.loot != nil {
+		w.grantKillXP(e, ev)
+		if w.loot != nil {
 			if drop := w.loot.Drop(w.cfg.Archetypes[e.Archetype].Loot, w.cfg.LootLevel, 1); len(drop) > 0 {
 				w.AddPile(e.Pos, drop)
 			}
 		}
-		if p, ok := w.players[d.Target]; ok {
-			l := p.Loadout()
-			if !l.Empty() {
-				w.AddPile(p.Pos, append(l.Equipment, l.Items...))
-			}
-			p.Equipment = map[items.Slot]items.Instance{}
-			p.Inventory.Items = nil
-			p.stats = baseStats(p.class)
-			p.MaxHealth = p.stats[items.MaxHealth]
-			ev.changed(p.ID)
+	}
+	// After kill XP, so a player who kills and dies on the same tick banks a share of it.
+	for _, d := range ev.Damage {
+		p, ok := w.players[d.Target]
+		if !ok || !d.Killed {
+			continue
 		}
+		if end, ok := w.endRun(p, false); ok {
+			ev.RunEnded = append(ev.RunEnded, end)
+		}
+		l := p.Loadout()
+		if !l.Empty() {
+			w.AddPile(p.Pos, append(l.Equipment, l.Items...))
+		}
+		p.Equipment = map[items.Slot]items.Instance{}
+		p.Inventory.Items = nil
+		// Not applyGear, which would bring the player back to 1 health.
+		sumStats(p)
+		p.MaxHealth = p.stats[items.MaxHealth]
+		ev.changed(p.ID)
 	}
 }

@@ -12,6 +12,10 @@ type Store interface {
 	Load(ctx context.Context, name string) (Loadout, bool, error)
 	Save(ctx context.Context, name string, l Loadout) error
 	Delete(ctx context.Context, name string) error
+	// Banked XP is kept apart from the loadout, which is deleted when a
+	// player loses everything. It is 0 for a new player.
+	LoadXP(ctx context.Context, name string) (int, error)
+	SaveXP(ctx context.Context, name string, xp int) error
 }
 
 // Memory is a Store that lasts as long as the process. Postgres replaces it
@@ -19,10 +23,11 @@ type Store interface {
 type Memory struct {
 	mu       sync.Mutex
 	loadouts map[string]Loadout
+	xp       map[string]int
 }
 
 func NewMemory() *Memory {
-	return &Memory{loadouts: map[string]Loadout{}}
+	return &Memory{loadouts: map[string]Loadout{}, xp: map[string]int{}}
 }
 
 func (m *Memory) Load(_ context.Context, name string) (Loadout, bool, error) {
@@ -43,6 +48,19 @@ func (m *Memory) Delete(_ context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.loadouts, name)
+	return nil
+}
+
+func (m *Memory) LoadXP(_ context.Context, name string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.xp[name], nil
+}
+
+func (m *Memory) SaveXP(_ context.Context, name string, xp int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.xp[name] = xp
 	return nil
 }
 

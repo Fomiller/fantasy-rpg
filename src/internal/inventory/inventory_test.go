@@ -87,3 +87,20 @@ func TestMemoryStore(t *testing.T) {
 		t.Fatal("loadout survived delete")
 	}
 }
+
+func TestMemoryStoreXP(t *testing.T) {
+	ctx := context.Background()
+	m := NewMemory()
+	if xp, err := m.LoadXP(ctx, "ann"); err != nil || xp != 0 {
+		t.Fatalf("new player xp = %d, %v", xp, err)
+	}
+	m.SaveXP(ctx, "ann", 168)
+	m.Save(ctx, "ann", Loadout{Items: []items.Instance{potions("p", 1)}})
+	m.Delete(ctx, "ann")
+	if xp, _ := m.LoadXP(ctx, "ann"); xp != 168 {
+		t.Fatalf("xp = %d, want it kept after the loadout is deleted", xp)
+	}
+	if xp, _ := m.LoadXP(ctx, "bob"); xp != 0 {
+		t.Fatalf("players share xp: bob has %d", xp)
+	}
+}

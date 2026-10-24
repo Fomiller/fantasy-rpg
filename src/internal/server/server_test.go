@@ -27,6 +27,7 @@ import (
 type harness struct {
 	url   string
 	enemy sim.EntityID
+	srv   *Server
 }
 
 // testCave spawns players at the origin, next to one enemy, with the exit
@@ -72,7 +73,7 @@ func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 		cancel()
 		srv.Close()
 	})
-	return harness{url: "ws" + strings.TrimPrefix(hs.URL, "http"), enemy: enemy}
+	return harness{url: "ws" + strings.TrimPrefix(hs.URL, "http"), enemy: enemy, srv: srv}
 }
 
 func dial(t *testing.T, url string) *websocket.Conn {
@@ -573,4 +574,31 @@ func chestID(t *testing.T, conn *websocket.Conn) uint64 {
 		return false
 	})
 	return chest
+}
+
+func TestExtractionSavesXP(t *testing.T) {
+	cave := testCave()
+	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
+	cfg := sim.DefaultConfig()
+	cfg.ExtractTime = 100 * time.Millisecond
+	h := startCave(t, cave, cfg)
+
+	conn := dial(t, h.url)
+	id := joinAs(t, conn, "ann").GetPlayerId()
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
+	// An empty run still banks the flat extraction bonus.
+	if xp, err := h.srv.Store.LoadXP(context.Background(), "ann"); err != nil || xp != cfg.Classes.Progression.ExtractBonus {
+		t.Fatalf("saved xp = %d, %v", xp, err)
+	}
+}
+
+func TestJoinLoadsBankedXP(t *testing.T) {
+	h := start(t)
+	prog := sim.DefaultConfig().Classes.Progression
+	h.srv.Store.SaveXP(context.Background(), "ann", prog.XPToReach(prog.MaxLevel))
+	conn := dial(t, h.url)
+	joinAs(t, conn, "ann")
+	if eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment(); stat(eq, "max_health") != 165 {
+		t.Fatalf("max health = %d, want the level 10 bonus", stat(eq, "max_health"))
+	}
 }

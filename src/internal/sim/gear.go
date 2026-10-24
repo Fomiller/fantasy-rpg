@@ -36,15 +36,7 @@ func (w *World) Equip(id EntityID, inst items.Instance) (items.Instance, bool, e
 // max health moves current health by the same amount, so swapping gear
 // never heals.
 func (w *World) applyGear(p *Player) {
-	p.stats = baseStats(p.class)
-	for s, v := range p.class.PerLevel {
-		p.stats[s] += v * (p.Level - 1)
-	}
-	for _, inst := range p.Equipment {
-		for s, v := range inst.Stats() {
-			p.stats[s] += v
-		}
-	}
+	sumStats(p)
 	maxHealth := p.stats[items.MaxHealth]
 	p.Health = max(min(p.Health+maxHealth-p.MaxHealth, maxHealth), 1)
 	p.MaxHealth = maxHealth
@@ -61,6 +53,18 @@ func (w *World) Stats(p Player) map[items.Stat]int {
 	out[items.Damage] = w.attackDamage(&p)
 	out[items.MoveSpeed] = min(out[items.MoveSpeed], w.cfg.MoveSpeedCap)
 	return out
+}
+
+func sumStats(p *Player) {
+	p.stats = baseStats(p.class)
+	for s, v := range p.class.PerLevel {
+		p.stats[s] += v * (p.Level - 1)
+	}
+	for _, inst := range p.Equipment {
+		for s, v := range inst.Stats() {
+			p.stats[s] += v
+		}
+	}
 }
 
 func baseStats(c classes.Class) map[items.Stat]int {
