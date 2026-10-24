@@ -196,6 +196,7 @@ func (w *World) enter(e *Enemy, a Archetype, s EnemyState, target EntityID) {
 	case EnemyReturn:
 		// Healing on the way home would let a player hit it at the leash edge for free.
 		e.Health = e.MaxHealth
+		e.hits = nil
 	}
 	e.State, e.Target, e.timer = s, target, 0
 	switch s {

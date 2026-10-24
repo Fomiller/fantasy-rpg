@@ -100,6 +100,8 @@ type Player struct {
 	// version that window last got.
 	looting  EntityID
 	lootSeen uint64
+	// runOver is set once the run's XP is banked, so it never banks twice.
+	runOver bool
 }
 
 type Enemy struct {
@@ -123,8 +125,10 @@ type Enemy struct {
 	looks           []Vec2
 	// trail holds points that each have line of sight to the one before,
 	// so Return can walk home around corners.
-	trail   []Vec2
-	hitBy   EntityID
+	trail []Vec2
+	hitBy EntityID
+	// hits is when each player last hit it, for the kill XP assist window.
+	hits    map[EntityID]time.Duration
 	charged map[EntityID]bool
 	blocked bool
 }
@@ -162,10 +166,13 @@ type Events struct {
 	Inventory      []EntityID
 	PickupRejected []PickupRejection
 	Loot           []LootEvent
+	XP             []XPEvent
+	RunEnded       []RunEnd
 }
 
 type World struct {
 	Tick    uint64
+	now     time.Duration
 	cfg     Config
 	walls   []Rect
 	exit    *Rect
@@ -258,8 +265,15 @@ func (w *World) AddEnemy(pos Vec2, archetype ArchetypeID) EntityID {
 	return w.nextID
 }
 
-func (w *World) RemovePlayer(id EntityID) {
+// RemovePlayer takes a player out mid-run, which banks XP like a death. It
+// reports the run end if the run had not ended already.
+func (w *World) RemovePlayer(id EntityID) (RunEnd, bool) {
+	p, ok := w.players[id]
+	if !ok {
+		return RunEnd{}, false
+	}
 	delete(w.players, id)
+	return w.endRun(p, false)
 }
 
 // Players returns copies sorted by ID, so snapshots are stable tick to tick.
@@ -305,6 +319,7 @@ func (w *World) Submit(cmd any) {
 
 func (w *World) Step(dt time.Duration) Events {
 	var ev Events
+	w.now += dt
 	w.stepAbilities(dt, &ev)
 	for _, cmd := range w.pending {
 		switch c := cmd.(type) {
@@ -317,7 +332,7 @@ func (w *World) Step(dt time.Duration) Events {
 				ev.changed(c.player())
 			}
 		case OpenLootCommand, CloseLootCommand:
-			w.applyLoot(c)
+			w.applyLoot(c, &ev)
 		}
 	}
 	w.pending = w.pending[:0]
@@ -327,20 +342,19 @@ func (w *World) Step(dt time.Duration) Events {
 	}
 	ev.Damage = append(ev.Damage, w.stepEnemies(dt)...)
 	ev.Damage = append(ev.Damage, w.stepProjectiles(dt)...)
-	w.dropOnKill(&ev)
-	ev.Extracted = w.stepExtraction(dt)
+	w.onKill(&ev)
+	w.stepExtraction(dt, &ev)
 	w.stepLoot(&ev)
 	w.Tick++
 	return ev
 }
 
-// stepExtraction removes players who stood in the zone long enough. Stepping
-// out resets the timer.
-func (w *World) stepExtraction(dt time.Duration) []EntityID {
+// stepExtraction banks and removes players who stood in the zone long
+// enough. Stepping out resets the timer.
+func (w *World) stepExtraction(dt time.Duration, ev *Events) {
 	if w.exit == nil {
-		return nil
+		return
 	}
-	var out []EntityID
 	for _, id := range slices.Sorted(maps.Keys(w.players)) {
 		p := w.players[id]
 		if p.Health <= 0 || !w.exit.Contains(p.Pos) {
@@ -351,11 +365,13 @@ func (w *World) stepExtraction(dt time.Duration) []EntityID {
 		need := w.extractTime(p)
 		p.ExtractProgress = min(p.extracting.Seconds()/need.Seconds(), 1)
 		if p.extracting >= need {
+			if end, ok := w.endRun(p, true); ok {
+				ev.RunEnded = append(ev.RunEnded, end)
+			}
 			delete(w.players, id)
-			out = append(out, id)
+			ev.Extracted = append(ev.Extracted, id)
 		}
 	}
-	return out
 }
 
 // maxQueuedInputs bounds how far behind a player's inputs can fall. The

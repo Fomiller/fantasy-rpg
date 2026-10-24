@@ -213,6 +213,10 @@ func (w *World) inArc(from, aim Vec2, t classes.Target) []*Enemy {
 func (w *World) hit(p *Player, e *Enemy, dmg int) DamageEvent {
 	e.Health = max(e.Health-dmg, 0)
 	e.hitBy = p.ID
+	if e.hits == nil {
+		e.hits = map[EntityID]time.Duration{}
+	}
+	e.hits[p.ID] = w.now
 	return DamageEvent{
 		Source:       p.ID,
 		Target:       e.ID,

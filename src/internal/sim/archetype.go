@@ -39,6 +39,7 @@ type Archetype struct {
 	Projectile    *ProjectileSpec
 	Special       Special
 	Loot          string // drop table id
+	XP            int    // run XP for each player who helped kill it
 
 	// Charge starts when the target is between ChargeMin and ChargeMax away.
 	ChargeMin, ChargeMax float64
@@ -75,6 +76,7 @@ func defaultArchetypes() map[ArchetypeID]Archetype {
 			Cooldown:      time.Second,
 			RetreatHealth: 0.25,
 			Loot:          "cave1_grunt",
+			XP:            10,
 		},
 		Ranged: {
 			Health:       20,
@@ -95,6 +97,7 @@ func defaultArchetypes() map[ArchetypeID]Archetype {
 			KeepAway:   140,
 			Projectile: &ProjectileSpec{Speed: 320, Radius: 6, Range: 320},
 			Loot:       "cave1_grunt",
+			XP:         10,
 		},
 		Elite: {
 			Health:         90,
@@ -113,6 +116,7 @@ func defaultArchetypes() map[ArchetypeID]Archetype {
 			Cooldown:       1200 * time.Millisecond,
 			Special:        SpecialCharge,
 			Loot:           "cave1_elite",
+			XP:             40,
 			ChargeMin:      100,
 			ChargeMax:      260,
 			ChargeWindup:   600 * time.Millisecond,
