@@ -9,3 +9,4 @@
 - [Classes](design/classes.md)
 - [Progression](design/progression.md)
 - [Persistence](design/persistence.md)
+- [Instances](design/instances.md)
