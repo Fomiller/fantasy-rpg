@@ -190,3 +190,62 @@ func TestRestartKeepsCharacters(t *testing.T) {
 		t.Fatalf("stash after restart = %+v, want %+v", got.Stash, want)
 	}
 }
+
+// worldServer is a world-server on store. stop shuts it down as a restart would.
+func worldServer(t *testing.T, store inventory.Store) (url string, stop func()) {
+	t.Helper()
+	lobby := server.NewLobby(sim.NewWorld(sim.DefaultConfig(), nil), items.NewRoller(items.Default(), 1), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	lobby.Store = store
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		lobby.Run(ctx)
+		close(done)
+	}()
+	hs := httptest.NewServer(http.HandlerFunc(lobby.HandleWS))
+	stopped := false
+	stop = func() {
+		if stopped {
+			return
+		}
+		stopped = true
+		hs.CloseClientConnections()
+		hs.Close()
+		cancel()
+		<-done
+		lobby.Close()
+	}
+	t.Cleanup(stop)
+	return "ws" + strings.TrimPrefix(hs.URL, "http"), stop
+}
+
+// A character made and changed on the world server outlives it. The
+// instance server then sees the same character, since both share the store.
+func TestWorldRestartKeepsCharacters(t *testing.T) {
+	t.Parallel()
+	url := newDBURL(t, true)
+
+	first := newStore(t, url)
+	wsURL, stop := worldServer(t, first)
+	conn, lobby, _ := joinLobby(t, wsURL, "ann")
+	if lobby.GetSaving() {
+		t.Fatalf("lobby = %v", lobby)
+	}
+	sword := waitLoaded(t, first, "ann", func(c inventory.Character) bool { return len(c.Loadout.Equipment) > 0 }).Loadout.Equipment[0].ID
+	send(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_StashMove{StashMove: &gamev1.StashMoveRequest{ItemId: sword, To: gamev1.ItemPlace_ITEM_PLACE_STASH}}})
+	saved := waitLoaded(t, first, "ann", func(c inventory.Character) bool { return len(c.Stash) == 1 && c.Stash[0].ID == sword })
+	stop()
+	first.Close()
+
+	second := newStore(t, url)
+	wsURL, _ = worldServer(t, second)
+	_, lobby, stash := joinLobby(t, wsURL, "ann")
+	if lobby.GetCharacter().GetName() != "ann" || len(stash.GetItems()) != 1 || stash.GetItems()[0].GetId() != sword {
+		t.Fatalf("after restart: lobby %v, stash %v, want the stashed sword", lobby, stash.GetItems())
+	}
+	got := waitLoaded(t, second, "ann", func(inventory.Character) bool { return true })
+	if !reflect.DeepEqual(got.Loadout, saved.Loadout) || !reflect.DeepEqual(got.Stash, saved.Stash) {
+		t.Fatalf("after restart = %+v, want %+v", got, saved)
+	}
+
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -58,8 +59,9 @@ type spyStore struct {
 	loadDown       bool
 	endRunFails    int
 	saveLobbyFails int
-	// hold, when set, makes EndRun wait until it is closed.
-	hold chan struct{}
+	// hold, when set, makes EndRun wait until it is closed. holdStart does
+	// the same for StartRun.
+	hold, holdStart chan struct{}
 }
 
 func newSpy() *spyStore { return &spyStore{Memory: inventory.NewMemory()} }
@@ -104,6 +106,22 @@ func (s *spyStore) SaveLobby(ctx context.Context, name, class string, l inventor
 		return errDown
 	}
 	return s.Memory.SaveLobby(ctx, name, class, l, stash)
+}
+
+func (s *spyStore) StartRun(ctx context.Context, name, class, runID, instance string) (inventory.Character, error) {
+	s.record("start run")
+	s.mu.Lock()
+	hold := s.holdStart
+	s.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	return s.Memory.StartRun(ctx, name, class, runID, instance)
+}
+
+func (s *spyStore) ClearRun(ctx context.Context, name, runID string) error {
+	s.record("clear run")
+	return s.Memory.ClearRun(ctx, name, runID)
 }
 
 func (s *spyStore) failEndRuns(n int) {
@@ -157,12 +175,12 @@ func TestDisconnectInRunIsOneWrite(t *testing.T) {
 	waitFor(t, conn, equipmentWith("rusty_sword"))
 	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
 	waitFor(t, conn, inventoryWith("rusty_sword"))
-	if got := spy.calls(); !slices.Equal(got, []string{"load", "create", "load"}) {
+	if got := spy.calls(); !slices.Equal(got, []string{"load", "create", "load", "start run"}) {
 		t.Fatalf("store calls in a run = %v, want only the join", got)
 	}
 
 	conn.Close(websocket.StatusNormalClosure, "")
-	waitCalls(t, spy, []string{"load", "create", "load", "end run"})
+	waitCalls(t, spy, []string{"load", "create", "load", "start run", "end run"})
 	waitSaved(t, h, "ann", func(c inventory.Character) bool {
 		return len(c.Loadout.Items) == 1 && c.Loadout.Items[0].ID == sword.GetId() && len(c.Loadout.Equipment) == len(items.StarterKit)-1
 	})
@@ -224,7 +242,7 @@ func TestSlowRunEndServesTheRejoin(t *testing.T) {
 	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
 	waitFor(t, conn, inventoryWith("rusty_sword"))
 	conn.Close(websocket.StatusNormalClosure, "")
-	waitCalls(t, spy, []string{"load", "create", "load", "load", "create", "load", "end run"})
+	waitCalls(t, spy, []string{"load", "create", "load", "start run", "load", "create", "load", "start run", "end run"})
 
 	for range 5 {
 		waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetSnapshot() != nil })
@@ -384,4 +402,87 @@ func TestFailedLobbySaveIsUndone(t *testing.T) {
 
 	moveTo(t, conn, id, toStash)
 	waitSaved(t, h, "ann", func(c inventory.Character) bool { return len(c.Stash) == 1 && c.Stash[0].ID == id })
+}
+
+func leaseOf(t *testing.T, s inventory.Store, name string) inventory.Lease {
+	t.Helper()
+	c, _, err := s.Load(context.Background(), name, classes.Starter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c.Run
+}
+
+// Entering takes the run lease for this instance, and the run end gives it back.
+func TestRunHoldsTheLease(t *testing.T) {
+	h := startExtract(t)
+	h.srv.ID = "instance-7"
+	conn := dial(t, h.url)
+	lobbyAs(t, conn, "ann")
+	if l := leaseOf(t, h.srv.Store, "ann"); l.Held() {
+		t.Fatalf("lease in the lobby = %+v", l)
+	}
+	enterInstance(t, conn)
+	l := leaseOf(t, h.srv.Store, "ann")
+	if !l.Held() || l.Instance != h.srv.Instance() || !strings.HasPrefix(l.Instance, "instance-7@") {
+		t.Fatalf("lease in the run = %+v, want this instance's", l)
+	}
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted() != nil })
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return !c.Run.Held() && c.XP > 0 })
+}
+
+// A lease left by an instance process that died is cleared on join, before
+// any lobby save, so the player is not locked out.
+func TestDeadLeaseIsClearedOnJoin(t *testing.T) {
+	spy := newSpy()
+	h := serveWith(t, testCave(), calm(sim.DefaultConfig()), spy)
+	seed(t, h, inventory.Character{Name: "ann", Loadout: h.srv.starterKit()})
+	if _, err := spy.Memory.StartRun(context.Background(), "ann", classes.Starter, items.NewID(), "instance-0@dead00"); err != nil {
+		t.Fatal(err)
+	}
+	conn := dial(t, h.url)
+	if lobby := lobbyAs(t, conn, "ann"); lobby.GetSaving() {
+		t.Fatalf("lobby = %v, want it open", lobby)
+	}
+	eq, _, _ := lobbyItems(t, conn)
+	moveTo(t, conn, eq.GetItems()[0].GetId(), toStash)
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return len(c.Stash) == 1 && !c.Run.Held() })
+	if got := spy.calls(); !slices.Equal(got[:3], []string{"create", "load", "clear run"}) {
+		t.Fatalf("store calls = %v, want the clear before anything else", got)
+	}
+	enterInstance(t, conn)
+}
+
+// A run that takes the lease after the join turns the next Enter Cave away.
+func TestEnterWhileInRunElsewhere(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	lobbyAs(t, conn, "ann")
+	if _, err := h.srv.Store.StartRun(context.Background(), "ann", classes.Starter, items.NewID(), h.srv.Instance()); err != nil {
+		t.Fatal(err)
+	}
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
+	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterInstanceRejected() != nil }).GetEnterInstanceRejected(); r.GetReason() != MoveInRun {
+		t.Fatalf("enter rejected = %v, want in_run", r)
+	}
+}
+
+// A player who leaves while the lease is being taken gives it straight back.
+func TestLeaveWhileEntering(t *testing.T) {
+	spy := newSpy()
+	spy.holdStart = make(chan struct{})
+	h := serveWith(t, testCave(), calm(sim.DefaultConfig()), spy)
+	conn := dial(t, h.url)
+	lobbyAs(t, conn, "ann")
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
+	waitCalls(t, spy, []string{"load", "create", "load", "start run"})
+	conn.Close(websocket.StatusNormalClosure, "")
+	time.Sleep(50 * time.Millisecond)
+	close(spy.holdStart)
+
+	waitCalls(t, spy, []string{"load", "create", "load", "start run", "end run"})
+	waitSaved(t, h, "ann", func(c inventory.Character) bool {
+		return !c.Run.Held() && len(c.Loadout.Equipment) == len(items.StarterKit)
+	})
+	rejoin(t, h.url, "ann")
 }

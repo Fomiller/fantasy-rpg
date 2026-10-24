@@ -1,0 +1,71 @@
+{{- /* The world server: join, the lobby and the stash. It runs from the same
+       image as the instance server. The IngressRoute does not send it /ws
+       until FOM-228, so for now it is reached only inside the cluster. */ -}}
+{{- if .Values.world.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chart.fullname" . }}-world
+  labels:
+    {{- include "chart.worldSelectorLabels" . | nindent 4 }}
+  annotations:
+    {{- /* After the migrate Job (0), like the instance server. */}}
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  {{- /* One connection per name lives in one process. Two world servers at
+         once could each hold a lobby for the same player. */}}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "chart.worldSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.worldSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: world
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [/world-server]
+          ports:
+            - containerPort: 8080
+          {{- if or .Values.world.env .Values.postgres.enabled }}
+          env:
+            {{- with .Values.world.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.postgres.enabled }}
+            {{- include "chart.databaseEnv" . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chart.fullname" . }}-world
+  labels:
+    {{- include "chart.worldSelectorLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "chart.worldSelectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+{{- end }}

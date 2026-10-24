@@ -20,6 +20,13 @@ imagePullSecrets: []
 # Plain configuration in the container env shape, e.g. TICK_RATE or LOOT_SEED.
 env: []
 
+# The world server, from the same image with its own command. Off by default
+# because the default image above is http-echo, which has no /world-server.
+world:
+  enabled: false
+  # Extra container env, in the same shape as env above.
+  env: []
+
 # No host means no IngressRoute. The overlay that owns the hostname sets it.
 ingressRoute:
   host: ""

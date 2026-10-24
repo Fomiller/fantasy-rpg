@@ -1,124 +1,75 @@
-// Package server connects WebSocket clients to one sim.World. The world is
-// only touched from the tick loop goroutine: connections hand work to it
-// through an inbox, and it hands encoded messages back through each client's
-// outbox.
+// Package server connects WebSocket clients to the game. Its lobby half,
+// Lobby, is the world server: join, characters, the lobby and the stash. Its
+// run half, Server, is the instance server: one sim.World and its tick loop,
+// on top of a lobby of its own until FOM-228 moves players over from the
+// world server.
 //
-// A player joins into the lobby, where they move items between stash, bag
-// and gear, and enters the cave from there. When the run ends they go back
-// to the lobby on the same connection.
+// State is only touched from one goroutine: connections hand work to it
+// through an inbox, and it hands encoded messages back through each
+// client's outbox.
 package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"sync"
 	"time"
-
-	"github.com/coder/websocket"
-	"github.com/prometheus/client_golang/prometheus"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
-	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
-const (
-	outboxSize  = 64
-	joinTimeout = 5 * time.Second
-)
-
+// Server is an instance server. A player joins into its lobby and enters
+// the cave from there. When the run ends they go back to the lobby on the
+// same connection.
 type Server struct {
+	*Lobby
 	// TickRate is sent to clients on join. It must match the tick loop.
 	TickRate int
-	// Store keeps characters and stashes by player name. Set it before
-	// serving. Only connection and writer goroutines call it, never the tick.
-	Store  inventory.Store
-	world  *sim.World
-	cave   caves.Cave
-	spawns int
-	loot   *items.Roller
-	log    *slog.Logger
-	inbox  chan func()
-	done   chan struct{}
-	stop   sync.Once
-	// conns has every connected player by name, until their last write lands.
-	// clients has only those in the cave.
-	conns   map[string]*client
+	// ID names this instance in the run lease, with a boot id that is new on
+	// every start.
+	ID      string
+	boot    string
+	world   *sim.World
+	cave    caves.Cave
+	spawns  int
 	clients map[sim.EntityID]*client
-
-	// PendingSaves counts run ends that are past their patience and still
-	// retrying. Register it to export it.
-	PendingSaves prometheus.Gauge
-	// Tests shorten these.
-	endRunPatience, pendingRetry time.Duration
-}
-
-type client struct {
-	name   string
-	class  string
-	out    chan []byte
-	cancel context.CancelFunc
-	writes *writer
-	// id is the player's entity in the cave. In the lobby it is 0 and lobby is set.
-	id    sim.EntityID
-	lobby *lobby
-	// runID and stash are set from cave entry, so the run end needs no read.
-	runID string
-	stash []items.Instance
-	// pending is the run end not in the store yet.
-	pending *inventory.Character
-	// saved is the lobby as the store has it once queued writes land. A failed
-	// lobby save goes back to it. The seqs order lobby saves.
-	saved              inventory.Character
-	lobbySeq, savedSeq int
 }
 
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
-	return &Server{
+	s := &Server{
+		Lobby:    NewLobby(world, loot, log),
 		TickRate: 20,
-		Store:    inventory.NewMemory(),
+		ID:       "instance-0",
+		boot:     bootID(),
 		world:    world,
 		cave:     cave,
-		loot:     loot,
-		log:      log,
-		inbox:    make(chan func(), 1024),
-		done:     make(chan struct{}),
-		conns:    map[string]*client{},
 		clients:  map[sim.EntityID]*client{},
-
-		PendingSaves: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "store_pending_saves",
-			Help: "Run end saves that failed for longer than their patience and are still retrying.",
-		}),
-		endRunPatience: endRunPatience,
-		pendingRetry:   pendingRetry,
 	}
+	s.run = s
+	return s
 }
 
-// Close stops accepting work. Call it once the tick loop has stopped, so
-// connections waiting on the inbox give up instead of blocking forever.
-func (s *Server) Close() {
-	s.stop.Do(func() { close(s.done) })
+func bootID() string {
+	b := make([]byte, 3)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// Instance is the id and boot id, like instance-0@3f9a1c.
+func (s *Server) Instance() string {
+	return s.ID + "@" + s.boot
 }
 
 // Step runs on the tick loop goroutine.
 func (s *Server) Step(dt time.Duration) {
-	for drained := false; !drained; {
-		select {
-		case f := <-s.inbox:
-			f()
-		default:
-			drained = true
-		}
-	}
+	s.drain()
 
 	events := s.world.Step(dt)
 
@@ -208,12 +159,6 @@ func (s *Server) sendTo(id sim.EntityID, msg *gamev1.ServerMessage) {
 	}
 }
 
-func (s *Server) sendToClient(c *client, msg *gamev1.ServerMessage) {
-	if b, err := protocol.EncodeServer(msg); err == nil {
-		c.send(b)
-	}
-}
-
 func (s *Server) broadcast(msg *gamev1.ServerMessage) {
 	s.broadcastExcept(0, msg)
 }
@@ -234,208 +179,99 @@ func (s *Server) broadcastExcept(skip sim.EntityID, msg *gamev1.ServerMessage) {
 	}
 }
 
-// send never blocks the tick loop. A client too slow to drain its outbox is
-// dropped rather than holding up everyone else.
-func (c *client) send(b []byte) {
-	select {
-	case c.out <- b:
-	default:
-		c.cancel()
-	}
-}
-
-func (s *Server) starterKit() inventory.Loadout {
-	var l inventory.Loadout
-	for _, def := range items.StarterKit {
-		inst, err := s.loot.Make(def, 1, items.Common)
-		if err != nil {
-			s.log.Error("starter kit", "item", def, "err", err)
-			continue
-		}
-		l.Equipment = append(l.Equipment, inst)
-	}
-	return l
-}
-
-func (s *Server) enqueue(f func()) bool {
-	select {
-	case s.inbox <- f:
-		return true
-	case <-s.done:
-		return false
-	}
-}
-
-func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, nil)
-	if err != nil {
-		s.log.Warn("websocket accept", "err", err)
-		return
-	}
-	defer conn.CloseNow()
-
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
-	join, err := readJoin(ctx, conn)
-	if err != nil {
-		conn.Close(websocket.StatusPolicyViolation, err.Error())
-		return
-	}
-
-	name := join.GetName()
-	class := join.GetClassId()
-	if class == "" {
-		class = classes.Starter
-	}
-	c := &client{name: name, class: class, out: make(chan []byte, outboxSize), cancel: cancel, writes: newWriter()}
-	claimed := make(chan error, 1)
-	// resume is set when the join takes over a run end that is still saving.
-	var resume *inventory.Character
-	ok := s.enqueue(func() {
-		// One connection per name, or two copies of a player could load and
-		// save the same items.
-		if old, ok := s.conns[name]; ok {
-			if old.pending == nil || old.class != class || !old.writes.reopen() {
-				claimed <- errors.New("name already playing")
-				return
-			}
-			c.writes, c.pending = old.writes, old.pending
-			s.conns[name] = c
-			ch := cloneCharacter(*c.pending)
-			resume = &ch
-			claimed <- nil
-			return
-		}
-		if _, ok := s.world.Classes().Classes[class]; !ok {
-			claimed <- fmt.Errorf("unknown class %q", class)
-			return
-		}
-		s.conns[name] = c
-		claimed <- nil
-	})
-	if !ok {
-		conn.Close(websocket.StatusGoingAway, "server shutting down")
-		return
-	}
-	// Wait even if the client goes, or a late claim would hold the name forever.
-	select {
-	case err = <-claimed:
-	case <-s.done:
-		return
-	}
-	if err != nil {
-		conn.Close(websocket.StatusPolicyViolation, err.Error())
-		return
-	}
-	log := s.log.With("name", name)
-	if resume == nil {
-		go s.saveLoop(name, c.writes)
-	}
-	defer func() {
-		s.enqueue(func() { s.leave(c) })
-		log.Info("player left")
-	}()
-
-	// A pending save is newer than the store, so it is what the lobby opens from.
+// enter takes the run lease on the player's writer, off the tick, and
+// spawns them with what the store handed back. Lobby saves queued before it
+// land first, so that is the lobby the player sees.
+func (s *Server) enter(c *client) {
+	runID := items.NewID()
+	name, class, instance := c.name, c.class, s.Instance()
 	var ch inventory.Character
-	if resume != nil {
-		ch = *resume
-	} else {
-		ch, err = s.loadCharacter(ctx, name, class)
-	}
-	if err != nil {
-		log.Error("load character", "err", err)
-		// Never fall back to a starter kit, which would later save over real gear.
-		conn.Close(websocket.StatusTryAgainLater, "characters unavailable")
-		return
-	}
-	if !s.enqueue(func() { s.openLobby(c, ch) }) {
-		conn.Close(websocket.StatusGoingAway, "server shutting down")
-		return
-	}
-	log.Info("player joined")
-
-	go s.writeLoop(ctx, conn, c, cancel)
-
-	for {
-		_, b, err := conn.Read(ctx)
+	c.entering = true
+	c.writes.push(storeWrite{op: "start run", call: func(ctx context.Context) (err error) {
+		ch, err = s.Store.StartRun(ctx, name, class, runID, instance)
+		return err
+	}, done: func(_ *client, err error) {
+		c.entering = false
 		if err != nil {
-			if status := websocket.CloseStatus(err); status != websocket.StatusNormalClosure && status != websocket.StatusGoingAway && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
-				log.Info("read stopped", "err", err)
+			reason := MoveSaving
+			if errors.Is(err, inventory.ErrInRun) {
+				reason = MoveInRun
+			}
+			if !c.gone {
+				s.sendToClient(c, protocol.EnterInstanceRejected(reason))
 			}
 			return
 		}
-		msg, err := protocol.DecodeClient(b)
-		if err != nil {
-			conn.Close(websocket.StatusPolicyViolation, err.Error())
+		c.runID = runID
+		if c.gone {
+			// The player left while the lease was taken. Give it back with what
+			// they took in.
+			s.saveRun(c, ch)
 			return
 		}
-		if !s.enqueue(func() { s.handle(c, msg) }) {
-			return
-		}
+		s.spawn(c, ch)
+	}})
+}
+
+// spawn puts a player in the cave with everything they have on them.
+func (s *Server) spawn(c *client, ch inventory.Character) {
+	spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
+	id, err := s.world.AddPlayerAs(spawn, c.class, ch.XP)
+	if err != nil {
+		s.log.Error("enter instance", "name", c.name, "err", err)
+		s.saveRun(c, ch)
+		return
+	}
+	if err := s.world.Restore(id, ch.Loadout); err != nil {
+		s.log.Error("restore loadout", "player", id, "err", err)
+	}
+	s.spawns++
+	c.id, c.stash, c.lobby = id, ch.Stash, nil
+	s.clients[id] = c
+	p, _ := s.world.Player(id)
+	class := protocol.ClassInfo(s.world.Classes(), p.Class)
+	character := protocol.Character(s.world.Classes().Progression, c.name, p.Class, p.Level, p.XP, p.RunXP)
+	s.sendToClient(c, protocol.Joined(id, s.cave, spawn, s.TickRate, class, character))
+	s.sendItems(id)
+	s.log.Info("player entered the cave", "player", id, "name", c.name, "run", c.runID)
+}
+
+func (s *Server) command(c *client, msg *gamev1.ClientMessage) {
+	if c.id == 0 {
+		return
+	}
+	if cmd, ok := protocol.Command(msg, c.id); ok {
+		s.world.Submit(cmd)
 	}
 }
 
-// leave runs on the tick loop once the connection is gone. A run in progress
-// ends as a death would for XP, but keeps what the player carried until the
-// 30 s rule in FOM-217.
+// leave ends a run in progress as a death would for XP, but keeps what the
+// player carried until the 30 s rule in FOM-217.
 func (s *Server) leave(c *client) {
-	if c.id != 0 {
-		p, _ := s.world.Player(c.id)
-		if end, ok := s.world.RemovePlayer(c.id); ok {
-			s.saveRun(c, inventory.Character{Name: c.name, Class: c.class, XP: end.XP, Loadout: p.Loadout(), Stash: c.stash})
-		}
-		delete(s.clients, c.id)
+	if c.id == 0 {
+		return
 	}
-	c.writes.close()
+	p, _ := s.world.Player(c.id)
+	if end, ok := s.world.RemovePlayer(c.id); ok {
+		s.saveRun(c, inventory.Character{Name: c.name, Class: c.class, XP: end.XP, Loadout: p.Loadout(), Stash: c.stash})
+	}
+	delete(s.clients, c.id)
 }
 
-// handle runs on the tick loop, which is the only place c.id and c.lobby change.
-func (s *Server) handle(c *client, msg *gamev1.ClientMessage) {
-	switch {
-	case msg.GetEnterInstance() != nil:
-		s.enterInstance(c)
-	case msg.GetStashMove() != nil:
-		s.moveItem(c, msg.GetStashMove())
-	case c.id != 0:
-		if cmd, ok := protocol.Command(msg, c.id); ok {
-			s.world.Submit(cmd)
-		}
-	}
+// staleLease is true for any lease but this process's own. Until FOM-228
+// there is one instance server, so a lease from another process is one that
+// died with its run.
+func (s *Server) staleLease(l inventory.Lease) bool {
+	return l.Instance != s.Instance()
 }
 
-func (s *Server) writeLoop(ctx context.Context, conn *websocket.Conn, c *client, cancel context.CancelFunc) {
-	defer cancel()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case b := <-c.out:
-			if err := conn.Write(ctx, websocket.MessageBinary, b); err != nil {
-				return
-			}
-		}
+// toLobby takes a player whose run ended out of the cave.
+func (s *Server) toLobby(id sim.EntityID, ch inventory.Character) {
+	c, ok := s.clients[id]
+	if !ok {
+		return
 	}
-}
-
-func readJoin(ctx context.Context, conn *websocket.Conn) (*gamev1.JoinRequest, error) {
-	ctx, cancel := context.WithTimeout(ctx, joinTimeout)
-	defer cancel()
-	_, b, err := conn.Read(ctx)
-	if err != nil {
-		return nil, err
-	}
-	msg, err := protocol.DecodeClient(b)
-	if err != nil {
-		return nil, err
-	}
-	join := msg.GetJoin()
-	if join == nil {
-		return nil, errors.New("first message must be join")
-	}
-	if join.GetName() == "" {
-		return nil, errors.New("join needs a name")
-	}
-	return join, nil
+	delete(s.clients, id)
+	c.id = 0
+	s.openLobby(c, ch)
 }

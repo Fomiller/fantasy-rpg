@@ -56,6 +56,16 @@ func (m *metered) SaveLobby(ctx context.Context, name, class string, l Loadout, 
 	return m.store.SaveLobby(ctx, name, class, l, stash)
 }
 
+func (m *metered) StartRun(ctx context.Context, name, class, runID, instance string) (c Character, err error) {
+	defer m.observe("start_run", time.Now(), &err)
+	return m.store.StartRun(ctx, name, class, runID, instance)
+}
+
+func (m *metered) ClearRun(ctx context.Context, name, runID string) (err error) {
+	defer m.observe("clear_run", time.Now(), &err)
+	return m.store.ClearRun(ctx, name, runID)
+}
+
 func (m *metered) EndRun(ctx context.Context, runID string, c Character) (err error) {
 	defer m.observe("end_run", time.Now(), &err)
 	return m.store.EndRun(ctx, runID, c)

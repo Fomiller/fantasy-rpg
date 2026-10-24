@@ -42,8 +42,8 @@ fmt:
 deps:
     {{compose}} up -d --wait postgres nats
 
-dev: deps
-    go run ./src/cmd/world-server
+dev: migrate
+    PORT=8090 DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/world-server
 
 instance:
     go run ./src/cmd/instance-server
@@ -93,6 +93,10 @@ client-run:
     {{godot}} --headless --path client/godot --import
     {{godot}} --path client/godot
 
+client-world:
+    {{godot}} --headless --path client/godot --import
+    {{godot}} --path client/godot -- --server=ws://127.0.0.1:8090/ws
+
 client-online:
     {{godot}} --headless --path client/godot --import
     {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws
@@ -121,15 +125,17 @@ client-test:
 net-test: build
     #!/usr/bin/env bash
     set -euo pipefail
-    if curl -sf localhost:8080/healthz >/dev/null; then echo "port 8080 is in use. Stop the other instance-server first." >&2; exit 1; fi
+    for port in 8080 8090; do if curl -sf localhost:$port/healthz >/dev/null; then echo "port $port is in use. Stop the other server first." >&2; exit 1; fi; done
     {{godot}} --headless --path client/godot --import
     # Picked here, not by the server, so a failure can say how to replay it.
     export LOOT_SEED="${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}"
     ./bin/instance-server & pid=$!
-    trap 'status=$?; kill $pid 2>/dev/null || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
-    for i in $(seq 50); do curl -sf localhost:8080/healthz >/dev/null && break; sleep 0.1; done
+    PORT=8090 ./bin/world-server & world=$!
+    trap 'status=$?; kill $pid $world 2>/dev/null || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
+    for port in 8080 8090; do for i in $(seq 50); do curl -sf localhost:$port/healthz >/dev/null && break; sleep 0.1; done; done
     {{godot}} --headless --path client/godot --script res://tests/net_test.gd
     {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/world_test.gd -- --server=ws://127.0.0.1:8090/ws
 
 proto:
     buf lint

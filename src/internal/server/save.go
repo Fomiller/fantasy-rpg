@@ -50,9 +50,12 @@ func newWriter() *writer {
 	return &writer{wake: make(chan struct{}, 1)}
 }
 
+// push still takes a write after close, until the loop has exited. A write's
+// done can then queue one more, like the run end for a lease taken just as
+// the player left.
 func (w *writer) push(sw storeWrite) {
 	w.mu.Lock()
-	if w.closed {
+	if w.exited {
 		w.mu.Unlock()
 		return
 	}
@@ -64,6 +67,13 @@ func (w *writer) push(sw storeWrite) {
 	}
 	w.mu.Unlock()
 	w.signal()
+}
+
+// dropLobby forgets queued lobby saves.
+func (w *writer) dropLobby() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.queue = slices.DeleteFunc(w.queue, func(sw storeWrite) bool { return sw.lobby })
 }
 
 func (w *writer) close() {
@@ -119,21 +129,32 @@ func (w *writer) next(stop <-chan struct{}) (storeWrite, bool) {
 
 // saveLoop runs one player's writes in order. The name stays claimed until
 // the last write lands, so a rejoin never loads a character about to change.
-func (s *Server) saveLoop(name string, w *writer) {
+// Each write's done runs before the next write starts, so done sees the
+// queue as it is and can add to it.
+func (s *Lobby) saveLoop(name string, w *writer) {
 	for {
 		sw, ok := w.next(s.done)
 		if !ok {
 			break
 		}
 		err := s.write(sw)
-		s.enqueue(func() {
+		handled := make(chan struct{})
+		if !s.enqueue(func() {
+			defer close(handled)
 			if err != nil {
 				s.log.Error("store write", "op", sw.op, "name", name, "err", err)
 			}
 			if sw.done != nil {
 				sw.done(s.owner(name, w), err)
 			}
-		})
+		}) {
+			return
+		}
+		select {
+		case <-handled:
+		case <-s.done:
+			return
+		}
 	}
 	s.enqueue(func() {
 		if s.owner(name, w) != nil {
@@ -144,14 +165,14 @@ func (s *Server) saveLoop(name string, w *writer) {
 
 // owner is the client using w, which changes when a rejoin takes over a
 // pending save.
-func (s *Server) owner(name string, w *writer) *client {
+func (s *Lobby) owner(name string, w *writer) *client {
 	if c, ok := s.conns[name]; ok && c.writes == w {
 		return c
 	}
 	return nil
 }
 
-func (s *Server) write(sw storeWrite) error {
+func (s *Lobby) write(sw storeWrite) error {
 	deadline := time.Now().Add(sw.patience)
 	pending := false
 	defer func() {
@@ -164,8 +185,8 @@ func (s *Server) write(sw storeWrite) error {
 		ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 		err := sw.call(ctx)
 		cancel()
-		if err == nil {
-			return nil
+		if err == nil || final(err) {
+			return err
 		}
 		wait := backoff
 		backoff = min(backoff*2, storeTimeout)
@@ -191,7 +212,7 @@ func (s *Server) write(sw storeWrite) error {
 // loadCharacter runs on the connection goroutine. A name and class that never
 // joined get the starter kit, which is made on the tick loop because the
 // roller is not safe to share.
-func (s *Server) loadCharacter(ctx context.Context, name, class string) (inventory.Character, error) {
+func (s *Lobby) loadCharacter(ctx context.Context, name, class string) (inventory.Character, error) {
 	load := func() (inventory.Character, bool, error) {
 		ctx, cancel := context.WithTimeout(ctx, storeTimeout)
 		defer cancel()
@@ -225,7 +246,7 @@ func (s *Server) loadCharacter(ctx context.Context, name, class string) (invento
 
 // saveLobby queues the lobby as it is now. If the write fails and no newer
 // one is queued, the lobby goes back to what the store has.
-func (s *Server) saveLobby(c *client, itemID string) {
+func (s *Lobby) saveLobby(c *client, itemID string) {
 	name, class, l, stash := c.name, c.class, c.lobby.loadout(), slices.Clone(c.lobby.stash.Items)
 	c.lobbySeq++
 	seq := c.lobbySeq
@@ -237,23 +258,37 @@ func (s *Server) saveLobby(c *client, itemID string) {
 		}
 		if err == nil {
 			if seq > c.savedSeq {
-				c.saved, c.savedSeq = inventory.Character{Loadout: l, Stash: stash}, seq
+				c.saved, c.savedSeq = inventory.Character{XP: c.saved.XP, Loadout: l, Stash: stash}, seq
 			}
 			return
 		}
-		if seq != c.lobbySeq || c.lobby == nil {
+		inRun := errors.Is(err, inventory.ErrInRun)
+		if inRun {
+			// A save queued behind this one is from the same lobby, which a run
+			// end is about to replace.
+			c.writes.dropLobby()
+		} else if seq != c.lobbySeq {
+			return
+		}
+		if c.lobby == nil {
 			return
 		}
 		saved := cloneCharacter(c.saved)
-		c.lobby = newLobby(c.lobby.xp, s.world.BagSize(), saved.Loadout, saved.Stash)
-		s.sendToClient(c, protocol.StashMoveRejected(itemID, MoveSaving))
+		c.lobby = newLobby(c.lobby.xp, s.rules.BagSize(), saved.Loadout, saved.Stash)
+		reason := MoveSaving
+		if inRun {
+			reason = MoveInRun
+			s.setInRun(c, true)
+			s.sendLobby(c)
+		}
+		s.sendToClient(c, protocol.StashMoveRejected(itemID, reason))
 		s.sendLobbyItems(c)
 	}})
 }
 
 // saveRun queues the one write a run end makes. Until it lands the lobby
 // shows saving and nothing else can change the character.
-func (s *Server) saveRun(c *client, ch inventory.Character) {
+func (s *Lobby) saveRun(c *client, ch inventory.Character) {
 	runID := c.runID
 	ch = cloneCharacter(ch)
 	pending := &ch
@@ -261,7 +296,17 @@ func (s *Server) saveRun(c *client, ch inventory.Character) {
 	c.writes.push(storeWrite{op: "end run", patience: s.endRunPatience, keep: true, call: func(ctx context.Context) error {
 		return s.Store.EndRun(ctx, runID, *pending)
 	}, done: func(owner *client, err error) {
-		if owner == nil || err != nil || owner.pending != pending {
+		if owner == nil || owner.pending != pending {
+			return
+		}
+		if errors.Is(err, inventory.ErrLeaseLost) {
+			// The run result is gone. Drop the player so a rejoin loads what
+			// the store has, not a lobby that was never saved.
+			owner.pending = nil
+			owner.cancel()
+			return
+		}
+		if err != nil {
 			return
 		}
 		owner.pending = nil
@@ -269,6 +314,19 @@ func (s *Server) saveRun(c *client, ch inventory.Character) {
 			s.sendLobby(owner)
 		}
 	}})
+}
+
+// clearRun drops a dead lease before any lobby save can hit it.
+func (s *Lobby) clearRun(c *client, runID string) {
+	name := c.name
+	c.writes.push(storeWrite{op: "clear run", call: func(ctx context.Context) error {
+		return s.Store.ClearRun(ctx, name, runID)
+	}})
+}
+
+// final errors never get better with a retry.
+func final(err error) bool {
+	return errors.Is(err, inventory.ErrInRun) || errors.Is(err, inventory.ErrRunUsed) || errors.Is(err, inventory.ErrLeaseLost)
 }
 
 func cloneCharacter(ch inventory.Character) inventory.Character {

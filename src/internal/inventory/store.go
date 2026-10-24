@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
@@ -16,6 +17,9 @@ const StashSize = 100
 var (
 	ErrNoCharacter = errors.New("no such character")
 	ErrNoRunID     = errors.New("run id is empty")
+	ErrInRun       = errors.New("account is in a run")
+	ErrRunUsed     = errors.New("run id already ended")
+	ErrLeaseLost   = errors.New("run does not hold the lease")
 )
 
 // Character is what the store keeps for one class of one account. Level is
@@ -27,7 +31,20 @@ type Character struct {
 	XP      int
 	Loadout Loadout
 	Stash   []items.Instance
+	// Run is the account's run lease. Only Load and StartRun fill it.
+	Run Lease
 }
+
+// Lease is the run that holds an account. While it is held only that run
+// may write the account, so a lobby move cannot land under a run end.
+type Lease struct {
+	RunID string
+	// Instance is the instance id and boot id, like instance-0@3f9a1c.
+	Instance string
+	Since    time.Time
+}
+
+func (l Lease) Held() bool { return l.RunID != "" }
 
 // Store keeps characters between connections. Each write is one call that
 // replaces whole values, so a crash never leaves the stash and the
@@ -40,11 +57,18 @@ type Store interface {
 	// character already exists, so two racing joins cannot both hand out a kit.
 	// A new account starts with c.Stash; an existing one keeps its own.
 	Create(ctx context.Context, c Character) error
-	// SaveLobby writes the loadout and stash after a lobby move.
+	// SaveLobby writes the loadout and stash after a lobby move. ErrInRun while
+	// a lease is held.
 	SaveLobby(ctx context.Context, name, class string, l Loadout, stash []items.Instance) error
-	// EndRun writes XP, loadout and stash after a run. Writing the same run id
-	// twice is a no-op, so a retry after a lost reply cannot apply it twice.
+	// StartRun takes the run lease and returns the character and stash.
+	// ErrInRun if a lease is held. ErrRunUsed if runID is the character's last run.
+	StartRun(ctx context.Context, name, class, runID, instance string) (Character, error)
+	// EndRun writes XP, loadout and stash after a run and clears the lease.
+	// Writing the same run id twice is a no-op, so a retry after a lost reply
+	// cannot apply it twice. ErrLeaseLost if the lease is not runID's.
 	EndRun(ctx context.Context, runID string, c Character) error
+	// ClearRun drops a dead lease. A no-op unless the lease is still runID's.
+	ClearRun(ctx context.Context, name, runID string) error
 }
 
 // Memory is a Store that lasts as long as the process. db.Store is the
@@ -52,6 +76,7 @@ type Store interface {
 type Memory struct {
 	mu         sync.Mutex
 	stashes    map[string][]items.Instance
+	leases     map[string]Lease
 	characters map[charKey]*saved
 }
 
@@ -64,13 +89,13 @@ type saved struct {
 }
 
 func NewMemory() *Memory {
-	return &Memory{stashes: map[string][]items.Instance{}, characters: map[charKey]*saved{}}
+	return &Memory{stashes: map[string][]items.Instance{}, leases: map[string]Lease{}, characters: map[charKey]*saved{}}
 }
 
 func (m *Memory) Load(_ context.Context, name, class string) (Character, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	c := Character{Name: name, Class: class, Stash: slices.Clone(m.stashes[name])}
+	c := Character{Name: name, Class: class, Stash: slices.Clone(m.stashes[name]), Run: m.leases[name]}
 	s, ok := m.characters[charKey{name, class}]
 	if !ok {
 		return c, false, nil
@@ -105,6 +130,9 @@ func (m *Memory) SaveLobby(_ context.Context, name, class string, l Loadout, sta
 	if !ok {
 		return fmt.Errorf("%w: %s %s", ErrNoCharacter, name, class)
 	}
+	if m.leases[name].Held() {
+		return ErrInRun
+	}
 	s.loadout = l.clone()
 	m.stashes[name] = slices.Clone(stash)
 	return nil
@@ -126,8 +154,41 @@ func (m *Memory) EndRun(_ context.Context, runID string, c Character) error {
 	if s.lastRun == runID {
 		return nil
 	}
+	if m.leases[c.Name].RunID != runID {
+		return ErrLeaseLost
+	}
 	s.xp, s.loadout, s.lastRun = c.XP, c.Loadout.clone(), runID
 	m.stashes[c.Name] = slices.Clone(c.Stash)
+	delete(m.leases, c.Name)
+	return nil
+}
+
+func (m *Memory) StartRun(_ context.Context, name, class, runID, instance string) (Character, error) {
+	if runID == "" {
+		return Character{}, ErrNoRunID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.characters[charKey{name, class}]
+	switch {
+	case !ok:
+		return Character{}, fmt.Errorf("%w: %s %s", ErrNoCharacter, name, class)
+	case m.leases[name].Held():
+		return Character{}, ErrInRun
+	case s.lastRun == runID:
+		return Character{}, ErrRunUsed
+	}
+	lease := Lease{RunID: runID, Instance: instance, Since: time.Now()}
+	m.leases[name] = lease
+	return Character{Name: name, Class: class, XP: s.xp, Loadout: s.loadout.clone(), Stash: slices.Clone(m.stashes[name]), Run: lease}, nil
+}
+
+func (m *Memory) ClearRun(_ context.Context, name, runID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if runID != "" && m.leases[name].RunID == runID {
+		delete(m.leases, name)
+	}
 	return nil
 }
 

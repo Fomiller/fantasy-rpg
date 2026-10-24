@@ -31,14 +31,18 @@ Godot is not in the dev shell. Install Godot 4 yourself. Docker must be running.
 
 There are three ways to run the stack, from fastest to most realistic.
 
-**1. Local process.** Postgres and NATS run in Compose. The world server runs as a normal Go process, so a restart is a few seconds.
+**1. Local process.** Postgres and NATS run in Compose. Each server runs as a normal Go process, so a restart is a few seconds.
 
 ```sh
-just dev         # start postgres + nats, then run world-server on :8080
+just instance    # instance-server on :8080 with the memory store
+just instance-db # migrate, then run instance-server with DATABASE_URL set
+just dev         # migrate, then run world-server on :8090 with DATABASE_URL set
+just client-world # run the client against the world server on :8090
 just deps        # only postgres + nats
 just migrate     # apply database migrations to the Compose postgres
-just instance-db # migrate, then run instance-server with DATABASE_URL set
 ```
+
+The client connects to the instance-server on :8080 by default. It has its own lobby and the way into the cave. The world server has the lobby and stash only: Enter cave says every instance is full until FOM-228 hands players from it to an instance. Run `just instance-db` and `just dev` together to share characters between them.
 
 **2. Full Compose.** Every server runs as a container.
 
