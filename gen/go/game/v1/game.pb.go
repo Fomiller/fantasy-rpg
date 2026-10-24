@@ -1974,8 +1974,11 @@ func (x *ItemAffix) GetTier() uint32 {
 // EquipmentUpdated is the full set of equipped items, sent to that player
 // whenever it changes.
 type EquipmentUpdated struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*Item                `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Items []*Item                `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// Class base plus gear, as the server uses them. Unarmed damage and the
+	// move_speed cap are already applied. Gear is the only thing that changes them.
+	Stats         []*ItemStat `protobuf:"bytes,2,rep,name=stats,proto3" json:"stats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2013,6 +2016,13 @@ func (*EquipmentUpdated) Descriptor() ([]byte, []int) {
 func (x *EquipmentUpdated) GetItems() []*Item {
 	if x != nil {
 		return x.Items
+	}
+	return nil
+}
+
+func (x *EquipmentUpdated) GetStats() []*ItemStat {
+	if x != nil {
+		return x.Stats
 	}
 	return nil
 }
@@ -2668,9 +2678,10 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04stat\x18\x02 \x01(\tR\x04stat\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\x05R\x05value\x12\x12\n" +
-	"\x04tier\x18\x04 \x01(\rR\x04tier\"7\n" +
+	"\x04tier\x18\x04 \x01(\rR\x04tier\"`\n" +
 	"\x10EquipmentUpdated\x12#\n" +
-	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\"S\n" +
+	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\x12'\n" +
+	"\x05stats\x18\x02 \x03(\v2\x11.game.v1.ItemStatR\x05stats\"S\n" +
 	"\x10InventoryUpdated\x12#\n" +
 	"\x05items\x18\x01 \x03(\v2\r.game.v1.ItemR\x05items\x12\x1a\n" +
 	"\bcapacity\x18\x02 \x01(\rR\bcapacity\"E\n" +
@@ -2822,13 +2833,14 @@ var file_game_v1_game_proto_depIdxs = []int32{
 	21, // 39: game.v1.Item.base:type_name -> game.v1.ItemStat
 	22, // 40: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
 	20, // 41: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
-	20, // 42: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
-	20, // 43: game.v1.LootContents.items:type_name -> game.v1.Item
-	44, // [44:44] is the sub-list for method output_type
-	44, // [44:44] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	21, // 42: game.v1.EquipmentUpdated.stats:type_name -> game.v1.ItemStat
+	20, // 43: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
+	20, // 44: game.v1.LootContents.items:type_name -> game.v1.Item
+	45, // [45:45] is the sub-list for method output_type
+	45, // [45:45] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_game_v1_game_proto_init() }

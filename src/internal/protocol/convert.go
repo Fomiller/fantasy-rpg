@@ -184,13 +184,19 @@ func Damage(ev sim.DamageEvent) *gamev1.ServerMessage {
 	}}}
 }
 
-// Equipment lists a player's gear in slot order, so the client can show it
-// the same way every time.
-func Equipment(p sim.Player) *gamev1.ServerMessage {
+// Equipment lists a player's gear in slot order and stats in stat order, so
+// the client can show them the same way every time.
+func Equipment(w *sim.World, p sim.Player) *gamev1.ServerMessage {
 	msg := &gamev1.EquipmentUpdated{}
 	for _, slot := range items.GearSlots {
 		if inst, ok := p.Equipment[slot]; ok {
 			msg.Items = append(msg.Items, Item(inst))
+		}
+	}
+	stats := w.Stats(p)
+	for _, s := range items.AllStats {
+		if v, ok := stats[s]; ok {
+			msg.Stats = append(msg.Stats, &gamev1.ItemStat{Stat: string(s), Value: int32(v)})
 		}
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Equipment{Equipment: msg}}

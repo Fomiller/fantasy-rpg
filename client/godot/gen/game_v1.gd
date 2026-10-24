@@ -3561,6 +3561,13 @@ class EquipmentUpdated:
 		service.func_ref = Callable(self, "add_items")
 		data[__items.tag] = service
 		
+		var __stats_default: Array[ItemStat] = []
+		__stats = PBField.new("stats", PB_DATA_TYPE.MESSAGE, PB_RULE.REPEATED, 2, true, __stats_default)
+		service = PBServiceField.new()
+		service.field = __stats
+		service.func_ref = Callable(self, "add_stats")
+		data[__stats.tag] = service
+		
 	var data = {}
 	
 	var __items: PBField
@@ -3572,6 +3579,17 @@ class EquipmentUpdated:
 	func add_items() -> Item:
 		var element = Item.new()
 		__items.value.append(element)
+		return element
+	
+	var __stats: PBField
+	func get_stats() -> Array[ItemStat]:
+		return __stats.value
+	func clear_stats() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__stats.value.clear()
+	func add_stats() -> ItemStat:
+		var element = ItemStat.new()
+		__stats.value.append(element)
 		return element
 	
 	func _to_string() -> String:

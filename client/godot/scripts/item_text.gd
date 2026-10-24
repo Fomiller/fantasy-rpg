@@ -8,6 +8,8 @@ const RARITY_COLORS := {
 	GameV1.Rarity.EPIC: Color(0.7, 0.4, 0.95),
 	GameV1.Rarity.UNIQUE: Color(1.0, 0.6, 0.2),
 }
+# Stats that are a percent bonus, not a flat number.
+const PERCENT_STATS := ["attack_speed", "move_speed", "extract_speed", "detect_radius"]
 
 
 static func color(item: GameV1.Item) -> Color:
@@ -25,5 +27,5 @@ static func line(item: GameV1.Item) -> String:
 
 
 static func _stat(stat: String, value: int) -> String:
-	var percent := stat in ["attack_speed", "move_speed", "extract_speed", "detect_radius"]
+	var percent := stat in PERCENT_STATS
 	return "+%d%s %s" % [value, "%" if percent else "", stat.replace("_", " ")]

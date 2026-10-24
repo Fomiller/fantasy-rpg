@@ -23,6 +23,7 @@ const WINDOWS_GROUP := "windows"
 @onready var _inventory: InventoryPanel = $HUD/Inventory
 @onready var _abilities: AbilityBar = $HUD/Abilities
 @onready var _loot: LootWindow = $HUD/Loot
+@onready var _character: CharacterScreen = $HUD/Character
 
 # Set by main. Tests swap it for a fake.
 var send_attack: Callable
@@ -46,6 +47,9 @@ func _ready() -> void:
 	_connection.equipment_received.connect(_inventory.show_equipment)
 	_connection.inventory_received.connect(_inventory.show_inventory)
 	_inventory.connection = _connection
+	_connection.equipment_received.connect(_character.show_equipment)
+	_connection.stats_received.connect(_character.show_stats)
+	_character.send_unequip = _connection.send_unequip
 	_connection.loot_received.connect(_loot.show_contents)
 	_connection.pickup_rejected.connect(_loot.show_rejected)
 	_loot.send_open = _connection.send_loot_open
@@ -66,6 +70,8 @@ func _physics_process(_delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("inventory"):
 		_inventory.visible = not _inventory.visible
+	if Input.is_action_just_pressed("character"):
+		_character.visible = not _character.visible
 	if Input.is_action_just_pressed("interact"):
 		_open_loot()
 	_close_loot_out_of_range()
@@ -148,6 +154,7 @@ func _on_joined(player_id: int) -> void:
 	_player.revive()
 	if _connection.class_info:
 		_abilities.setup(_connection.class_info)
+	_character.setup(_connection.player_name, _connection.class_info)
 	_status.text = "player %d" % player_id
 
 
@@ -158,6 +165,7 @@ func _on_disconnected() -> void:
 	_views.clear()
 	_equipment.text = ""
 	_inventory.clear()
+	_character.clear()
 	_loot.close()
 	_abilities.clear()
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
@@ -181,6 +189,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_max_health = entity.get_max_health()
 			_extract_progress = entity.get_extract_progress()
 			_abilities.set_resource(entity.get_resource(), entity.get_max_resource())
+			_character.set_vitals(_health, _max_health, entity.get_resource(), entity.get_max_resource())
 			if _health <= 0 and _player.alive:
 				_player.die()
 			continue

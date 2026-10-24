@@ -136,3 +136,26 @@ func TestLoudGearIsSpottedFarther(t *testing.T) {
 		t.Fatal("enemy missed a player wearing a beacon")
 	}
 }
+
+func TestStatsSumClassAndGear(t *testing.T) {
+	cfg := passive()
+	w := NewWorld(cfg, nil)
+	id := w.AddPlayer(Vec2{})
+
+	p, _ := w.Player(id)
+	got := w.Stats(p)
+	if got[items.MaxHealth] != 120 || got[items.Armor] != 5 || got[items.Damage] != cfg.AttackDamage {
+		t.Fatalf("warrior stats = %v", got)
+	}
+	if _, ok := got[items.Heal]; ok {
+		t.Fatalf("stats include heal: %v", got)
+	}
+
+	equip(t, w, id, gear(items.Weapon, map[items.Stat]int{items.Damage: 17}))
+	equip(t, w, id, gear(items.Chest, map[items.Stat]int{items.Armor: 8, items.MoveSpeed: 50}))
+	p, _ = w.Player(id)
+	got = w.Stats(p)
+	if got[items.Damage] != 17 || got[items.Armor] != 13 || got[items.MoveSpeed] != cfg.MoveSpeedCap {
+		t.Fatalf("geared stats = %v", got)
+	}
+}

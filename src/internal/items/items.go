@@ -23,9 +23,10 @@ const (
 	DetectRadius Stat = "detect_radius"
 )
 
-var stats = []Stat{Damage, AttackSpeed, Armor, MaxHealth, MoveSpeed, ExtractSpeed, Heal, DetectRadius}
+// AllStats is every stat, in the order the client lists them.
+var AllStats = []Stat{Damage, AttackSpeed, Armor, MaxHealth, MoveSpeed, ExtractSpeed, Heal, DetectRadius}
 
-func (s Stat) Valid() bool { return slices.Contains(stats, s) }
+func (s Stat) Valid() bool { return slices.Contains(AllStats, s) }
 
 // WeaponType is what a class checks before it lets a player equip a weapon.
 type WeaponType string
