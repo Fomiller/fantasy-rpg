@@ -19,6 +19,7 @@ const WINDOWS_GROUP := "windows"
 @onready var _ghost: Node2D = $ServerGhost
 @onready var _entities: Node2D = $Entities
 @onready var _status: Label = $HUD/Status
+@onready var _debug_overlay: Label = $HUD/DebugOverlay
 @onready var _equipment: RichTextLabel = $HUD/Equipment
 @onready var _inventory: InventoryPanel = $HUD/Inventory
 @onready var _abilities: AbilityBar = $HUD/Abilities
@@ -27,6 +28,12 @@ const WINDOWS_GROUP := "windows"
 
 # Set by main. Tests swap it for a fake.
 var send_attack: Callable
+# Shows the server ghost, the overlay and the labels with server state.
+var debug := false
+
+var _last_tick := 0
+var _last_snapshot_ms := 0
+var _snapshot_rate := 0.0
 
 var _views: Dictionary[int, EntityView] = {}
 var _health := 0
@@ -61,7 +68,14 @@ func _ready() -> void:
 	_on_disconnected()
 
 
+func _process(_delta: float) -> void:
+	if debug:
+		_debug_overlay.text = debug_text()
+
+
 func _physics_process(_delta: float) -> void:
+	if Input.is_action_just_pressed("debug_overlay"):
+		set_debug(not debug)
 	if Input.is_action_just_pressed("close_window"):
 		close_top_window()
 	if _connection.has_extracted:
@@ -85,6 +99,26 @@ func _unhandled_input(event: InputEvent) -> void:
 	for i in ABILITY_ACTIONS.size():
 		if event.is_action_pressed(ABILITY_ACTIONS[i]):
 			use_ability(i)
+
+
+func set_debug(on: bool) -> void:
+	debug = on
+	_debug_overlay.visible = on
+	_debug_overlay.text = debug_text()
+	_ghost.visible = on and _connection.is_joined() and not _connection.has_extracted
+	for view: EntityView in _views.values():
+		view.debug = on
+
+
+func debug_text() -> String:
+	var age := Time.get_ticks_msec() - _last_snapshot_ms if _last_snapshot_ms > 0 else -1
+	return "\n".join([
+		"fps %d" % Engine.get_frames_per_second(),
+		"player %d" % _connection.player_id,
+		"pos %d, %d · server %d, %d" % [_player.position.x, _player.position.y, _ghost.position.x, _ghost.position.y],
+		"tick %d · %d Hz · seen %.1f/s" % [_last_tick, _connection.tick_rate, _snapshot_rate],
+		"snapshot age %d ms" % age,
+	])
 
 
 # Closes one window per press, the one drawn on top. Does nothing when none is open.
@@ -155,7 +189,7 @@ func _on_joined(player_id: int) -> void:
 	if _connection.class_info:
 		_abilities.setup(_connection.class_info)
 	_character.setup(_connection.player_name, _connection.class_info)
-	_status.text = "player %d" % player_id
+	_status.text = "joined"
 
 
 func _on_disconnected() -> void:
@@ -174,6 +208,7 @@ func _on_disconnected() -> void:
 # The ghost marks where the server thinks this player is. With prediction it
 # should sit just behind the player, about one round trip back.
 func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
+	_track_snapshot(snapshot.get_tick())
 	var seen := {}
 	for entity: GameV1.EntityState in snapshot.get_entities():
 		var id := entity.get_id()
@@ -181,7 +216,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			var pos := entity.get_position()
 			var vel := entity.get_velocity()
 			_ghost.position = Vector2(pos.get_x(), pos.get_y())
-			_ghost.visible = true
+			_ghost.visible = debug
 			if entity.get_max_speed() > 0.0:
 				_player.max_speed = entity.get_max_speed()
 			_player.reconcile(entity.get_last_input_seq(), _ghost.position, Vector2(vel.get_x(), vel.get_y()))
@@ -205,9 +240,19 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_views[id].queue_free()
 			_views.erase(id)
 	var hp := "%d/%d hp" % [_health, _max_health] if _health > 0 else "dead"
-	_status.text = "player %d · %s · tick %d" % [_connection.player_id, hp, snapshot.get_tick()]
+	_status.text = hp
 	if _extract_progress > 0.0:
 		_status.text += " · extracting %d%%" % int(_extract_progress * 100)
+
+
+# Smoothed so one late packet does not make the rate jump.
+func _track_snapshot(tick: int) -> void:
+	var now := Time.get_ticks_msec()
+	if _last_snapshot_ms > 0 and now > _last_snapshot_ms:
+		var rate := 1000.0 / (now - _last_snapshot_ms)
+		_snapshot_rate = rate if _snapshot_rate == 0.0 else lerpf(_snapshot_rate, rate, 0.1)
+	_last_snapshot_ms = now
+	_last_tick = tick
 
 
 func _spawn_view(kind: int) -> EntityView:
@@ -222,6 +267,7 @@ func _spawn_view(kind: int) -> EntityView:
 	else:
 		view = REMOTE_PLAYER_SCENE.instantiate()
 	_entities.add_child(view)
+	view.debug = debug
 	return view
 
 

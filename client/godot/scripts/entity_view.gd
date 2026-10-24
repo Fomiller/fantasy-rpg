@@ -8,6 +8,11 @@ const SMOOTHING := 20.0
 
 var entity_id := 0
 var health := 0
+# Main sets it on every view, including ones spawned after the toggle.
+var debug := false:
+	set(value):
+		debug = value
+		_show_debug()
 
 var _target := Vector2.ZERO
 var _placed := false
@@ -30,6 +35,10 @@ func apply(state: GameV1.EntityState) -> void:
 
 func _process(delta: float) -> void:
 	position = position.lerp(_target, minf(1.0, SMOOTHING * delta))
+
+
+func _show_debug() -> void:
+	pass
 
 
 func is_alive() -> bool:

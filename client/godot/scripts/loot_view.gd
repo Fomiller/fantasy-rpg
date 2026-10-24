@@ -20,3 +20,7 @@ func apply(state: GameV1.EntityState) -> void:
 		_sprite.texture = CHEST if item_count > 0 else OPEN_CHEST
 	else:
 		_sprite.texture = LOOT
+
+
+func _show_debug() -> void:
+	_health.visible = debug

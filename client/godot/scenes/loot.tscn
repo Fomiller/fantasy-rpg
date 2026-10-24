@@ -11,6 +11,7 @@ scale = Vector2(2, 2)
 texture = ExtResource("2_sack")
 
 [node name="Health" type="Label" parent="."]
+visible = false
 offset_left = -32.0
 offset_top = -38.0
 offset_right = 32.0
