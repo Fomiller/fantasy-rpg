@@ -38,6 +38,15 @@ offset_right = 400.0
 offset_bottom = 32.0
 text = "offline"
 
+[node name="DebugOverlay" type="Label" parent="HUD"]
+visible = false
+offset_left = 960.0
+offset_top = 560.0
+offset_right = 1272.0
+offset_bottom = 712.0
+mouse_filter = 2
+vertical_alignment = 2
+
 [node name="Equipment" type="RichTextLabel" parent="HUD"]
 offset_left = 12.0
 offset_top = 36.0

@@ -51,7 +51,14 @@ func _tint() -> Color:
 	return WINDUP_TINT if is_telegraphing() or state == GameV1.EnemyState.CHARGE else Color.WHITE
 
 
+func _show_debug() -> void:
+	_health.text = _label()
+
+
+# The alerts are a gameplay cue. The raw state is only for debugging.
 func _label() -> String:
+	if debug:
+		return "#%d %s" % [entity_id, str(GameV1.EnemyState.find_key(state)).to_lower()]
 	if not is_alive():
 		return "dead"
 	match state:
