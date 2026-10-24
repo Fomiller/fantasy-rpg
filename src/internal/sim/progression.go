@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
 // Where run XP came from.
@@ -24,12 +26,15 @@ type XPEvent struct {
 // the totals after banking.
 type RunEnd struct {
 	Player    EntityID
+	Class     string
 	Extracted bool
 	RunXP     int
 	Banked    int
 	XP        int
 	Level     int
 	Levels    int
+	// The bag the player left with. Nil on death, since it all drops.
+	Kept []items.Instance
 }
 
 // AddRunXP gives a player XP for this run. It does not change the level, so
@@ -84,7 +89,11 @@ func (w *World) endRun(p *Player, extracted bool) (RunEnd, bool) {
 		banked = run + rules.ExtractBonus + run*rules.ExtractBonusPercent/100
 	}
 	levels := w.bank(p, banked)
-	return RunEnd{Player: p.ID, Extracted: extracted, RunXP: run, Banked: banked, XP: p.XP, Level: p.Level, Levels: levels}, true
+	end := RunEnd{Player: p.ID, Class: p.Class, Extracted: extracted, RunXP: run, Banked: banked, XP: p.XP, Level: p.Level, Levels: levels}
+	if extracted {
+		end.Kept = slices.Clone(p.Inventory.Items)
+	}
+	return end, true
 }
 
 func (w *World) grantXP(p *Player, amount int, source string, ev *Events) {

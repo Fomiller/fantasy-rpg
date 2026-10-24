@@ -8,6 +8,9 @@ const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 const LOOT_SCENE := preload("res://scenes/loot.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/projectile.tscn")
 const EXTRACTED_TEXT := "extracted · press E to go again"
+# Where +XP popups start, above the player's head.
+const POPUP_OFFSET := Vector2(-24, -56)
+const POPUP_SPACING := 16.0
 # Slot 0 is the basic attack.
 const ABILITY_ACTIONS := ["attack", "ability_1", "ability_2", "ability_3"]
 # Any Control in this group is a window that Escape closes.
@@ -25,6 +28,9 @@ const WINDOWS_GROUP := "windows"
 @onready var _abilities: AbilityBar = $HUD/Abilities
 @onready var _loot: LootWindow = $HUD/Loot
 @onready var _character: CharacterScreen = $HUD/Character
+@onready var _xp_bar: XpBar = $HUD/XpBar
+@onready var _level_up: LevelUpBanner = $HUD/LevelUp
+@onready var _summary: RunSummaryWindow = $HUD/RunSummary
 
 # Set by main. Tests swap it for a fake.
 var send_attack: Callable
@@ -50,6 +56,9 @@ func _ready() -> void:
 	_connection.ability_used.connect(_on_ability_used)
 	_connection.ability_rejected.connect(_on_ability_rejected)
 	_connection.extracted.connect(_on_extracted)
+	_connection.xp_gained.connect(_on_xp_gained)
+	_connection.level_up.connect(_on_level_up)
+	_connection.run_ended.connect(_on_run_ended)
 	_connection.equipment_received.connect(_on_equipment)
 	_connection.equipment_received.connect(_inventory.show_equipment)
 	_connection.inventory_received.connect(_inventory.show_inventory)
@@ -188,7 +197,10 @@ func _on_joined(player_id: int) -> void:
 	_player.revive()
 	if _connection.class_info:
 		_abilities.setup(_connection.class_info)
-	_character.setup(_connection.player_name, _connection.class_info)
+	_character.setup(_connection.character, _connection.class_info)
+	if _connection.character:
+		_xp_bar.show_character(_connection.character)
+	_summary.visible = false
 	_status.text = "joined"
 
 
@@ -202,6 +214,7 @@ func _on_disconnected() -> void:
 	_character.clear()
 	_loot.close()
 	_abilities.clear()
+	_xp_bar.clear()
 	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
@@ -311,6 +324,32 @@ func _on_extracted(player_id: int) -> void:
 	_player.visible = false
 	_ghost.visible = false
 	_status.text = EXTRACTED_TEXT
+
+
+func _on_xp_gained(event: GameV1.XpGained) -> void:
+	_xp_bar.set_run_xp(event.get_run_xp())
+	_character.set_run_xp(event.get_run_xp())
+	var popup := XpPopup.make(event.get_amount())
+	popup.position = POPUP_OFFSET - Vector2(0, POPUP_SPACING * xp_popups().size())
+	_player.add_child(popup)
+
+
+func xp_popups() -> Array[Node]:
+	return _player.find_children("*", "XpPopup", false, false)
+
+
+func _on_level_up(event: GameV1.LevelUp) -> void:
+	_abilities.set_level(event.get_level())
+	_level_up.play(event.get_level())
+	_xp_bar.flash()
+
+
+# Kept open through the disconnect after an extraction. Joining again closes it.
+func _on_run_ended(summary: GameV1.RunSummary) -> void:
+	if summary.has_character():
+		_xp_bar.show_character(summary.get_character())
+		_character.show_character(summary.get_character())
+	_summary.show_summary(summary)
 
 
 func _on_equipment(items: Array[GameV1.Item]) -> void:
