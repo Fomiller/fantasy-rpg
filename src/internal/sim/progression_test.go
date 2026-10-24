@@ -1,10 +1,12 @@
 package sim
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
@@ -175,10 +177,11 @@ func TestExtractionBanksRunXPAndBonus(t *testing.T) {
 	w.SetExtraction(Rect{Vec2{-50, -50}, Vec2{50, 50}})
 	id := w.AddPlayer(Vec2{})
 	w.AddRunXP(id, 115)
+	w.Restore(id, inventory.Loadout{Items: []items.Instance{potion("p", 2)}})
 
 	ev := w.Step(dt)
-	want := RunEnd{Player: id, Extracted: true, RunXP: 115, Banked: 168, XP: 168, Level: 2, Levels: 1}
-	if len(ev.RunEnded) != 1 || ev.RunEnded[0] != want || len(ev.Extracted) != 1 {
+	want := RunEnd{Player: id, Class: "warrior", Extracted: true, RunXP: 115, Banked: 168, XP: 168, Level: 2, Levels: 1, Kept: []items.Instance{potion("p", 2)}}
+	if len(ev.RunEnded) != 1 || !reflect.DeepEqual(ev.RunEnded[0], want) || len(ev.Extracted) != 1 {
 		t.Fatalf("run ended = %+v, extracted %v, want %+v", ev.RunEnded, ev.Extracted, want)
 	}
 }
@@ -189,13 +192,14 @@ func TestDeathBanksAQuarterAndStaysDead(t *testing.T) {
 	w.AddEnemy(Vec2{}, Melee)
 	w.players[id].Health = 1
 	w.AddRunXP(id, 403)
+	w.Restore(id, inventory.Loadout{Items: []items.Instance{potion("p", 2)}})
 
 	var ends []RunEnd
 	for range 40 {
 		ends = append(ends, w.Step(dt).RunEnded...)
 	}
-	want := RunEnd{Player: id, RunXP: 403, Banked: 100, XP: 100, Level: 2, Levels: 1}
-	if len(ends) != 1 || ends[0] != want {
+	want := RunEnd{Player: id, Class: "warrior", RunXP: 403, Banked: 100, XP: 100, Level: 2, Levels: 1}
+	if len(ends) != 1 || !reflect.DeepEqual(ends[0], want) {
 		t.Fatalf("run ended = %+v, want %+v", ends, want)
 	}
 	if p := playerOf(t, w, id); p.Health != 0 || p.MaxHealth != 125 || p.RunXP != 0 {

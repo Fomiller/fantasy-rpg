@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
@@ -85,8 +87,8 @@ func TestDamageAndJoined(t *testing.T) {
 		t.Fatalf("damage = %v", d)
 	}
 	cave := caves.Loop()
-	j := Joined(5, cave, cave.PlayerSpawns[0], 30, ClassInfo(classes.Default(), classes.Starter)).GetJoined()
-	if j.GetPlayerId() != 5 || j.GetTickRate() != 30 || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
+	j := Joined(5, cave, cave.PlayerSpawns[0], 30, ClassInfo(classes.Default(), classes.Starter), &gamev1.CharacterInfo{Name: "ann"}).GetJoined()
+	if j.GetPlayerId() != 5 || j.GetTickRate() != 30 || j.GetCharacter().GetName() != "ann" || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
 		t.Fatalf("joined = %v", j)
 	}
 	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetCave().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
@@ -99,8 +101,8 @@ func TestDamageAndJoined(t *testing.T) {
 	if cleave := c.GetAbilities()[1]; cleave.GetId() != "cleave" || cleave.GetCost() != 30 || cleave.GetCooldownMs() != 4000 || cleave.GetWindupMs() != 250 || !cleave.GetRoot() || cleave.GetUnlockLevel() != 2 {
 		t.Fatalf("cleave = %v", cleave)
 	}
-	if id := Extracted(5).GetExtracted().GetPlayerId(); id != 5 {
-		t.Fatalf("extracted player = %d, want 5", id)
+	if e := Extracted(5, nil).GetExtracted(); e.GetPlayerId() != 5 || e.GetSummary() != nil {
+		t.Fatalf("extracted = %v, want player 5 with no summary", e)
 	}
 }
 
@@ -203,5 +205,56 @@ func TestAbilityMessages(t *testing.T) {
 	rejected := AbilityRejected(sim.Rejection{Player: 3, Seq: 9, Ability: "brace", Reason: sim.RejectResource}).GetAbilityRejected()
 	if rejected.GetSeq() != 9 || rejected.GetAbilityId() != "brace" || rejected.GetReason() != "resource" {
 		t.Fatalf("rejected = %v", rejected)
+	}
+}
+
+func TestCharacterSplitsXPByLevel(t *testing.T) {
+	prog := classes.Default().Progression
+	c := Character(prog, "ann", "warrior", 3, 300, 40)
+	want := &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 3, Xp: 300, LevelXp: 50, XpToNext: 200, RunXp: 40}
+	if !proto.Equal(c, want) {
+		t.Fatalf("character = %v, want %v", c, want)
+	}
+	top := prog.XPToReach(prog.MaxLevel)
+	if c := Character(prog, "ann", "warrior", prog.MaxLevel, top+30, 0); c.GetXpToNext() != 0 || c.GetLevelXp() != 30 {
+		t.Fatalf("at the cap = %v, want 30 past it and nothing to next", c)
+	}
+}
+
+func TestProgressionMessages(t *testing.T) {
+	xp := XPGained(sim.XPEvent{Player: 1, Amount: 10, Source: sim.XPKill, RunXP: 25}).GetXpGained()
+	if xp.GetAmount() != 10 || xp.GetSource() != "kill" || xp.GetRunXp() != 25 {
+		t.Fatalf("xp = %v", xp)
+	}
+	data := classes.Default()
+	up := LevelUp(3, ClassInfo(data, classes.Starter)).GetLevelUp()
+	if up.GetLevel() != 3 || up.GetClassInfo().GetId() != "warrior" {
+		t.Fatalf("level up = %v", up)
+	}
+
+	r := items.NewRoller(items.Default(), 1)
+	potion, err := r.Make("health_potion", 1, items.Common)
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := sim.RunEnd{Player: 1, Class: "warrior", Extracted: true, RunXP: 115, Banked: 168, XP: 168, Level: 2, Levels: 1, Kept: []items.Instance{potion}}
+	summary := RunSummary(data.Progression, "ann", end)
+	want := &gamev1.RunSummary{
+		Extracted:    true,
+		RunXp:        115,
+		BankedXp:     168,
+		LevelsGained: 1,
+		Character:    &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 2, Xp: 168, LevelXp: 68, XpToNext: 150},
+		Kept:         []*gamev1.Item{Item(potion)},
+	}
+	if !proto.Equal(summary, want) {
+		t.Fatalf("summary = %v, want %v", summary, want)
+	}
+	if got := Extracted(1, summary).GetExtracted().GetSummary(); got != summary {
+		t.Fatalf("extracted summary = %v", got)
+	}
+	end.Extracted, end.Kept = false, nil
+	if got := RunEnded(RunSummary(data.Progression, "ann", end)).GetRunEnded().GetSummary(); got.GetExtracted() || len(got.GetKept()) != 0 {
+		t.Fatalf("death summary = %v, want no items kept", got)
 	}
 }

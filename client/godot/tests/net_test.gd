@@ -21,6 +21,11 @@ func _run() -> void:
 		_finish()
 		return
 
+	var character := connection.character
+	_check(character != null and character.get_name() == connection.player_name and character.get_level() == 1, "server sends back the character under the joined name")
+	var bar: XpBar = main.get_node("HUD/XpBar")
+	_check(bar.visible and bar.text() == "Lv 1 · 0/100 XP", "XP bar shows a new character at level 1")
+
 	var hud: RichTextLabel = main.get_node("HUD/Equipment")
 	_check(await _until(func() -> bool: return "Rusty Sword" in hud.text), "HUD shows the starter kit")
 
@@ -123,6 +128,8 @@ func _test_chest(main: Node, connection: ServerConnection, latest: Dictionary) -
 	var loot: LootWindow = main.get_node("HUD/Loot")
 	await _press("interact")
 	_check(await _until(func() -> bool: return loot.visible), "interact opens the chest's loot window")
+	var bar: XpBar = main.get_node("HUD/XpBar")
+	_check(await _until(func() -> bool: return bar.run_xp == 5 and not main.xp_popups().is_empty()), "opening the chest shows its run XP and a popup")
 	if not loot.visible:
 		return
 	var rows := _loot_rows(loot)

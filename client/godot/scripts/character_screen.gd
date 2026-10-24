@@ -3,8 +3,6 @@ extends PanelContainer
 
 # Mirrors items.GearSlots, so an empty slot still gets a row.
 const SLOTS := ["weapon", "head", "chest", "hands", "feet", "trinket"]
-# The server has no levels yet.
-const LEVEL := 1
 const SPRITE_SCENE := preload("res://scenes/character_sprite.tscn")
 const BODY := preload("res://assets/kenney_tiny_dungeon/tile_0097.png")
 const SPRITE_SCALE := 4.0
@@ -13,11 +11,13 @@ const SPRITE_SCALE := 4.0
 # server answers with new equipment.
 var send_unequip: Callable
 
-var _name := ""
 var _info: GameV1.ClassInfo
+var _character: GameV1.CharacterInfo
+var _run_xp := 0
 var _equipment: Dictionary[String, GameV1.Item] = {}
 
 var _title := Label.new()
+var _xp := Label.new()
 var _portrait := Control.new()
 var _sprite: CharacterSprite = SPRITE_SCENE.instantiate()
 var _slots := VBoxContainer.new()
@@ -34,21 +34,34 @@ func _ready() -> void:
 	_sprite.position = _portrait.custom_minimum_size / 2
 	_sprite.scale = Vector2.ONE * SPRITE_SCALE
 	_portrait.add_child(_sprite)
-	for child: Control in [_title, _portrait, _slots, _vitals, _stats]:
+	for child: Control in [_title, _xp, _portrait, _slots, _vitals, _stats]:
 		_list.add_child(child)
 	clear()
 
 
-func setup(character_name: String, info: GameV1.ClassInfo) -> void:
-	_name = character_name
+func setup(character: GameV1.CharacterInfo, info: GameV1.ClassInfo) -> void:
 	_info = info
-	_title.text = "%s · %s · level %d" % [_name, _info.get_name() if _info else "", LEVEL]
+	show_character(character)
+
+
+# The name is the one the server keeps the character under.
+func show_character(character: GameV1.CharacterInfo) -> void:
+	_character = character
+	_run_xp = character.get_run_xp() if character else 0
+	_refresh_character()
+
+
+func set_run_xp(value: int) -> void:
+	_run_xp = value
+	_refresh_character()
 
 
 func clear() -> void:
-	_name = ""
 	_info = null
+	_character = null
+	_run_xp = 0
 	_title.text = ""
+	_xp.text = ""
 	_vitals.text = ""
 	_stats.text = ""
 	var none: Array[GameV1.Item] = []
@@ -97,6 +110,20 @@ func show_stats(stats: Array[GameV1.ItemStat]) -> void:
 func set_vitals(health: int, max_health: int, resource: int, max_resource: int) -> void:
 	var resource_name := _info.get_resource().capitalize() if _info else "Resource"
 	_vitals.text = "Health %d/%d\n%s %d/%d" % [health, max_health, resource_name, resource, max_resource]
+
+
+func _refresh_character() -> void:
+	if _character == null:
+		_title.text = ""
+		_xp.text = ""
+		return
+	_title.text = "%s · %s · level %d" % [_character.get_name(), _info.get_name() if _info else "", _character.get_level()]
+	if _character.get_xp_to_next() == 0:
+		_xp.text = "XP %d · max level" % _character.get_xp()
+	else:
+		_xp.text = "XP %d/%d to level %d" % [_character.get_level_xp(), _character.get_xp_to_next(), _character.get_level() + 1]
+	if _run_xp > 0:
+		_xp.text += "\nRun XP %d, banked when the run ends" % _run_xp
 
 
 func slot_item(slot: String) -> GameV1.Item:

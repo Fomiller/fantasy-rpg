@@ -34,6 +34,9 @@ message ServerMessage {
     AbilityRejected ability_rejected = 17;
     LootContents loot = 18;
     PickupRejected pickup_rejected = 19;
+    XpGained xp_gained = 20;
+    LevelUp level_up = 21;
+    RunEnded run_ended = 22;
   }
 }
 
@@ -64,6 +67,23 @@ message JoinAccepted {
   // Named class_info because Godobuf would make get_class(), which Godot
   // already has on every Object.
   ClassInfo class_info = 5;
+  CharacterInfo character = 6;
+}
+
+// CharacterInfo is the player's own level and XP, and the name the server
+// keeps their character under.
+message CharacterInfo {
+  string name = 1;
+  string class_id = 2;
+  uint32 level = 3;
+  // Banked XP in total.
+  uint32 xp = 4;
+  // Banked XP past the start of this level.
+  uint32 level_xp = 5;
+  // XP from this level to the next. 0 at the level cap.
+  uint32 xp_to_next = 6;
+  // Earned this run and not banked yet. The level does not move until the run ends.
+  uint32 run_xp = 7;
 }
 
 // ClassInfo is the player's own class. The client has no class data files,
@@ -95,6 +115,42 @@ message AbilityInfo {
 // connection closes right after.
 message Extracted {
   uint64 player_id = 1;
+  // Only in the copy sent to the player who extracted.
+  RunSummary summary = 2;
+}
+
+// RunEnded is sent to a player who died. They stay in the cave, dead.
+message RunEnded {
+  RunSummary summary = 1;
+}
+
+// RunSummary is how a run ended for one player. Any LevelUp is sent just before it.
+message RunSummary {
+  bool extracted = 1;
+  // Run XP earned before the run ended.
+  uint32 run_xp = 2;
+  // What went into banked XP: all of it plus a bonus on extraction, a share on death.
+  uint32 banked_xp = 3;
+  uint32 levels_gained = 4;
+  // The character after banking. run_xp is 0.
+  CharacterInfo character = 5;
+  // The bag the player left with. Empty on death, since it all drops.
+  repeated Item kept = 6;
+}
+
+// XpGained is sent to the player who earned it.
+message XpGained {
+  uint32 amount = 1;
+  // One of kill, chest.
+  string source = 2;
+  // The run total after this.
+  uint32 run_xp = 3;
+}
+
+// LevelUp is sent to that player when banked XP at the end of a run gives a level.
+message LevelUp {
+  uint32 level = 1;
+  ClassInfo class_info = 2;
 }
 
 // MoveInput is sent once per tick. The server uses one per tick, in seq order.
@@ -195,7 +251,8 @@ message EntityState {
   string class_id = 14;
   int32 resource = 15;
   int32 max_resource = 16;
-  // Players only. The client compares it to AbilityInfo.unlock_level.
+  // Players only, so other players' levels can be shown too. The client
+  // compares its own to AbilityInfo.unlock_level.
   uint32 level = 17;
 }
 

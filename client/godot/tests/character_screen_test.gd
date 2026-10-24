@@ -21,12 +21,22 @@ func _run() -> void:
 		_sent.append(ability_id)
 		return 1
 	screen.send_unequip = func(slot: String) -> void: _sent.append("unequip %s" % slot)
-	screen.setup("ann", _warrior())
+	connection.player_name = "local-name"
+	screen.setup(_character("ann", 3, 50, 200), _warrior())
 
 	await _key(KEY_C)
 	await _frames(1)
 	_check(screen.visible, "C opens the character screen")
-	_check(_has_text(screen, "ann · Warrior · level 1"), "screen shows name, class and level")
+	_check(_has_text(screen, "ann · Warrior · level 3"), "screen shows the server's name, class and level")
+	_check(_has_text(screen, "XP 50/200 to level 4"), "screen shows XP into the level")
+
+	connection._handle(_xp_gained(10, 15))
+	_check(_has_text(screen, "Run XP 15"), "run XP shows after an XpGained")
+	connection._handle(_run_ended(_character("ann", 4, 20, 250)))
+	_check(_has_text(screen, "ann · Warrior · level 4") and _has_text(screen, "XP 20/250 to level 5") and not _has_text(screen, "Run XP"), "a run summary moves the screen to the new level")
+	main.get_node("HUD/RunSummary").visible = false
+	screen.show_character(_character("ann", 10, 30, 0))
+	_check(_has_text(screen, "level 10") and _has_text(screen, "max level"), "the cap shows max level")
 	_check(screen.find_children("*", "CharacterSprite", true, false).size() == 1, "screen shows the character sprite")
 
 	connection._handle(_equipment(["Iron Sword"], {"damage": 17, "armor": 13, "max_health": 140, "move_speed": 5}))
@@ -83,6 +93,37 @@ func _equipment(names: Array, stats: Dictionary) -> PackedByteArray:
 		var s := equipment.add_stats()
 		s.set_stat(stat)
 		s.set_value(stats[stat])
+	return msg.to_bytes()
+
+
+func _character(character_name: String, level: int, level_xp: int, to_next: int) -> GameV1.CharacterInfo:
+	var info := GameV1.CharacterInfo.new()
+	info.set_name(character_name)
+	info.set_class_id("warrior")
+	info.set_level(level)
+	info.set_level_xp(level_xp)
+	info.set_xp_to_next(to_next)
+	return info
+
+
+func _xp_gained(amount: int, run_xp: int) -> PackedByteArray:
+	var msg := GameV1.ServerMessage.new()
+	msg.set_protocol_version(1)
+	var xp := msg.new_xp_gained()
+	xp.set_amount(amount)
+	xp.set_source("kill")
+	xp.set_run_xp(run_xp)
+	return msg.to_bytes()
+
+
+func _run_ended(character: GameV1.CharacterInfo) -> PackedByteArray:
+	var msg := GameV1.ServerMessage.new()
+	msg.set_protocol_version(1)
+	var c := msg.new_run_ended().new_summary().new_character()
+	c.set_name(character.get_name())
+	c.set_level(character.get_level())
+	c.set_level_xp(character.get_level_xp())
+	c.set_xp_to_next(character.get_xp_to_next())
 	return msg.to_bytes()
 
 

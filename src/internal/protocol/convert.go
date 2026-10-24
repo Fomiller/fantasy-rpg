@@ -50,7 +50,7 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 	return nil, false
 }
 
-func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, class *gamev1.ClassInfo) *gamev1.ServerMessage {
+func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, class *gamev1.ClassInfo, character *gamev1.CharacterInfo) *gamev1.ServerMessage {
 	layout := &gamev1.CaveLayout{
 		Name:       cave.Name,
 		Bounds:     rect(cave.Bounds),
@@ -60,7 +60,7 @@ func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, 
 		layout.Walls = append(layout.Walls, rect(w))
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Joined{
-		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class},
+		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class, Character: character},
 	}}
 }
 
@@ -83,6 +83,50 @@ func ClassInfo(data *classes.Data, id string) *gamev1.ClassInfo {
 	return info
 }
 
+// Character splits banked XP into the part past the current level, so the
+// client never needs the XP curve.
+func Character(prog classes.Progression, name, class string, level, xp, runXP int) *gamev1.CharacterInfo {
+	return &gamev1.CharacterInfo{
+		Name:     name,
+		ClassId:  class,
+		Level:    uint32(level),
+		Xp:       uint32(xp),
+		LevelXp:  uint32(xp - prog.XPToReach(level)),
+		XpToNext: uint32(prog.ToNext(level)),
+		RunXp:    uint32(runXP),
+	}
+}
+
+func RunSummary(prog classes.Progression, name string, end sim.RunEnd) *gamev1.RunSummary {
+	summary := &gamev1.RunSummary{
+		Extracted:    end.Extracted,
+		RunXp:        uint32(end.RunXP),
+		BankedXp:     uint32(end.Banked),
+		LevelsGained: uint32(end.Levels),
+		Character:    Character(prog, name, end.Class, end.Level, end.XP, 0),
+	}
+	for _, inst := range end.Kept {
+		summary.Kept = append(summary.Kept, Item(inst))
+	}
+	return summary
+}
+
+func RunEnded(summary *gamev1.RunSummary) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_RunEnded{RunEnded: &gamev1.RunEnded{Summary: summary}}}
+}
+
+func XPGained(ev sim.XPEvent) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_XpGained{XpGained: &gamev1.XpGained{
+		Amount: uint32(ev.Amount),
+		Source: ev.Source,
+		RunXp:  uint32(ev.RunXP),
+	}}}
+}
+
+func LevelUp(level int, class *gamev1.ClassInfo) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_LevelUp{LevelUp: &gamev1.LevelUp{Level: uint32(level), ClassInfo: class}}}
+}
+
 func AbilityUsed(ev sim.AbilityEvent) *gamev1.ServerMessage {
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_AbilityUsed{AbilityUsed: &gamev1.AbilityUsed{
 		SourceId:   uint64(ev.Source),
@@ -101,9 +145,10 @@ func AbilityRejected(r sim.Rejection) *gamev1.ServerMessage {
 	}}}
 }
 
-func Extracted(player sim.EntityID) *gamev1.ServerMessage {
+// Extracted has a summary only for the player who left. Everyone else gets nil.
+func Extracted(player sim.EntityID, summary *gamev1.RunSummary) *gamev1.ServerMessage {
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Extracted{
-		Extracted: &gamev1.Extracted{PlayerId: uint64(player)},
+		Extracted: &gamev1.Extracted{PlayerId: uint64(player), Summary: summary},
 	}}
 }
 

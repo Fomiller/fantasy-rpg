@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
@@ -8,6 +8,9 @@
 [ext_resource type="Script" path="res://scripts/ability_bar.gd" id="6_abilities"]
 [ext_resource type="Script" path="res://scripts/loot_window.gd" id="7_loot"]
 [ext_resource type="Script" path="res://scripts/character_screen.gd" id="8_character"]
+[ext_resource type="Script" path="res://scripts/xp_bar.gd" id="9_xp_bar"]
+[ext_resource type="Script" path="res://scripts/level_up_banner.gd" id="10_level_up"]
+[ext_resource type="Script" path="res://scripts/run_summary.gd" id="11_run_summary"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -96,3 +99,38 @@ offset_right = 400.0
 offset_bottom = 712.0
 mouse_filter = 2
 script = ExtResource("6_abilities")
+
+[node name="XpBar" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 0
+offset_left = 440.0
+offset_top = 692.0
+offset_right = 840.0
+offset_bottom = 710.0
+mouse_filter = 2
+script = ExtResource("9_xp_bar")
+
+[node name="LevelUp" type="Label" parent="HUD"]
+visible = false
+offset_left = 340.0
+offset_top = 120.0
+offset_right = 940.0
+offset_bottom = 160.0
+theme_override_colors/font_color = Color(0.95, 0.78, 0.3, 1)
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+script = ExtResource("10_level_up")
+
+[node name="RunSummary" type="PanelContainer" parent="HUD"]
+visible = false
+offset_left = 440.0
+offset_top = 180.0
+offset_right = 840.0
+offset_bottom = 480.0
+script = ExtResource("11_run_summary")
+
+[node name="List" type="VBoxContainer" parent="HUD/RunSummary"]
+layout_mode = 2

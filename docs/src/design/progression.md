@@ -343,23 +343,32 @@ Load checks:
 
 ## Protocol changes
 
-Proposal only.
+FOM-213 and FOM-214 built these.
 
 | Message | Field | For |
 | -- | -- | -- |
-| `JoinAccepted` | `CharacterInfo character` | level, xp, xp_to_next, run_xp (0 at start) |
+| `JoinAccepted` | `CharacterInfo character` | name, class_id, level, xp, level_xp, xp_to_next, run_xp (0 at start) |
 | `AbilityInfo` | `uint32 unlock_level` | Client greys out locked abilities and shows the level |
 | `AbilityRejected` | reason `locked` | New reason |
 | new `XpGained` | amount, source (`kill`, `chest`), run_xp | To that player only |
 | new `LevelUp` | level, new `ClassInfo` | To that player, after the run ends |
-| `Extracted` | `RunSummary summary` | run_xp, banked_xp, new level, items moved to stash |
+| `Extracted` | `RunSummary summary` | Only in the copy sent to the player who left |
 | new `RunEnded` on death | `RunSummary summary` | Same summary for a death |
 
+`RunSummary` holds run_xp, banked_xp, levels_gained, the `CharacterInfo`
+after banking, and `kept`: the bag on extraction, empty on death.
+
+- `CharacterInfo` sends `level_xp` (XP past the start of the level) and
+  `xp_to_next`. The client draws the XP bar from them and never needs the
+  curve.
 - Level changes only at run end. During a run, run XP shows as a second
-  segment on the XP bar. `LevelUp` comes with the `RunSummary`.
-- FOM-213 added `uint32 level` to the player's `EntityState` before
-  `CharacterInfo` exists. The client compares it to `unlock_level`, so a
-  level up shows in the next snapshot.
+  segment on the XP bar.
+- Order at run end: any `XpGained` from that tick, then `LevelUp` if a level
+  was gained, then the summary. On extraction the summary is on `Extracted`,
+  and the connection closes after it.
+- `EntityState.level` stays. Snapshots carry every player's level, so other
+  players' levels can be shown later. The ability bar still reads its own
+  level from it.
 - No stat changes mid-run, so health never jumps in a fight. A death can
   never take away a level the player already saw.
 

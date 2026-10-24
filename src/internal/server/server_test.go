@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -54,6 +55,12 @@ func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 		a.DetectRadius, a.PatrolSpeed, a.Speed, a.AttackRange, a.Special = 0, 0, 0, 0, sim.SpecialNone
 		cfg.Archetypes[id] = a
 	}
+	return serve(t, cave, cfg)
+}
+
+// serve leaves the enemy as cfg has it.
+func serve(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
+	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
 	world := cave.NewWorld(cfg, loot)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, sim.Melee)
@@ -615,5 +622,139 @@ func TestJoinLoadsBankedXP(t *testing.T) {
 	}})
 	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetAbilityRejected() != nil }).GetAbilityRejected(); r.GetReason() != sim.RejectResource {
 		t.Fatalf("rejected = %v, want resource", r)
+	}
+}
+
+func TestJoinSendsCharacter(t *testing.T) {
+	h := start(t)
+	h.srv.Store.SaveXP(context.Background(), "ann", 120)
+	c := joinAs(t, dial(t, h.url), "ann").GetCharacter()
+	want := &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 2, Xp: 120, LevelXp: 20, XpToNext: 150}
+	if !proto.Equal(c, want) {
+		t.Fatalf("character = %v, want %v", c, want)
+	}
+}
+
+// progress reads until stop matches and returns the progression messages seen
+// on the way, in order.
+func progress(t *testing.T, conn *websocket.Conn, stop func(*gamev1.ServerMessage) bool) []*gamev1.ServerMessage {
+	t.Helper()
+	var seen []*gamev1.ServerMessage
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		if m.GetXpGained() != nil || m.GetLevelUp() != nil || m.GetRunEnded() != nil || m.GetExtracted() != nil {
+			seen = append(seen, m)
+		}
+		return stop(m)
+	})
+	return seen
+}
+
+func kinds(msgs []*gamev1.ServerMessage) []string {
+	var out []string
+	for _, m := range msgs {
+		switch {
+		case m.GetXpGained() != nil:
+			out = append(out, "xp")
+		case m.GetLevelUp() != nil:
+			out = append(out, "level_up")
+		case m.GetRunEnded() != nil:
+			out = append(out, "run_ended")
+		case m.GetExtracted() != nil:
+			out = append(out, "extracted")
+		}
+	}
+	return out
+}
+
+func lootChest(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	chest := chestID(t, conn)
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_LootOpen{LootOpen: &gamev1.LootOpenRequest{TargetId: chest}}})
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Pickup{Pickup: &gamev1.PickupRequest{TargetId: chest}}})
+}
+
+// The chest's XP comes first, then the level it gave, then the summary on
+// Extracted, and only then does the connection close.
+func TestExtractionSendsSummaryLast(t *testing.T) {
+	cave := testCave()
+	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
+	cave.Chests = []sim.Vec2{{X: 0, Y: 20}}
+	cfg := sim.DefaultConfig()
+	cfg.ExtractTime = 500 * time.Millisecond
+	h := startCave(t, cave, cfg)
+	h.srv.Store.SaveXP(context.Background(), "ann", 90)
+
+	leaver, other := dial(t, h.url), dial(t, h.url)
+	id := joinAs(t, leaver, "ann").GetPlayerId()
+	join(t, other)
+	lootChest(t, leaver)
+
+	var bag []*gamev1.Item
+	msgs := progress(t, leaver, func(m *gamev1.ServerMessage) bool {
+		if inv := m.GetInventory(); inv != nil {
+			bag = inv.GetItems()
+		}
+		return m.GetExtracted() != nil
+	})
+	if got := kinds(msgs); !slices.Equal(got, []string{"xp", "level_up", "extracted"}) {
+		t.Fatalf("messages = %v, want xp, level_up, extracted", got)
+	}
+	if xp := msgs[0].GetXpGained(); xp.GetAmount() != 5 || xp.GetSource() != sim.XPChest || xp.GetRunXp() != 5 {
+		t.Fatalf("xp = %v", xp)
+	}
+	if up := msgs[1].GetLevelUp(); up.GetLevel() != 2 || up.GetClassInfo().GetId() != "warrior" {
+		t.Fatalf("level up = %v", up)
+	}
+	// 5 run XP, plus 25 and 25% of 5 for extracting.
+	summary := msgs[2].GetExtracted().GetSummary()
+	want := &gamev1.RunSummary{
+		Extracted:    true,
+		RunXp:        5,
+		BankedXp:     31,
+		LevelsGained: 1,
+		Character:    &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 2, Xp: 121, LevelXp: 21, XpToNext: 150},
+		Kept:         bag,
+	}
+	if len(bag) == 0 || !proto.Equal(summary, want) {
+		t.Fatalf("summary = %v, want %v", summary, want)
+	}
+	_, _, err := leaver.Read(context.Background())
+	if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+		t.Fatalf("got %v, want normal close after the summary", err)
+	}
+
+	seen := waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id }).GetExtracted()
+	if seen.GetSummary() != nil {
+		t.Fatalf("another player got the summary: %v", seen)
+	}
+}
+
+func TestDeathSendsRunEnded(t *testing.T) {
+	cave := testCave()
+	cave.Chests = []sim.Vec2{{X: 0, Y: 20}}
+	cfg := sim.DefaultConfig()
+	melee := cfg.Archetypes[sim.Melee]
+	melee.Damage = 10000
+	cfg.Archetypes[sim.Melee] = melee
+	h := serve(t, cave, cfg)
+	h.srv.Store.SaveXP(context.Background(), "ann", 99)
+
+	conn := dial(t, h.url)
+	joinAs(t, conn, "ann")
+	lootChest(t, conn)
+
+	msgs := progress(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetRunEnded() != nil })
+	if got := kinds(msgs); !slices.Equal(got, []string{"xp", "level_up", "run_ended"}) {
+		t.Fatalf("messages = %v, want xp, level_up, run_ended", got)
+	}
+	// A quarter of 5, rounded down, is enough for level 2 from 99.
+	want := &gamev1.RunSummary{
+		RunXp:        5,
+		BankedXp:     1,
+		LevelsGained: 1,
+		Character:    &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 2, Xp: 100, XpToNext: 150},
+	}
+	if summary := msgs[2].GetRunEnded().GetSummary(); !proto.Equal(summary, want) {
+		t.Fatalf("summary = %v, want %v", summary, want)
 	}
 }

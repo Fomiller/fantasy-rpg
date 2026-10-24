@@ -1193,6 +1193,24 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_pickup_rejected")
 		data[__pickup_rejected.tag] = service
 		
+		__xp_gained = PBField.new("xp_gained", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 20, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __xp_gained
+		service.func_ref = Callable(self, "new_xp_gained")
+		data[__xp_gained.tag] = service
+		
+		__level_up = PBField.new("level_up", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 21, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __level_up
+		service.func_ref = Callable(self, "new_level_up")
+		data[__level_up.tag] = service
+		
+		__run_ended = PBField.new("run_ended", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 22, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __run_ended
+		service.func_ref = Callable(self, "new_run_ended")
+		data[__run_ended.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -1207,6 +1225,9 @@ class ServerMessage:
 		ABILITY_REJECTED = 17,
 		LOOT = 18,
 		PICKUP_REJECTED = 19,
+		XP_GAINED = 20,
+		LEVEL_UP = 21,
+		RUN_ENDED = 22,
 	}
 	var _payload_case: int = 0
 
@@ -1252,6 +1273,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
 	
@@ -1284,6 +1311,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
 	
@@ -1316,6 +1349,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
 	
@@ -1348,6 +1387,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
 	
@@ -1380,6 +1425,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__extracted.value = Extracted.new()
 		return __extracted.value
 	
@@ -1412,6 +1463,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__equipment.value = EquipmentUpdated.new()
 		return __equipment.value
 	
@@ -1444,6 +1501,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__ability_used.value = AbilityUsed.new()
 		return __ability_used.value
 	
@@ -1476,6 +1539,12 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = AbilityRejected.new()
 		return __ability_rejected.value
 	
@@ -1508,6 +1577,12 @@ class ServerMessage:
 		_payload_case = 18
 		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__loot.value = LootContents.new()
 		return __loot.value
 	
@@ -1540,8 +1615,128 @@ class ServerMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		data[19].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 19
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = PickupRejected.new()
 		return __pickup_rejected.value
+	
+	var __xp_gained: PBField
+	func has_xp_gained() -> bool:
+		return data[20].state == PB_SERVICE_STATE.FILLED
+	func get_xp_gained() -> XpGained:
+		return __xp_gained.value
+	func clear_xp_gained() -> void:
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_xp_gained() -> XpGained:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		data[20].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 20
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = XpGained.new()
+		return __xp_gained.value
+	
+	var __level_up: PBField
+	func has_level_up() -> bool:
+		return data[21].state == PB_SERVICE_STATE.FILLED
+	func get_level_up() -> LevelUp:
+		return __level_up.value
+	func clear_level_up() -> void:
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_level_up() -> LevelUp:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		data[21].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 21
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = LevelUp.new()
+		return __level_up.value
+	
+	var __run_ended: PBField
+	func has_run_ended() -> bool:
+		return data[22].state == PB_SERVICE_STATE.FILLED
+	func get_run_ended() -> RunEnded:
+		return __run_ended.value
+	func clear_run_ended() -> void:
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_run_ended() -> RunEnded:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		data[22].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 22
+		__run_ended.value = RunEnded.new()
+		return __run_ended.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -1791,6 +1986,12 @@ class JoinAccepted:
 		service.func_ref = Callable(self, "new_class_info")
 		data[__class_info.tag] = service
 		
+		__character = PBField.new("character", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 6, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __character
+		service.func_ref = Callable(self, "new_character")
+		data[__character.tag] = service
+		
 	var data = {}
 	
 	var __player_id: PBField
@@ -1860,6 +2061,173 @@ class JoinAccepted:
 	func new_class_info() -> ClassInfo:
 		__class_info.value = ClassInfo.new()
 		return __class_info.value
+	
+	var __character: PBField
+	func has_character() -> bool:
+		if __character.value != null:
+			return true
+		return false
+	func get_character() -> CharacterInfo:
+		return __character.value
+	func clear_character() -> void:
+		data[6].state = PB_SERVICE_STATE.UNFILLED
+		__character.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_character() -> CharacterInfo:
+		__character.value = CharacterInfo.new()
+		return __character.value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class CharacterInfo:
+	func _init():
+		var service
+		
+		__name = PBField.new("name", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __name
+		data[__name.tag] = service
+		
+		__class_id = PBField.new("class_id", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __class_id
+		data[__class_id.tag] = service
+		
+		__level = PBField.new("level", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __level
+		data[__level.tag] = service
+		
+		__xp = PBField.new("xp", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __xp
+		data[__xp.tag] = service
+		
+		__level_xp = PBField.new("level_xp", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 5, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __level_xp
+		data[__level_xp.tag] = service
+		
+		__xp_to_next = PBField.new("xp_to_next", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 6, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __xp_to_next
+		data[__xp_to_next.tag] = service
+		
+		__run_xp = PBField.new("run_xp", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 7, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __run_xp
+		data[__run_xp.tag] = service
+		
+	var data = {}
+	
+	var __name: PBField
+	func has_name() -> bool:
+		if __name.value != null:
+			return true
+		return false
+	func get_name() -> String:
+		return __name.value
+	func clear_name() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__name.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_name(value : String) -> void:
+		__name.value = value
+	
+	var __class_id: PBField
+	func has_class_id() -> bool:
+		if __class_id.value != null:
+			return true
+		return false
+	func get_class_id() -> String:
+		return __class_id.value
+	func clear_class_id() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__class_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_class_id(value : String) -> void:
+		__class_id.value = value
+	
+	var __level: PBField
+	func has_level() -> bool:
+		if __level.value != null:
+			return true
+		return false
+	func get_level() -> int:
+		return __level.value
+	func clear_level() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__level.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_level(value : int) -> void:
+		__level.value = value
+	
+	var __xp: PBField
+	func has_xp() -> bool:
+		if __xp.value != null:
+			return true
+		return false
+	func get_xp() -> int:
+		return __xp.value
+	func clear_xp() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__xp.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_xp(value : int) -> void:
+		__xp.value = value
+	
+	var __level_xp: PBField
+	func has_level_xp() -> bool:
+		if __level_xp.value != null:
+			return true
+		return false
+	func get_level_xp() -> int:
+		return __level_xp.value
+	func clear_level_xp() -> void:
+		data[5].state = PB_SERVICE_STATE.UNFILLED
+		__level_xp.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_level_xp(value : int) -> void:
+		__level_xp.value = value
+	
+	var __xp_to_next: PBField
+	func has_xp_to_next() -> bool:
+		if __xp_to_next.value != null:
+			return true
+		return false
+	func get_xp_to_next() -> int:
+		return __xp_to_next.value
+	func clear_xp_to_next() -> void:
+		data[6].state = PB_SERVICE_STATE.UNFILLED
+		__xp_to_next.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_xp_to_next(value : int) -> void:
+		__xp_to_next.value = value
+	
+	var __run_xp: PBField
+	func has_run_xp() -> bool:
+		if __run_xp.value != null:
+			return true
+		return false
+	func get_run_xp() -> int:
+		return __run_xp.value
+	func clear_run_xp() -> void:
+		data[7].state = PB_SERVICE_STATE.UNFILLED
+		__run_xp.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_run_xp(value : int) -> void:
+		__run_xp.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -2179,6 +2547,12 @@ class Extracted:
 		service.field = __player_id
 		data[__player_id.tag] = service
 		
+		__summary = PBField.new("summary", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __summary
+		service.func_ref = Callable(self, "new_summary")
+		data[__summary.tag] = service
+		
 	var data = {}
 	
 	var __player_id: PBField
@@ -2193,6 +2567,350 @@ class Extracted:
 		__player_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT64]
 	func set_player_id(value : int) -> void:
 		__player_id.value = value
+	
+	var __summary: PBField
+	func has_summary() -> bool:
+		if __summary.value != null:
+			return true
+		return false
+	func get_summary() -> RunSummary:
+		return __summary.value
+	func clear_summary() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__summary.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_summary() -> RunSummary:
+		__summary.value = RunSummary.new()
+		return __summary.value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class RunEnded:
+	func _init():
+		var service
+		
+		__summary = PBField.new("summary", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __summary
+		service.func_ref = Callable(self, "new_summary")
+		data[__summary.tag] = service
+		
+	var data = {}
+	
+	var __summary: PBField
+	func has_summary() -> bool:
+		if __summary.value != null:
+			return true
+		return false
+	func get_summary() -> RunSummary:
+		return __summary.value
+	func clear_summary() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__summary.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_summary() -> RunSummary:
+		__summary.value = RunSummary.new()
+		return __summary.value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class RunSummary:
+	func _init():
+		var service
+		
+		__extracted = PBField.new("extracted", PB_DATA_TYPE.BOOL, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL])
+		service = PBServiceField.new()
+		service.field = __extracted
+		data[__extracted.tag] = service
+		
+		__run_xp = PBField.new("run_xp", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __run_xp
+		data[__run_xp.tag] = service
+		
+		__banked_xp = PBField.new("banked_xp", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __banked_xp
+		data[__banked_xp.tag] = service
+		
+		__levels_gained = PBField.new("levels_gained", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __levels_gained
+		data[__levels_gained.tag] = service
+		
+		__character = PBField.new("character", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 5, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __character
+		service.func_ref = Callable(self, "new_character")
+		data[__character.tag] = service
+		
+		var __kept_default: Array[Item] = []
+		__kept = PBField.new("kept", PB_DATA_TYPE.MESSAGE, PB_RULE.REPEATED, 6, true, __kept_default)
+		service = PBServiceField.new()
+		service.field = __kept
+		service.func_ref = Callable(self, "add_kept")
+		data[__kept.tag] = service
+		
+	var data = {}
+	
+	var __extracted: PBField
+	func has_extracted() -> bool:
+		if __extracted.value != null:
+			return true
+		return false
+	func get_extracted() -> bool:
+		return __extracted.value
+	func clear_extracted() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
+	func set_extracted(value : bool) -> void:
+		__extracted.value = value
+	
+	var __run_xp: PBField
+	func has_run_xp() -> bool:
+		if __run_xp.value != null:
+			return true
+		return false
+	func get_run_xp() -> int:
+		return __run_xp.value
+	func clear_run_xp() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__run_xp.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_run_xp(value : int) -> void:
+		__run_xp.value = value
+	
+	var __banked_xp: PBField
+	func has_banked_xp() -> bool:
+		if __banked_xp.value != null:
+			return true
+		return false
+	func get_banked_xp() -> int:
+		return __banked_xp.value
+	func clear_banked_xp() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__banked_xp.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_banked_xp(value : int) -> void:
+		__banked_xp.value = value
+	
+	var __levels_gained: PBField
+	func has_levels_gained() -> bool:
+		if __levels_gained.value != null:
+			return true
+		return false
+	func get_levels_gained() -> int:
+		return __levels_gained.value
+	func clear_levels_gained() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__levels_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_levels_gained(value : int) -> void:
+		__levels_gained.value = value
+	
+	var __character: PBField
+	func has_character() -> bool:
+		if __character.value != null:
+			return true
+		return false
+	func get_character() -> CharacterInfo:
+		return __character.value
+	func clear_character() -> void:
+		data[5].state = PB_SERVICE_STATE.UNFILLED
+		__character.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_character() -> CharacterInfo:
+		__character.value = CharacterInfo.new()
+		return __character.value
+	
+	var __kept: PBField
+	func get_kept() -> Array[Item]:
+		return __kept.value
+	func clear_kept() -> void:
+		data[6].state = PB_SERVICE_STATE.UNFILLED
+		__kept.value.clear()
+	func add_kept() -> Item:
+		var element = Item.new()
+		__kept.value.append(element)
+		return element
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class XpGained:
+	func _init():
+		var service
+		
+		__amount = PBField.new("amount", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __amount
+		data[__amount.tag] = service
+		
+		__source = PBField.new("source", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __source
+		data[__source.tag] = service
+		
+		__run_xp = PBField.new("run_xp", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __run_xp
+		data[__run_xp.tag] = service
+		
+	var data = {}
+	
+	var __amount: PBField
+	func has_amount() -> bool:
+		if __amount.value != null:
+			return true
+		return false
+	func get_amount() -> int:
+		return __amount.value
+	func clear_amount() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__amount.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_amount(value : int) -> void:
+		__amount.value = value
+	
+	var __source: PBField
+	func has_source() -> bool:
+		if __source.value != null:
+			return true
+		return false
+	func get_source() -> String:
+		return __source.value
+	func clear_source() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__source.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_source(value : String) -> void:
+		__source.value = value
+	
+	var __run_xp: PBField
+	func has_run_xp() -> bool:
+		if __run_xp.value != null:
+			return true
+		return false
+	func get_run_xp() -> int:
+		return __run_xp.value
+	func clear_run_xp() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__run_xp.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_run_xp(value : int) -> void:
+		__run_xp.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class LevelUp:
+	func _init():
+		var service
+		
+		__level = PBField.new("level", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __level
+		data[__level.tag] = service
+		
+		__class_info = PBField.new("class_info", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __class_info
+		service.func_ref = Callable(self, "new_class_info")
+		data[__class_info.tag] = service
+		
+	var data = {}
+	
+	var __level: PBField
+	func has_level() -> bool:
+		if __level.value != null:
+			return true
+		return false
+	func get_level() -> int:
+		return __level.value
+	func clear_level() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__level.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_level(value : int) -> void:
+		__level.value = value
+	
+	var __class_info: PBField
+	func has_class_info() -> bool:
+		if __class_info.value != null:
+			return true
+		return false
+	func get_class_info() -> ClassInfo:
+		return __class_info.value
+	func clear_class_info() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__class_info.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_class_info() -> ClassInfo:
+		__class_info.value = ClassInfo.new()
+		return __class_info.value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

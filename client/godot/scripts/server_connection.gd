@@ -13,6 +13,10 @@ signal ability_used(event: GameV1.AbilityUsed)
 signal ability_rejected(event: GameV1.AbilityRejected)
 signal loot_received(contents: GameV1.LootContents)
 signal pickup_rejected(event: GameV1.PickupRejected)
+signal xp_gained(event: GameV1.XpGained)
+signal level_up(event: GameV1.LevelUp)
+# After a death, and on this player's own extraction just before extracted.
+signal run_ended(summary: GameV1.RunSummary)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
@@ -29,6 +33,8 @@ var cave: GameV1.CaveLayout
 var spawn := Vector2.ZERO
 var tick_rate := 20
 var class_info: GameV1.ClassInfo
+# Level and XP as the server last sent them. A run summary replaces it.
+var character: GameV1.CharacterInfo
 # Set once this player leaves through the exit. Stops the reconnect loop until rejoin().
 var has_extracted := false
 
@@ -203,6 +209,7 @@ func _handle(bytes: PackedByteArray) -> void:
 		if accepted.get_tick_rate() > 0:
 			tick_rate = accepted.get_tick_rate()
 		class_info = accepted.get_class_info()
+		character = accepted.get_character() if accepted.has_character() else null
 		print("joined %s as player %d in %s" % [_url, player_id, cave.get_name()])
 		joined.emit(player_id)
 	elif msg.has_snapshot():
@@ -223,11 +230,29 @@ func _handle(bytes: PackedByteArray) -> void:
 		loot_received.emit(msg.get_loot())
 	elif msg.has_pickup_rejected():
 		pickup_rejected.emit(msg.get_pickup_rejected())
+	elif msg.has_xp_gained():
+		xp_gained.emit(msg.get_xp_gained())
+	elif msg.has_level_up():
+		var up := msg.get_level_up()
+		if up.has_class_info():
+			class_info = up.get_class_info()
+		level_up.emit(up)
+	elif msg.has_run_ended():
+		_end_run(msg.get_run_ended().get_summary())
 	elif msg.has_extracted():
-		var id := msg.get_extracted().get_player_id()
+		var event := msg.get_extracted()
+		var id := event.get_player_id()
 		if id == player_id:
 			has_extracted = true
+			if event.has_summary():
+				_end_run(event.get_summary())
 		extracted.emit(id)
+
+
+func _end_run(summary: GameV1.RunSummary) -> void:
+	if summary.has_character():
+		character = summary.get_character()
+	run_ended.emit(summary)
 
 
 func _new_message() -> GameV1.ClientMessage:

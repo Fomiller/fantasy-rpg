@@ -93,11 +93,19 @@ func (s *Server) Step(dt time.Duration) {
 	for _, ev := range events.Damage {
 		s.broadcast(protocol.Damage(ev))
 	}
+	for _, ev := range events.XP {
+		s.sendTo(ev.Player, protocol.XPGained(ev))
+	}
+	// An extracting player's summary rides on their Extracted, which has to
+	// come after the XP above and before the connection closes.
+	summaries := map[sim.EntityID]*gamev1.RunSummary{}
 	for _, end := range events.RunEnded {
 		s.saveXP(end)
+		summaries[end.Player] = s.endRun(end)
 	}
 	for _, id := range events.Extracted {
-		s.broadcast(protocol.Extracted(id))
+		s.sendTo(id, protocol.Extracted(id, summaries[id]))
+		s.broadcastExcept(id, protocol.Extracted(id, nil))
 		if c, ok := s.clients[id]; ok {
 			c.finish()
 			delete(s.clients, id)
@@ -151,6 +159,23 @@ func (s *Server) saveXP(end sim.RunEnd) {
 	}
 }
 
+// endRun tells the player about any new level, then sends a death's summary.
+// An extraction's summary goes out with Extracted instead.
+func (s *Server) endRun(end sim.RunEnd) *gamev1.RunSummary {
+	c, ok := s.clients[end.Player]
+	if !ok {
+		return nil
+	}
+	if end.Levels > 0 {
+		s.sendTo(end.Player, protocol.LevelUp(end.Level, protocol.ClassInfo(s.world.Classes(), end.Class)))
+	}
+	summary := protocol.RunSummary(s.world.Classes().Progression, c.name, end)
+	if !end.Extracted {
+		s.sendTo(end.Player, protocol.RunEnded(summary))
+	}
+	return summary
+}
+
 func (s *Server) nameInUse(name string) bool {
 	for _, c := range s.clients {
 		if c.name == name {
@@ -171,6 +196,10 @@ func (s *Server) sendTo(id sim.EntityID, msg *gamev1.ServerMessage) {
 }
 
 func (s *Server) broadcast(msg *gamev1.ServerMessage) {
+	s.broadcastExcept(0, msg)
+}
+
+func (s *Server) broadcastExcept(skip sim.EntityID, msg *gamev1.ServerMessage) {
 	if len(s.clients) == 0 {
 		return
 	}
@@ -179,8 +208,10 @@ func (s *Server) broadcast(msg *gamev1.ServerMessage) {
 		s.log.Error("encode server message", "err", err)
 		return
 	}
-	for _, c := range s.clients {
-		c.send(b)
+	for id, c := range s.clients {
+		if id != skip {
+			c.send(b)
+		}
 	}
 }
 
@@ -285,7 +316,8 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		s.clients[id] = c
 		p, _ := s.world.Player(id)
 		class := protocol.ClassInfo(s.world.Classes(), p.Class)
-		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn, s.TickRate, class)); err == nil {
+		character := protocol.Character(s.world.Classes().Progression, name, p.Class, p.Level, p.XP, p.RunXP)
+		if b, err := protocol.EncodeServer(protocol.Joined(id, s.cave, spawn, s.TickRate, class, character)); err == nil {
 			c.send(b)
 		}
 		s.giveLoadout(id, name)
