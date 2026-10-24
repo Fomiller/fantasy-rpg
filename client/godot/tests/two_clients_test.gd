@@ -5,6 +5,7 @@ extends SceneTree
 # `just net-test` starts one.
 const TIMEOUT_MSEC := 10000
 const ATTACK_EVERY_MSEC := 600
+const CORRIDOR_HALF_HEIGHT := 32.0
 
 var _failures := 0
 
@@ -38,18 +39,24 @@ class Client:
 	func enemy() -> GameV1.EntityState:
 		return by_id(enemy_id)
 
-	# The live enemy closest to this player.
+	# The live enemy closest to this player along the spawn corridor. The walk is
+	# a straight line, so an enemy past a wall can be nearer and still unreachable.
 	func nearest_enemy() -> GameV1.EntityState:
 		var best: GameV1.EntityState = null
 		var best_distance := INF
 		for e: GameV1.EntityState in snapshot.get_entities():
 			if e.get_kind() != GameV1.EntityKind.ENEMY or e.get_health() <= 0:
 				continue
+			if absf(pos(e).y - pos(me()).y) > CORRIDOR_HALF_HEIGHT:
+				continue
 			var d := pos(e).distance_to(pos(me()))
 			if d < best_distance:
 				best = e
 				best_distance = d
 		return best
+
+	func saw_kill(id: int) -> bool:
+		return hits.any(func(hit: String) -> bool: return hit.get_slice("->", 1).begins_with("%d:" % id) and hit.ends_with("killed"))
 
 	static func pos(e: GameV1.EntityState) -> Vector2:
 		return Vector2(e.get_position().get_x(), e.get_position().get_y())
@@ -98,7 +105,8 @@ func _run() -> void:
 			next_attack = Time.get_ticks_msec() + ATTACK_EVERY_MSEC
 			for c in clients:
 				c.connection.send_attack(enemy_id)
-		return a.enemy().get_health() == 0 and b.enemy().get_health() == 0)
+		# The kill's DamageEvent comes after the snapshot that shows the enemy at 0.
+		return a.saw_kill(enemy_id) and b.saw_kill(enemy_id))
 	_check(dead, "both clients see the enemy die")
 
 	var sources := {}
