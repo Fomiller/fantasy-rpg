@@ -5,6 +5,7 @@ package storetest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -30,6 +31,12 @@ func Run(t *testing.T, newStore func(*testing.T) inventory.Store) {
 		{"StashLimit", stashLimit},
 		{"NamesAreApart", namesAreApart},
 		{"ParallelPlayers", parallelPlayers},
+		{"StartRunTakesTheLease", startRunTakesTheLease},
+		{"OneRunPerAccount", oneRunPerAccount},
+		{"NoLobbySaveInARun", noLobbySaveInARun},
+		{"EndRunNeedsTheLease", endRunNeedsTheLease},
+		{"RunIDIsUsedOnce", runIDIsUsedOnce},
+		{"ClearRun", clearRun},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) { tt.run(t, newStore(t)) })
@@ -75,6 +82,25 @@ func mustLoad(t *testing.T, s inventory.Store, name, class string) inventory.Cha
 		}
 	}
 	return c
+}
+
+const instance = "instance-0@3f9a1c"
+
+// mustStart takes the lease, as an instance server does on entry.
+func mustStart(t *testing.T, s inventory.Store, name, runID string) inventory.Character {
+	t.Helper()
+	c, err := s.StartRun(ctx, name, "warrior", runID, instance)
+	if err != nil {
+		t.Fatalf("start run %s for %s: %v", runID, name, err)
+	}
+	return c
+}
+
+func noLease(t *testing.T, s inventory.Store, name string) {
+	t.Helper()
+	if c := mustLoad(t, s, name, "warrior"); c.Run.Held() {
+		t.Fatalf("%s still has a lease: %+v", name, c.Run)
+	}
 }
 
 func mustCreate(t *testing.T, s inventory.Store, c inventory.Character) {
@@ -204,6 +230,7 @@ func endRun(t *testing.T, s inventory.Store) {
 		Loadout: inventory.Loadout{Equipment: []items.Instance{sword("ann-sword")}, Items: []items.Instance{potions("overflow", 1)}},
 		Stash:   []items.Instance{potions("ann-stashed", 5), potions("ann-potions", 1)},
 	}
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000001")
 	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000001", after); err != nil {
 		t.Fatal(err)
 	}
@@ -221,6 +248,7 @@ func endRunSameID(t *testing.T, s inventory.Store) {
 	const run = "6f1c2b3a-0000-4000-8000-000000000002"
 	first := character("ann")
 	first.XP = 50
+	mustStart(t, s, "ann", run)
 	if err := s.EndRun(ctx, run, first); err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +269,7 @@ func endRunSameID(t *testing.T, s inventory.Store) {
 
 	next := got
 	next.XP = 60
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000003")
 	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000003", next); err != nil {
 		t.Fatal(err)
 	}
@@ -256,12 +285,18 @@ func writesNeedACharacter(t *testing.T, s inventory.Store) {
 	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000004", character("ann")); err == nil {
 		t.Fatal("ended a run for a character that does not exist")
 	}
+	if _, err := s.StartRun(ctx, "ann", "warrior", "6f1c2b3a-0000-4000-8000-000000000004", instance); err == nil {
+		t.Fatal("started a run for a character that does not exist")
+	}
 	if _, ok, _ := s.Load(ctx, "ann", "warrior"); ok {
 		t.Fatal("a failed write made a character")
 	}
 	mustCreate(t, s, character("ann"))
 	if err := s.EndRun(ctx, "", character("ann")); err == nil {
 		t.Fatal("ended a run with no run id")
+	}
+	if _, err := s.StartRun(ctx, "ann", "warrior", "", instance); err == nil {
+		t.Fatal("started a run with no run id")
 	}
 }
 
@@ -280,6 +315,7 @@ func stashLimit(t *testing.T, s inventory.Store) {
 	}
 	c := character("ann")
 	c.Stash = over
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000005")
 	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000005", c); err == nil {
 		t.Fatal("ended a run with a stash over the limit")
 	}
@@ -291,6 +327,8 @@ func stashLimit(t *testing.T, s inventory.Store) {
 func namesAreApart(t *testing.T, s inventory.Store) {
 	mustCreate(t, s, character("ann"))
 	mustCreate(t, s, character("bob"))
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000006")
+	mustStart(t, s, "bob", "6f1c2b3a-0000-4000-8000-000000000006")
 	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000006", inventory.Character{Name: "ann", Class: "warrior", XP: 77}); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +355,11 @@ func parallelPlayers(t *testing.T, s inventory.Store) {
 			}
 			for run := range 5 {
 				c.XP++
-				if err := s.EndRun(ctx, fmt.Sprintf("6f1c2b3a-0000-4000-8000-%012d", run), c); err != nil {
+				id := fmt.Sprintf("6f1c2b3a-0000-4000-8000-%012d", run)
+				if _, err := s.StartRun(ctx, c.Name, c.Class, id, instance); err != nil {
+					t.Error(err)
+				}
+				if err := s.EndRun(ctx, id, c); err != nil {
 					t.Error(err)
 				}
 				if err := s.SaveLobby(ctx, c.Name, c.Class, c.Loadout, c.Stash); err != nil {
@@ -332,4 +374,124 @@ func parallelPlayers(t *testing.T, s inventory.Store) {
 			t.Fatalf("p%d xp = %d, want 15", i, got.XP)
 		}
 	}
+}
+
+func startRunTakesTheLease(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	const run = "6f1c2b3a-0000-4000-8000-000000000010"
+	got := mustStart(t, s, "ann", run)
+	if got.XP != 10 || got.Run.RunID != run || got.Run.Instance != instance || got.Run.Since.IsZero() {
+		t.Fatalf("start run = %+v", got)
+	}
+	sameItems(t, "equipment", got.Loadout.Equipment, []items.Instance{sword("ann-sword")})
+	sameItems(t, "bag", got.Loadout.Items, []items.Instance{potions("ann-potions", 2)})
+	sameItems(t, "stash", got.Stash, []items.Instance{potions("ann-stashed", 4)})
+
+	loaded := mustLoad(t, s, "ann", "warrior")
+	if loaded.Run.RunID != run || loaded.Run.Instance != instance {
+		t.Fatalf("lease on load = %+v", loaded.Run)
+	}
+	// The lease is the account's, so another class sees it before it has a character.
+	if c, ok, err := s.Load(ctx, "ann", "rogue"); err != nil || ok || c.Run.RunID != run {
+		t.Fatalf("load of a new class = %+v, %v, %v, want the lease", c, ok, err)
+	}
+}
+
+func oneRunPerAccount(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	mustCreate(t, s, inventory.Character{Name: "ann", Class: "rogue"})
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000011")
+	if _, err := s.StartRun(ctx, "ann", "warrior", "6f1c2b3a-0000-4000-8000-000000000012", instance); !errors.Is(err, inventory.ErrInRun) {
+		t.Fatalf("second run = %v, want ErrInRun", err)
+	}
+	if _, err := s.StartRun(ctx, "ann", "rogue", "6f1c2b3a-0000-4000-8000-000000000012", "instance-1@aa"); !errors.Is(err, inventory.ErrInRun) {
+		t.Fatalf("run for another class = %v, want ErrInRun", err)
+	}
+	if got := mustLoad(t, s, "ann", "warrior"); got.Run.RunID != "6f1c2b3a-0000-4000-8000-000000000011" {
+		t.Fatalf("lease = %+v, want the first run's", got.Run)
+	}
+	mustCreate(t, s, character("bob"))
+	mustStart(t, s, "bob", "6f1c2b3a-0000-4000-8000-000000000012")
+}
+
+func noLobbySaveInARun(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000013")
+	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); !errors.Is(err, inventory.ErrInRun) {
+		t.Fatalf("lobby save in a run = %v, want ErrInRun", err)
+	}
+	got := mustLoad(t, s, "ann", "warrior")
+	sameItems(t, "equipment", got.Loadout.Equipment, []items.Instance{sword("ann-sword")})
+	sameItems(t, "stash", got.Stash, []items.Instance{potions("ann-stashed", 4)})
+
+	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000013", got); err != nil {
+		t.Fatal(err)
+	}
+	noLease(t, s, "ann")
+	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); err != nil {
+		t.Fatalf("lobby save after the run: %v", err)
+	}
+}
+
+func endRunNeedsTheLease(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	after := character("ann")
+	after.XP = 99
+	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000014", after); !errors.Is(err, inventory.ErrLeaseLost) {
+		t.Fatalf("run end with no lease = %v, want ErrLeaseLost", err)
+	}
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000015")
+	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000014", after); !errors.Is(err, inventory.ErrLeaseLost) {
+		t.Fatalf("run end under another run's lease = %v, want ErrLeaseLost", err)
+	}
+	if got := mustLoad(t, s, "ann", "warrior"); got.XP != 10 || got.Run.RunID != "6f1c2b3a-0000-4000-8000-000000000015" {
+		t.Fatalf("after lost run ends = %+v, want nothing written", got)
+	}
+}
+
+func runIDIsUsedOnce(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	const run = "6f1c2b3a-0000-4000-8000-000000000016"
+	c := mustStart(t, s, "ann", run)
+	c.XP = 20
+	if err := s.EndRun(ctx, run, c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartRun(ctx, "ann", "warrior", run, instance); !errors.Is(err, inventory.ErrRunUsed) {
+		t.Fatalf("start of an ended run = %v, want ErrRunUsed", err)
+	}
+	noLease(t, s, "ann")
+	// The retry no-op still holds once the lease is gone.
+	c.XP = 999
+	if err := s.EndRun(ctx, run, c); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got := mustLoad(t, s, "ann", "warrior"); got.XP != 20 {
+		t.Fatalf("xp = %d, want the first run end", got.XP)
+	}
+}
+
+func clearRun(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	const run = "6f1c2b3a-0000-4000-8000-000000000017"
+	c := mustStart(t, s, "ann", run)
+	if err := s.ClearRun(ctx, "ann", "6f1c2b3a-0000-4000-8000-000000000018"); err != nil {
+		t.Fatal(err)
+	}
+	if got := mustLoad(t, s, "ann", "warrior"); got.Run.RunID != run {
+		t.Fatalf("lease after clearing another run = %+v, want it kept", got.Run)
+	}
+	if err := s.ClearRun(ctx, "ann", run); err != nil {
+		t.Fatal(err)
+	}
+	noLease(t, s, "ann")
+	// The run that lost its lease cannot write over what comes after.
+	c.XP = 500
+	if err := s.EndRun(ctx, run, c); !errors.Is(err, inventory.ErrLeaseLost) {
+		t.Fatalf("run end after a clear = %v, want ErrLeaseLost", err)
+	}
+	if err := s.ClearRun(ctx, "nobody", run); err != nil {
+		t.Fatalf("clear for an unknown name: %v", err)
+	}
+	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000019")
 }

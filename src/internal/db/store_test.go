@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/storetest"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -93,7 +95,7 @@ func TestUnknownRarityFailsLoad(t *testing.T) {
 	}
 }
 
-func TestEndRunRejectsBadRunID(t *testing.T) {
+func TestRunIDMustBeAUUID(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s := newStore(t, newDBURL(t, true))
@@ -101,7 +103,24 @@ func TestEndRunRejectsBadRunID(t *testing.T) {
 	if err := s.Create(ctx, c); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.StartRun(ctx, "ann", "warrior", "not-a-uuid", "instance-0@3f9a1c"); err == nil {
+		t.Fatal("started a run with a run id that is not a uuid")
+	}
 	if err := s.EndRun(ctx, "not-a-uuid", c); err == nil {
 		t.Fatal("ended a run with a run id that is not a uuid")
+	}
+}
+
+func TestOpenStorePicksByURL(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct{ url, want string }{{"", "memory"}, {newDBURL(t, true), "postgres"}} {
+		s, name, closeStore, err := OpenStore(t.Context(), tt.url, prometheus.NewRegistry())
+		if err != nil || name != tt.want {
+			t.Fatalf("open %q = %s, %v, want %s", tt.url, name, err, tt.want)
+		}
+		if _, _, err := s.Load(t.Context(), "ann", "warrior"); err != nil {
+			t.Fatalf("load on %s: %v", name, err)
+		}
+		closeStore()
 	}
 }

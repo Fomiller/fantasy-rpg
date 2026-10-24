@@ -7,9 +7,12 @@ const REJECTED_TEXT := {
 	"unknown_item": "item is gone",
 	"not_in_lobby": "not in the lobby",
 	"saving": "Couldn't save, try again",
+	"in_run": "Your character is in a run",
 }
 const ENTER_REJECTED_TEXT := {
 	"saving": "Still saving your last run",
+	"in_run": "Your character is in a run",
+	"full": "All instances are full.",
 }
 
 # Set by main. Tests swap them for fakes. Every button sends a request, and

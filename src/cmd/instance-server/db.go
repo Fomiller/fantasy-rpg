@@ -36,20 +36,3 @@ func migrate(ctx context.Context) error {
 	slog.Info("migrations done", "applied", len(results))
 	return nil
 }
-
-// checkSchema refuses a schema older than this binary, so a skipped migrate
-// fails at start instead of on the first query.
-func checkSchema(ctx context.Context, url string) error {
-	conn, err := db.Open(url)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	return db.Retry(ctx, 30*time.Second, func(ctx context.Context) error {
-		if err := conn.PingContext(ctx); err != nil {
-			return err
-		}
-		return db.CheckVersion(ctx, conn)
-	})
-}

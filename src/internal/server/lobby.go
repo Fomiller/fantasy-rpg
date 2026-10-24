@@ -7,7 +7,6 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
-	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
 // Why a lobby move did nothing.
@@ -17,8 +16,12 @@ const (
 	MoveFull         = "full"
 	MoveCannotEquip  = "cannot_equip"
 	MoveUnknownPlace = "unknown_place"
-	// MoveSaving is also why Enter Cave did nothing.
+	// MoveSaving and MoveInRun are also why Enter Cave did nothing.
 	MoveSaving = "saving"
+	// MoveInRun is a run holding the account somewhere else.
+	MoveInRun = "in_run"
+	// EnterFull is a world server with no instance to send the player to.
+	EnterFull = "full"
 )
 
 // lobby is a player between runs. Their items live here, not in the world,
@@ -137,42 +140,46 @@ func (lb *lobby) bagAt(place gamev1.ItemPlace) *inventory.Bag {
 
 // openLobby puts the player in the lobby with ch and sends it. ch is what
 // the store has, or is about to have once the player's queued writes land.
-func (s *Server) openLobby(c *client, ch inventory.Character) {
-	c.lobby = newLobby(ch.XP, s.world.BagSize(), ch.Loadout, ch.Stash)
+func (s *Lobby) openLobby(c *client, ch inventory.Character) {
+	c.lobby = newLobby(ch.XP, s.rules.BagSize(), ch.Loadout, ch.Stash)
 	c.runID, c.stash = "", nil
 	// A lobby save from before this lobby must not count as what is saved now.
 	c.lobbySeq++
 	c.saved, c.savedSeq = cloneCharacter(ch), c.lobbySeq
+	s.setInRun(c, ch.Run.Held())
 	s.sendLobby(c)
 	s.sendLobbyItems(c)
 }
 
-func (s *Server) sendLobby(c *client) {
-	prog := s.world.Classes().Progression
+func (s *Lobby) sendLobby(c *client) {
+	prog := s.rules.Classes().Progression
 	character := protocol.Character(prog, c.name, c.class, prog.LevelFor(c.lobby.xp), c.lobby.xp, 0)
-	s.sendToClient(c, protocol.Lobby(character, protocol.ClassInfo(s.world.Classes(), c.class), c.pending != nil))
+	s.sendToClient(c, protocol.Lobby(character, protocol.ClassInfo(s.rules.Classes(), c.class), c.pending != nil || c.inRun))
 }
 
-func (s *Server) sendLobbyItems(c *client) {
-	p, err := s.world.Preview(c.class, c.lobby.xp, c.lobby.loadout())
+func (s *Lobby) sendLobbyItems(c *client) {
+	p, err := s.rules.Preview(c.class, c.lobby.xp, c.lobby.loadout())
 	if err != nil {
 		s.log.Error("preview loadout", "name", c.name, "err", err)
 		return
 	}
-	s.sendToClient(c, protocol.Equipment(s.world, p))
+	s.sendToClient(c, protocol.Equipment(s.rules, p))
 	s.sendToClient(c, protocol.Inventory(p))
 	s.sendToClient(c, protocol.Stash(c.lobby.stash))
 }
 
 // moveItem checks a lobby move and saves what changed.
-func (s *Server) moveItem(c *client, req *gamev1.StashMoveRequest) {
+func (s *Lobby) moveItem(c *client, req *gamev1.StashMoveRequest) {
 	reason := MoveNotInLobby
 	switch {
-	case c.lobby != nil && c.pending != nil:
+	case c.lobby == nil || c.entering:
+	case c.pending != nil:
 		// Saving on top of a run that has not landed could lose the run.
 		reason = MoveSaving
-	case c.lobby != nil:
-		reason = c.lobby.move(req.GetItemId(), req.GetTo(), func(inst items.Instance) error { return s.world.CanEquip(c.class, inst) })
+	case c.inRun:
+		reason = MoveInRun
+	default:
+		reason = c.lobby.move(req.GetItemId(), req.GetTo(), func(inst items.Instance) error { return s.rules.CanEquip(c.class, inst) })
 	}
 	if reason != "" {
 		s.sendToClient(c, protocol.StashMoveRejected(req.GetItemId(), reason))
@@ -182,33 +189,25 @@ func (s *Server) moveItem(c *client, req *gamev1.StashMoveRequest) {
 	s.sendLobbyItems(c)
 }
 
-// enterInstance spawns a lobby player with everything they have on them.
-func (s *Server) enterInstance(c *client) {
-	if c.lobby == nil {
+// enterInstance checks the lobby can be left, then hands the player to the run.
+func (s *Lobby) enterInstance(c *client) {
+	reason := ""
+	switch {
+	case c.lobby == nil || c.entering:
+		return
+	case c.pending != nil:
+		reason = MoveSaving
+	case c.inRun:
+		reason = MoveInRun
+	case s.run == nil:
+		// FOM-228 sends the player to an instance server from here.
+		reason = EnterFull
+	}
+	if reason != "" {
+		s.sendToClient(c, protocol.EnterInstanceRejected(reason))
 		return
 	}
-	if c.pending != nil {
-		s.sendToClient(c, protocol.EnterInstanceRejected(MoveSaving))
-		return
-	}
-	spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
-	id, err := s.world.AddPlayerAs(spawn, c.class, c.lobby.xp)
-	if err != nil {
-		s.log.Error("enter instance", "name", c.name, "err", err)
-		return
-	}
-	if err := s.world.Restore(id, c.lobby.loadout()); err != nil {
-		s.log.Error("restore loadout", "player", id, "err", err)
-	}
-	s.spawns++
-	c.id, c.runID, c.stash, c.lobby = id, items.NewID(), c.lobby.stash.Items, nil
-	s.clients[id] = c
-	p, _ := s.world.Player(id)
-	class := protocol.ClassInfo(s.world.Classes(), p.Class)
-	character := protocol.Character(s.world.Classes().Progression, c.name, p.Class, p.Level, p.XP, p.RunXP)
-	s.sendToClient(c, protocol.Joined(id, s.cave, spawn, s.TickRate, class, character))
-	s.sendItems(id)
-	s.log.Info("player entered the cave", "player", id, "name", c.name)
+	s.run.enter(c)
 }
 
 // stashKept adds an extracted bag to a copy of the stash. What does not fit
@@ -223,15 +222,4 @@ func stashKept(saved, kept []items.Instance) ([]items.Instance, []items.Instance
 		}
 	}
 	return stash.Items, overflow
-}
-
-// toLobby takes a player whose run ended out of the cave.
-func (s *Server) toLobby(id sim.EntityID, ch inventory.Character) {
-	c, ok := s.clients[id]
-	if !ok {
-		return
-	}
-	delete(s.clients, id)
-	c.id = 0
-	s.openLobby(c, ch)
 }

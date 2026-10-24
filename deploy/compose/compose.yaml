@@ -33,11 +33,13 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BINARY: world-server
+    environment:
+      DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       nats:
         condition: service_started
 

@@ -19,7 +19,6 @@ import (
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
-	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
@@ -49,19 +48,11 @@ func run() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	var store inventory.Store = inventory.NewMemory()
-	storeName := "memory"
-	if url := os.Getenv("DATABASE_URL"); url != "" {
-		if err := checkSchema(ctx, url); err != nil {
-			return err
-		}
-		pg, err := db.NewStore(ctx, url)
-		if err != nil {
-			return err
-		}
-		defer pg.Close()
-		store, storeName = pg, "postgres"
+	store, storeName, closeStore, err := db.OpenStore(ctx, os.Getenv("DATABASE_URL"), reg)
+	if err != nil {
+		return err
 	}
+	defer closeStore()
 	slog.Info("character store", "store", storeName)
 
 	seed, err := lootSeed()
@@ -74,7 +65,10 @@ func run() error {
 	world.SeedAI(seed)
 	game := server.New(world, cave, loot, slog.Default())
 	game.TickRate = rate
-	game.Store = inventory.Metered(store, reg)
+	game.Store = store
+	if id := os.Getenv("INSTANCE_ID"); id != "" {
+		game.ID = id
+	}
 	reg.MustRegister(game.PendingSaves)
 	defer game.Close()
 
@@ -105,7 +99,7 @@ func run() error {
 		}
 	}()
 
-	slog.Info("instance-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed)
+	slog.Info("instance-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed, "instance", game.Instance())
 	go func() { errc <- loop.Run(ctx) }()
 
 	select {

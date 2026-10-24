@@ -495,6 +495,31 @@ In order. Each one merges on its own and leaves the game playable.
    pods that come and go, idle cleanup, the world server asking the
    manager. The token, lease and handoff stay.
 
+### What FOM-227 built
+
+Where it differs from the plan above:
+
+- **The split is two types in `internal/server`, not two packages.**
+  `Lobby` is the lobby half and is all `world-server` runs. `Server` is the
+  run half and embeds a `Lobby` for its own lobby until FOM-228. They share
+  per-player state, so a package split would have exported most of it.
+- **The world server builds a `sim.World` and never steps it.** It answers
+  the class, gear and stat questions the lobby and character screen need.
+  There is no tick loop. `Lobby.Run` handles the inbox on one goroutine.
+- **The instance server clears dead leases on join.** Until FOM-228 there is
+  one instance server, so a lease from another process or boot is from one
+  that died. Without this, a pod restart mid-run would lock the player out.
+  It goes away with the instance server's lobby.
+- **A lobby held by a lease waits for it.** The world server shows `saving`,
+  turns moves and Enter Cave away with `in_run`, and checks every 2 s.
+- **Enter Cave on the world server is rejected with `full`**, since it has no
+  instances to send anyone to yet.
+- **Each write's result is handled before the next write starts.** A
+  `StartRun` that lands after the player left can then still queue the
+  `EndRun` that gives the lease back.
+- **The Dockerfile is unmanaged in `repo.nix`.** golden-service writes one
+  binary per image.
+
 ## Later
 
 - **Second socket to the world during a run**, for chat and party

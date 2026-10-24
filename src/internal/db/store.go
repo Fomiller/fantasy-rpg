@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,17 +35,19 @@ func (s *Store) Load(ctx context.Context, name, class string) (inventory.Charact
 	c := inventory.Character{Name: name, Class: class}
 	var stash, equipment, bag []byte
 	var xp *int
+	var lease nullLease
 	err := s.pool.QueryRow(ctx, `
-		SELECT a.stash, c.xp, c.equipment, c.bag
+		SELECT a.stash, a.active_run_id::text, a.active_instance, a.active_since, c.xp, c.equipment, c.bag
 		FROM accounts a
 		LEFT JOIN characters c ON c.account_id = a.id AND c.class_id = $2
-		WHERE a.name = $1`, name, class).Scan(&stash, &xp, &equipment, &bag)
+		WHERE a.name = $1`, name, class).Scan(&stash, &lease.runID, &lease.instance, &lease.since, &xp, &equipment, &bag)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, false, nil
 	}
 	if err != nil {
 		return c, false, err
 	}
+	c.Run = lease.lease()
 	if c.Stash, err = decodeItems(stash); err != nil {
 		return c, false, fmt.Errorf("stash of %s: %w", name, err)
 	}
@@ -52,11 +55,8 @@ func (s *Store) Load(ctx context.Context, name, class string) (inventory.Charact
 		return c, false, nil
 	}
 	c.XP = *xp
-	if c.Loadout.Equipment, err = decodeItems(equipment); err != nil {
-		return c, false, fmt.Errorf("equipment of %s %s: %w", name, class, err)
-	}
-	if c.Loadout.Items, err = decodeItems(bag); err != nil {
-		return c, false, fmt.Errorf("bag of %s %s: %w", name, class, err)
+	if err := decodeLoadout(&c, equipment, bag); err != nil {
+		return c, false, err
 	}
 	return c, true, nil
 }
@@ -92,20 +92,70 @@ func (s *Store) SaveLobby(ctx context.Context, name, class string, l inventory.L
 		return err
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var account int64
-		err := tx.QueryRow(ctx, `
-			UPDATE characters c SET equipment = $3, bag = $4, updated_at = now()
-			FROM accounts a
-			WHERE a.id = c.account_id AND a.name = $1 AND c.class_id = $2
-			RETURNING a.id`, name, class, equipment, bag).Scan(&account)
+		account, lease, err := lockAccount(ctx, tx, name, class)
+		if err != nil {
+			return err
+		}
+		if lease.runID != nil {
+			return inventory.ErrInRun
+		}
+		tag, err := tx.Exec(ctx, `
+			UPDATE characters SET equipment = $3, bag = $4, updated_at = now()
+			WHERE account_id = $1 AND class_id = $2`, account, class, equipment, bag)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("%w: %s %s", inventory.ErrNoCharacter, name, class)
+		}
+		return saveStash(ctx, tx, account, stashJSON, false)
+	})
+}
+
+func (s *Store) StartRun(ctx context.Context, name, class, runID, instance string) (inventory.Character, error) {
+	c := inventory.Character{Name: name, Class: class}
+	if runID == "" {
+		return c, inventory.ErrNoRunID
+	}
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		account, lease, err := lockAccount(ctx, tx, name, class)
+		if err != nil {
+			return err
+		}
+		if lease.runID != nil {
+			return inventory.ErrInRun
+		}
+		var stash, equipment, bag []byte
+		var lastRun *string
+		err = tx.QueryRow(ctx, `
+			SELECT a.stash, c.xp, c.equipment, c.bag, c.last_run_id::text
+			FROM characters c JOIN accounts a ON a.id = c.account_id
+			WHERE a.id = $1 AND c.class_id = $2`, account, class).Scan(&stash, &c.XP, &equipment, &bag, &lastRun)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %s %s", inventory.ErrNoCharacter, name, class)
 		}
 		if err != nil {
 			return err
 		}
-		return saveStash(ctx, tx, account, stashJSON)
+		if lastRun != nil && *lastRun == runID {
+			return inventory.ErrRunUsed
+		}
+		if c.Stash, err = decodeItems(stash); err != nil {
+			return fmt.Errorf("stash of %s: %w", name, err)
+		}
+		if err := decodeLoadout(&c, equipment, bag); err != nil {
+			return err
+		}
+		c.Run = inventory.Lease{RunID: runID, Instance: instance}
+		return tx.QueryRow(ctx, `
+			UPDATE accounts SET active_run_id = $2, active_instance = $3, active_since = now()
+			WHERE id = $1
+			RETURNING active_since`, account, runID, instance).Scan(&c.Run.Since)
 	})
+	if err != nil {
+		return inventory.Character{Name: name, Class: class}, err
+	}
+	return c, nil
 }
 
 func (s *Store) EndRun(ctx context.Context, runID string, c inventory.Character) error {
@@ -120,13 +170,15 @@ func (s *Store) EndRun(ctx context.Context, runID string, c inventory.Character)
 		return err
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var account int64
+		account, lease, err := lockAccount(ctx, tx, c.Name, c.Class)
+		if err != nil {
+			return err
+		}
 		var lastRun *string
-		err := tx.QueryRow(ctx, `
-			SELECT a.id, c.last_run_id::text
-			FROM characters c JOIN accounts a ON a.id = c.account_id
-			WHERE a.name = $1 AND c.class_id = $2
-			FOR UPDATE OF c`, c.Name, c.Class).Scan(&account, &lastRun)
+		err = tx.QueryRow(ctx, `
+			SELECT last_run_id::text FROM characters
+			WHERE account_id = $1 AND class_id = $2
+			FOR UPDATE`, account, c.Class).Scan(&lastRun)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %s %s", inventory.ErrNoCharacter, c.Name, c.Class)
 		}
@@ -136,18 +188,81 @@ func (s *Store) EndRun(ctx context.Context, runID string, c inventory.Character)
 		if lastRun != nil && *lastRun == runID {
 			return nil
 		}
+		if lease.runID == nil || *lease.runID != runID {
+			return inventory.ErrLeaseLost
+		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE characters SET xp = $3, equipment = $4, bag = $5, last_run_id = $6, updated_at = now()
 			WHERE account_id = $1 AND class_id = $2`, account, c.Class, c.XP, equipment, bag, runID); err != nil {
 			return err
 		}
-		return saveStash(ctx, tx, account, stash)
+		return saveStash(ctx, tx, account, stash, true)
 	})
 }
 
-func saveStash(ctx context.Context, tx pgx.Tx, account int64, stash []byte) error {
-	_, err := tx.Exec(ctx, `UPDATE accounts SET stash = $2, updated_at = now() WHERE id = $1`, account, stash)
+func (s *Store) ClearRun(ctx context.Context, name, runID string) error {
+	if runID == "" {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE accounts SET active_run_id = NULL, active_instance = NULL, active_since = NULL, updated_at = now()
+		WHERE name = $1 AND active_run_id = $2`, name, runID)
 	return err
+}
+
+// lockAccount locks the account row before anything else, so every write
+// takes its locks in the same order and sees the lease it checks.
+func lockAccount(ctx context.Context, tx pgx.Tx, name, class string) (int64, nullLease, error) {
+	var account int64
+	var lease nullLease
+	err := tx.QueryRow(ctx, `
+		SELECT id, active_run_id::text FROM accounts WHERE name = $1
+		FOR UPDATE`, name).Scan(&account, &lease.runID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, lease, fmt.Errorf("%w: %s %s", inventory.ErrNoCharacter, name, class)
+	}
+	return account, lease, err
+}
+
+// saveStash also drops the lease when the write is a run end.
+func saveStash(ctx context.Context, tx pgx.Tx, account int64, stash []byte, endRun bool) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE accounts SET stash = $2, updated_at = now(),
+			active_run_id = CASE WHEN $3 THEN NULL ELSE active_run_id END,
+			active_instance = CASE WHEN $3 THEN NULL ELSE active_instance END,
+			active_since = CASE WHEN $3 THEN NULL ELSE active_since END
+		WHERE id = $1`, account, stash, endRun)
+	return err
+}
+
+type nullLease struct {
+	runID, instance *string
+	since           *time.Time
+}
+
+func (n nullLease) lease() inventory.Lease {
+	if n.runID == nil {
+		return inventory.Lease{}
+	}
+	l := inventory.Lease{RunID: *n.runID}
+	if n.instance != nil {
+		l.Instance = *n.instance
+	}
+	if n.since != nil {
+		l.Since = *n.since
+	}
+	return l
+}
+
+func decodeLoadout(c *inventory.Character, equipment, bag []byte) error {
+	var err error
+	if c.Loadout.Equipment, err = decodeItems(equipment); err != nil {
+		return fmt.Errorf("equipment of %s %s: %w", c.Name, c.Class, err)
+	}
+	if c.Loadout.Items, err = decodeItems(bag); err != nil {
+		return fmt.Errorf("bag of %s %s: %w", c.Name, c.Class, err)
+	}
+	return nil
 }
 
 // checkStash fails before the database does, with a clearer error than the

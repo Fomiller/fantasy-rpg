@@ -23,6 +23,14 @@ app.kubernetes.io/name: {{ include "chart.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{- /* A name of its own, not an extra label, so the instance server's
+       Service, which selects on name and instance, never picks up world pods.
+       Deployment selectors cannot change, so the old ones stay as they are. */ -}}
+{{- define "chart.worldSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-world
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
 {{- define "chart.dbName" -}}
 {{- printf "%s-db" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
