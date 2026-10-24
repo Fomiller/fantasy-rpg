@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
+	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 )
 
 const (
 	storeTimeout = 2 * time.Second
-	// endRunPatience is how long a run end keeps retrying. Keeping it as a
-	// pending save after that is FOM-223.
+	retryBackoff = 100 * time.Millisecond
+	// A run end that fails for endRunPatience becomes a pending save, retried
+	// every pendingRetry until it lands.
 	endRunPatience = 10 * time.Second
-	retryBackoff   = 100 * time.Millisecond
+	pendingRetry   = 5 * time.Second
 )
 
 var errShuttingDown = errors.New("server shutting down")
@@ -26,7 +28,11 @@ type storeWrite struct {
 	op       string
 	lobby    bool
 	patience time.Duration
-	call     func(context.Context) error
+	// keep retries past patience instead of giving up.
+	keep bool
+	call func(context.Context) error
+	// done runs on the tick loop with the client that now holds the name, or nil.
+	done func(owner *client, err error)
 }
 
 // writer is a player's queue of store writes. push never blocks, so the tick
@@ -35,6 +41,8 @@ type writer struct {
 	mu     sync.Mutex
 	queue  []storeWrite
 	closed bool
+	// exited is set once next has returned false, so the loop is gone for good.
+	exited bool
 	wake   chan struct{}
 }
 
@@ -65,6 +73,18 @@ func (w *writer) close() {
 	w.signal()
 }
 
+// reopen hands a closed writer to a new connection. It fails once the loop
+// has stopped, since nothing would run the new connection's writes.
+func (w *writer) reopen() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.closed || w.exited {
+		return false
+	}
+	w.closed = false
+	return true
+}
+
 func (w *writer) signal() {
 	select {
 	case w.wake <- struct{}{}:
@@ -84,6 +104,7 @@ func (w *writer) next(stop <-chan struct{}) (storeWrite, bool) {
 			return sw, true
 		}
 		closed := w.closed
+		w.exited = closed
 		w.mu.Unlock()
 		if closed {
 			return storeWrite{}, false
@@ -98,37 +119,69 @@ func (w *writer) next(stop <-chan struct{}) (storeWrite, bool) {
 
 // saveLoop runs one player's writes in order. The name stays claimed until
 // the last write lands, so a rejoin never loads a character about to change.
-func (s *Server) saveLoop(c *client) {
+func (s *Server) saveLoop(name string, w *writer) {
 	for {
-		sw, ok := c.writes.next(s.done)
+		sw, ok := w.next(s.done)
 		if !ok {
 			break
 		}
 		err := s.write(sw)
 		s.enqueue(func() {
 			if err != nil {
-				s.log.Error("store write", "op", sw.op, "name", c.name, "err", err)
+				s.log.Error("store write", "op", sw.op, "name", name, "err", err)
+			}
+			if sw.done != nil {
+				sw.done(s.owner(name, w), err)
 			}
 		})
 	}
 	s.enqueue(func() {
-		if s.conns[c.name] == c {
-			delete(s.conns, c.name)
+		if s.owner(name, w) != nil {
+			delete(s.conns, name)
 		}
 	})
 }
 
+// owner is the client using w, which changes when a rejoin takes over a
+// pending save.
+func (s *Server) owner(name string, w *writer) *client {
+	if c, ok := s.conns[name]; ok && c.writes == w {
+		return c
+	}
+	return nil
+}
+
 func (s *Server) write(sw storeWrite) error {
 	deadline := time.Now().Add(sw.patience)
-	for backoff := retryBackoff; ; backoff = min(backoff*2, storeTimeout) {
+	pending := false
+	defer func() {
+		if pending {
+			s.PendingSaves.Dec()
+		}
+	}()
+	backoff := retryBackoff
+	for {
 		ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 		err := sw.call(ctx)
 		cancel()
-		if err == nil || time.Now().Add(backoff).After(deadline) {
-			return err
+		if err == nil {
+			return nil
+		}
+		wait := backoff
+		backoff = min(backoff*2, storeTimeout)
+		if time.Now().Add(wait).After(deadline) {
+			if !sw.keep {
+				return err
+			}
+			if !pending {
+				pending = true
+				s.PendingSaves.Inc()
+				s.log.Warn("save pending", "op", sw.op, "err", err)
+			}
+			wait = s.pendingRetry
 		}
 		select {
-		case <-time.After(backoff):
+		case <-time.After(wait):
 		case <-s.done:
 			return err
 		}
@@ -170,20 +223,56 @@ func (s *Server) loadCharacter(ctx context.Context, name, class string) (invento
 	return ch, err
 }
 
-// saveLobby queues the lobby as it is now.
-func (s *Server) saveLobby(c *client) {
+// saveLobby queues the lobby as it is now. If the write fails and no newer
+// one is queued, the lobby goes back to what the store has.
+func (s *Server) saveLobby(c *client, itemID string) {
 	name, class, l, stash := c.name, c.class, c.lobby.loadout(), slices.Clone(c.lobby.stash.Items)
+	c.lobbySeq++
+	seq := c.lobbySeq
 	c.writes.push(storeWrite{op: "save lobby", lobby: true, call: func(ctx context.Context) error {
 		return s.Store.SaveLobby(ctx, name, class, l, stash)
+	}, done: func(owner *client, err error) {
+		if owner != c {
+			return
+		}
+		if err == nil {
+			if seq > c.savedSeq {
+				c.saved, c.savedSeq = inventory.Character{Loadout: l, Stash: stash}, seq
+			}
+			return
+		}
+		if seq != c.lobbySeq || c.lobby == nil {
+			return
+		}
+		saved := cloneCharacter(c.saved)
+		c.lobby = newLobby(c.lobby.xp, s.world.BagSize(), saved.Loadout, saved.Stash)
+		s.sendToClient(c, protocol.StashMoveRejected(itemID, MoveSaving))
+		s.sendLobbyItems(c)
 	}})
 }
 
-// saveRun queues the one write a run end makes.
+// saveRun queues the one write a run end makes. Until it lands the lobby
+// shows saving and nothing else can change the character.
 func (s *Server) saveRun(c *client, ch inventory.Character) {
 	runID := c.runID
+	ch = cloneCharacter(ch)
+	pending := &ch
+	c.pending = pending
+	c.writes.push(storeWrite{op: "end run", patience: s.endRunPatience, keep: true, call: func(ctx context.Context) error {
+		return s.Store.EndRun(ctx, runID, *pending)
+	}, done: func(owner *client, err error) {
+		if owner == nil || err != nil || owner.pending != pending {
+			return
+		}
+		owner.pending = nil
+		if owner.lobby != nil {
+			s.sendLobby(owner)
+		}
+	}})
+}
+
+func cloneCharacter(ch inventory.Character) inventory.Character {
 	ch.Loadout = inventory.Loadout{Equipment: slices.Clone(ch.Loadout.Equipment), Items: slices.Clone(ch.Loadout.Items)}
 	ch.Stash = slices.Clone(ch.Stash)
-	c.writes.push(storeWrite{op: "end run", patience: endRunPatience, call: func(ctx context.Context) error {
-		return s.Store.EndRun(ctx, runID, ch)
-	}})
+	return ch
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"google.golang.org/protobuf/proto"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
@@ -241,15 +242,25 @@ func TestStashingEverythingKeepsNoStarterKit(t *testing.T) {
 // rejoin retries until the server has let go of the name.
 func rejoin(t *testing.T, url, name string) *websocket.Conn {
 	t.Helper()
+	conn, _ := rejoinLobby(t, url, name)
+	return conn
+}
+
+func rejoinLobby(t *testing.T, url, name string) (*websocket.Conn, *gamev1.Lobby) {
+	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		conn := dial(t, url)
 		send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: name}}})
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		_, _, err := conn.Read(ctx)
+		_, b, err := conn.Read(ctx)
 		cancel()
 		if err == nil {
-			return conn
+			var msg gamev1.ServerMessage
+			if err := proto.Unmarshal(b, &msg); err != nil {
+				t.Fatal(err)
+			}
+			return conn, msg.GetLobby()
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("could not rejoin as %s: %v", name, err)

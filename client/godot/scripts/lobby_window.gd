@@ -6,6 +6,10 @@ const REJECTED_TEXT := {
 	"cannot_equip": "cannot equip that",
 	"unknown_item": "item is gone",
 	"not_in_lobby": "not in the lobby",
+	"saving": "Couldn't save, try again",
+}
+const ENTER_REJECTED_TEXT := {
+	"saving": "Still saving your last run",
 }
 
 # Set by main. Tests swap them for fakes. Every button sends a request, and
@@ -14,6 +18,8 @@ var send_move: Callable
 var send_enter: Callable
 
 var message := ""
+# Enter Cave stays off until the server says the last run is saved.
+var saving := false
 
 var _character: GameV1.CharacterInfo
 var _info: GameV1.ClassInfo
@@ -31,9 +37,10 @@ func _ready() -> void:
 	_rebuild()
 
 
-func show_lobby(character: GameV1.CharacterInfo, info: GameV1.ClassInfo) -> void:
+func show_lobby(character: GameV1.CharacterInfo, info: GameV1.ClassInfo, is_saving := false) -> void:
 	_character = character
 	_info = info
+	saving = is_saving
 	message = ""
 	_rebuild()
 	visible = true
@@ -59,6 +66,11 @@ func show_stash(items: Array[GameV1.Item], capacity: int) -> void:
 
 func show_rejected(event: GameV1.StashMoveRejected) -> void:
 	message = REJECTED_TEXT.get(event.get_reason(), event.get_reason())
+	_rebuild()
+
+
+func show_enter_rejected(event: GameV1.EnterCaveRejected) -> void:
+	message = ENTER_REJECTED_TEXT.get(event.get_reason(), event.get_reason())
 	_rebuild()
 
 
@@ -90,7 +102,11 @@ func _rebuild() -> void:
 	for item in _stash:
 		_row(item, _equip_or({"To bag": GameV1.ItemPlace.BAG}, item))
 
-	_list.add_child(ItemRow.button("Enter cave", func() -> void: send_enter.call()))
+	if saving:
+		_label("Saving...")
+	var enter := ItemRow.button("Enter cave", func() -> void: send_enter.call())
+	enter.disabled = saving
+	_list.add_child(enter)
 
 
 func _equip_or(places: Dictionary, item: GameV1.Item) -> Dictionary:

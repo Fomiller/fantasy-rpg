@@ -75,6 +75,7 @@ func run() error {
 	game := server.New(world, cave, loot, slog.Default())
 	game.TickRate = rate
 	game.Store = inventory.Metered(store, reg)
+	reg.MustRegister(game.PendingSaves)
 	defer game.Close()
 
 	loop := &tick.Loop{

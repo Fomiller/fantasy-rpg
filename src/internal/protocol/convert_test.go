@@ -262,8 +262,8 @@ func TestProgressionMessages(t *testing.T) {
 func TestLobbyMessages(t *testing.T) {
 	data := classes.Default()
 	character := Character(data.Progression, "ann", "warrior", 1, 0, 0)
-	lobby := Lobby(character, ClassInfo(data, classes.Starter)).GetLobby()
-	if lobby.GetCharacter() != character || lobby.GetClassInfo().GetId() != "warrior" {
+	lobby := Lobby(character, ClassInfo(data, classes.Starter), true).GetLobby()
+	if lobby.GetCharacter() != character || lobby.GetClassInfo().GetId() != "warrior" || !lobby.GetSaving() {
 		t.Fatalf("lobby = %v", lobby)
 	}
 
@@ -278,5 +278,8 @@ func TestLobbyMessages(t *testing.T) {
 	}
 	if r := StashMoveRejected("x", "full").GetStashMoveRejected(); r.GetItemId() != "x" || r.GetReason() != "full" {
 		t.Fatalf("rejected = %v", r)
+	}
+	if r := EnterCaveRejected("saving").GetEnterCaveRejected(); r.GetReason() != "saving" {
+		t.Fatalf("enter rejected = %v", r)
 	}
 }
