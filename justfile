@@ -106,6 +106,7 @@ client-test:
     {{godot}} --headless --path client/godot --script res://tests/windows_test.gd
     {{godot}} --headless --path client/godot --script res://tests/loot_window_test.gd
     {{godot}} --headless --path client/godot --script res://tests/window_attack_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/character_screen_test.gd
 
 net-test: build
     #!/usr/bin/env bash

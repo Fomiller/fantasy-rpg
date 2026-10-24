@@ -120,7 +120,7 @@ func (s *Server) sendItems(id sim.EntityID) {
 	if !ok || !alive {
 		return
 	}
-	for _, msg := range []*gamev1.ServerMessage{protocol.Equipment(p), protocol.Inventory(p)} {
+	for _, msg := range []*gamev1.ServerMessage{protocol.Equipment(s.world, p), protocol.Inventory(p)} {
 		if b, err := protocol.EncodeServer(msg); err == nil {
 			c.send(b)
 		}

@@ -47,6 +47,19 @@ func (w *World) applyGear(p *Player) {
 	p.MaxHealth = maxHealth
 }
 
+// Stats are the player's stats as the sim uses them. Heal is left out
+// because it only means something on a consumable.
+func (w *World) Stats(p Player) map[items.Stat]int {
+	out := map[items.Stat]int{}
+	for _, s := range items.AllStats {
+		out[s] = p.stats[s]
+	}
+	delete(out, items.Heal)
+	out[items.Damage] = w.attackDamage(&p)
+	out[items.MoveSpeed] = min(out[items.MoveSpeed], w.cfg.MoveSpeedCap)
+	return out
+}
+
 func baseStats(c classes.Class) map[items.Stat]int {
 	out := map[items.Stat]int{}
 	for s, v := range c.Base {

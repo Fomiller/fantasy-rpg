@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="5_inventory"]
 [ext_resource type="Script" path="res://scripts/ability_bar.gd" id="6_abilities"]
 [ext_resource type="Script" path="res://scripts/loot_window.gd" id="7_loot"]
+[ext_resource type="Script" path="res://scripts/character_screen.gd" id="8_character"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -66,6 +67,17 @@ offset_bottom = 420.0
 script = ExtResource("7_loot")
 
 [node name="List" type="VBoxContainer" parent="HUD/Loot"]
+layout_mode = 2
+
+[node name="Character" type="PanelContainer" parent="HUD"]
+visible = false
+offset_left = 12.0
+offset_top = 120.0
+offset_right = 312.0
+offset_bottom = 548.0
+script = ExtResource("8_character")
+
+[node name="List" type="VBoxContainer" parent="HUD/Character"]
 layout_mode = 2
 
 [node name="Abilities" type="VBoxContainer" parent="HUD"]

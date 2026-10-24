@@ -165,7 +165,12 @@ func cancel_cast() -> void:
 
 # An empty id means no weapon is equipped.
 func equip_weapon(item_def_id: String) -> void:
-	_sprite.weapon = WEAPONS.get(item_def_id, DEFAULT_WEAPON) if item_def_id != "" else null
+	_sprite.weapon = weapon_texture(item_def_id)
+
+
+# Null for an empty id.
+static func weapon_texture(item_def_id: String) -> Texture2D:
+	return WEAPONS.get(item_def_id, DEFAULT_WEAPON) if item_def_id != "" else null
 
 
 func flash() -> void:

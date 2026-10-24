@@ -252,6 +252,9 @@ message ItemAffix {
 // whenever it changes.
 message EquipmentUpdated {
   repeated Item items = 1;
+  // Class base plus gear, as the server uses them. Unarmed damage and the
+  // move_speed cap are already applied. Gear is the only thing that changes them.
+  repeated ItemStat stats = 2;
 }
 
 // InventoryUpdated is everything in the player's bag, sent to that player

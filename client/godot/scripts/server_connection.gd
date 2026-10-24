@@ -5,6 +5,7 @@ signal joined(player_id: int)
 signal disconnected
 signal extracted(player_id: int)
 signal equipment_received(items: Array[GameV1.Item])
+signal stats_received(stats: Array[GameV1.ItemStat])
 signal inventory_received(items: Array[GameV1.Item], capacity: int)
 signal snapshot_received(snapshot: GameV1.WorldSnapshot)
 signal damage_received(event: GameV1.DamageEvent)
@@ -214,6 +215,7 @@ func _handle(bytes: PackedByteArray) -> void:
 		ability_rejected.emit(msg.get_ability_rejected())
 	elif msg.has_equipment():
 		equipment_received.emit(msg.get_equipment().get_items())
+		stats_received.emit(msg.get_equipment().get_stats())
 	elif msg.has_inventory():
 		var inventory := msg.get_inventory()
 		inventory_received.emit(inventory.get_items(), inventory.get_capacity())

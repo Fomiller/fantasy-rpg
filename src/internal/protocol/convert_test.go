@@ -121,7 +121,8 @@ func TestItemAndEquipment(t *testing.T) {
 		}
 	}
 	p, _ := w.Player(id)
-	got := Equipment(p).GetEquipment().GetItems()
+	msg := Equipment(w, p).GetEquipment()
+	got := msg.GetItems()
 	if len(got) != 2 || got[0].GetSlot() != "weapon" || got[1].GetSlot() != "chest" {
 		t.Fatalf("equipment = %v", got)
 	}
@@ -131,6 +132,17 @@ func TestItemAndEquipment(t *testing.T) {
 	}
 	if len(it.GetAffixes()) != len(sword.Affixes) || it.GetBase()[0].GetStat() != "damage" || it.GetBase()[0].GetValue() != int32(sword.Base[items.Damage]) {
 		t.Fatalf("item stats = %v", it)
+	}
+
+	stats := msg.GetStats()
+	want := w.Stats(p)
+	if len(stats) != len(want) || stats[0].GetStat() != "damage" {
+		t.Fatalf("stats = %v, want %v in stat order", stats, want)
+	}
+	for _, s := range stats {
+		if int(s.GetValue()) != want[items.Stat(s.GetStat())] {
+			t.Fatalf("%s = %d, want %d", s.GetStat(), s.GetValue(), want[items.Stat(s.GetStat())])
+		}
 	}
 }
 

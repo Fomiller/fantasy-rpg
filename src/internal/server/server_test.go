@@ -327,6 +327,33 @@ func TestJoinEquipsStarterKit(t *testing.T) {
 	}
 }
 
+func stat(eq *gamev1.EquipmentUpdated, name string) int32 {
+	for _, s := range eq.GetStats() {
+		if s.GetStat() == name {
+			return s.GetValue()
+		}
+	}
+	return -1
+}
+
+func TestUnequipSendsNewStats(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	join(t, conn)
+
+	armed := waitFor(t, conn, equipmentWith("rusty_sword")).GetEquipment()
+	if stat(armed, "max_health") != 120 || stat(armed, "armor") < 5 {
+		t.Fatalf("stats = %v", armed.GetStats())
+	}
+	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
+	unarmed := waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		return m.GetEquipment() != nil && !equipmentWith("rusty_sword")(m)
+	}).GetEquipment()
+	if got, want := stat(unarmed, "damage"), int32(sim.DefaultConfig().AttackDamage); got != want {
+		t.Fatalf("unarmed damage = %d, want %d", got, want)
+	}
+}
+
 func sendItem(t *testing.T, conn *websocket.Conn, msg *gamev1.ClientMessage) {
 	t.Helper()
 	msg.ProtocolVersion = protocol.Version
