@@ -25,7 +25,11 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	cmd := run
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		cmd = runMigrate
+	}
+	if err := cmd(); err != nil {
 		slog.Error("cave-server stopped", "err", err)
 		os.Exit(1)
 	}
@@ -38,6 +42,14 @@ func run() error {
 	rate, err := tickRate()
 	if err != nil {
 		return err
+	}
+
+	// The server does not use Postgres yet. FOM-216 swaps the store in.
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		if err := checkSchema(ctx, url); err != nil {
+			return err
+		}
+		slog.Info("database schema is current")
 	}
 
 	reg := prometheus.NewRegistry()
@@ -96,6 +108,12 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+func runMigrate() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return migrate(ctx)
 }
 
 func tickRate() (int, error) {

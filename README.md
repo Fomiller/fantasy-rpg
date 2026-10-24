@@ -36,6 +36,8 @@ There are three ways to run the stack, from fastest to most realistic.
 ```sh
 just dev     # start postgres + nats, then run world-server on :8080
 just deps    # only postgres + nats
+just migrate # apply database migrations to the Compose postgres
+just cave-db # migrate, then run cave-server with DATABASE_URL set
 ```
 
 **2. Full Compose.** Every server runs as a container.
@@ -56,6 +58,10 @@ just k8s-down       # delete the cluster
 ```
 
 Local Postgres login is `fantasy` / `fantasy`, database `fantasy`. It is for local use only.
+
+Compose runs Postgres 18. A volume made by the old Postgres 17 setup will not start on it. Reset it once with `docker compose -f deploy/compose/compose.yaml down -v`.
+
+The `internal/db` tests use `TEST_DATABASE_URL` if set, else start `postgres:18` with testcontainers. Without Docker they skip, unless `CI` is set.
 
 Other recipes: `just build`, `just test`, `just lint`, `just fmt`.
 

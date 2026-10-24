@@ -11,6 +11,7 @@ compose := "docker compose -f deploy/compose/compose.yaml"
 kube := "kubectl --context k3d-fantasy-rpg"
 godot := "/Applications/Godot.app/Contents/MacOS/Godot"
 infraDir := "infra/live/dev"
+databaseUrl := "postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable"
 
 fetch:
     curl -sSfL https://raw.githubusercontent.com/Fomiller/justfiles/refs/heads/main/base.just > just/base.just
@@ -46,6 +47,12 @@ dev: deps
 
 cave:
     go run ./src/cmd/cave-server
+
+migrate: deps
+    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/cave-server migrate
+
+cave-db: migrate
+    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/cave-server
 
 up:
     {{compose}} --profile full up -d --build --wait
