@@ -70,8 +70,17 @@ const (
 	Unique
 )
 
-func (r Rarity) String() string {
-	return [...]string{"common", "uncommon", "rare", "epic", "unique"}[r]
+var rarityNames = [...]string{"common", "uncommon", "rare", "epic", "unique"}
+
+func (r Rarity) String() string { return rarityNames[r] }
+
+// ParseRarity is the reverse of String.
+func ParseRarity(name string) (Rarity, error) {
+	i := slices.Index(rarityNames[:], name)
+	if i < 0 {
+		return 0, fmt.Errorf("unknown rarity %q", name)
+	}
+	return Rarity(i), nil
 }
 
 // Range is an inclusive [min, max] pair, written as a two element JSON array.

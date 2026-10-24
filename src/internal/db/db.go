@@ -1,4 +1,5 @@
-// Package db owns the Postgres schema and its migrations.
+// Package db owns the Postgres schema, its migrations and the Postgres
+// inventory store.
 package db
 
 import (

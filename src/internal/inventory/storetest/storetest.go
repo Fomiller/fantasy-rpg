@@ -1,5 +1,6 @@
 // Package storetest is the contract every inventory.Store must meet. Each
-// store's tests call Run with a constructor for an empty store.
+// store's tests call Run with a constructor for an empty store, which gets
+// the subtest it is for.
 package storetest
 
 import (
@@ -12,7 +13,7 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
-func Run(t *testing.T, newStore func() inventory.Store) {
+func Run(t *testing.T, newStore func(*testing.T) inventory.Store) {
 	tests := []struct {
 		name string
 		run  func(*testing.T, inventory.Store)
@@ -31,7 +32,7 @@ func Run(t *testing.T, newStore func() inventory.Store) {
 		{"ParallelPlayers", parallelPlayers},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) { tt.run(t, newStore()) })
+		t.Run(tt.name, func(t *testing.T) { tt.run(t, newStore(t)) })
 	}
 }
 
