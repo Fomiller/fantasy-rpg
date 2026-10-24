@@ -69,7 +69,12 @@ func DefaultConfig() Config {
 type Player struct {
 	ID EntityID
 	// Class is the class id. It is set on join and never changes.
-	Class        string
+	Class string
+	// Level comes from XP, the banked total. RunXP is earned this run and
+	// is not banked until the run ends.
+	Level        int
+	XP           int
+	RunXP        int
 	Resource     float64
 	MaxResource  int
 	Pos, Vel     Vec2
@@ -204,13 +209,14 @@ func (w *World) SetExtraction(r Rect) {
 	w.exit = &r
 }
 
-// AddPlayer adds a player of the starter class.
+// AddPlayer adds a level 1 player of the starter class.
 func (w *World) AddPlayer(pos Vec2) EntityID {
-	return w.addPlayer(pos, w.cfg.Classes.Classes[classes.Starter])
+	return w.addPlayer(pos, w.cfg.Classes.Classes[classes.Starter], 0)
 }
 
-// AddPlayerAs adds a player of a class. An empty class is the starter.
-func (w *World) AddPlayerAs(pos Vec2, class string) (EntityID, error) {
+// AddPlayerAs adds a player of a class with banked XP, which sets the
+// level. An empty class is the starter.
+func (w *World) AddPlayerAs(pos Vec2, class string, xp int) (EntityID, error) {
 	if class == "" {
 		class = classes.Starter
 	}
@@ -218,14 +224,19 @@ func (w *World) AddPlayerAs(pos Vec2, class string) (EntityID, error) {
 	if !ok {
 		return 0, fmt.Errorf("unknown class %q", class)
 	}
-	return w.addPlayer(pos, c), nil
+	if xp < 0 {
+		return 0, fmt.Errorf("xp is %d", xp)
+	}
+	return w.addPlayer(pos, c, xp), nil
 }
 
-func (w *World) addPlayer(pos Vec2, c classes.Class) EntityID {
+func (w *World) addPlayer(pos Vec2, c classes.Class, xp int) EntityID {
 	w.nextID++
 	p := &Player{
 		ID:          w.nextID,
 		Class:       c.ID,
+		Level:       w.cfg.Classes.Progression.LevelFor(xp),
+		XP:          xp,
 		Resource:    float64(c.Resource.Start),
 		MaxResource: c.Resource.Max,
 		Pos:         pos,

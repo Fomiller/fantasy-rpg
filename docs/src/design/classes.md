@@ -364,6 +364,7 @@ no code change. `TestClassComesFromData` in `src/internal/sim` checks that.
     "id": "warrior",
     "name": "Warrior",
     "base": { "max_health": 120, "armor": 5 },
+    "per_level": { "max_health": 5 },
     "resource": {
       "kind": "rage",
       "max": 100,

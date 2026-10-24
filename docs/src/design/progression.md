@@ -302,7 +302,9 @@ Today a disconnect keeps all loot. That makes "pull the plug" a free escape.
 
 ## Data file changes
 
-Proposal only. FOM-100 owns the format, this adds fields.
+FOM-100 owns the format, this adds fields. FOM-211 built `per_level` and
+`progression.json`. `unlock_level` and the `Archetype` field are still
+proposals.
 
 `classes.json`, new fields on a class:
 

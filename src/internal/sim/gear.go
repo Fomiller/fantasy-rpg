@@ -32,11 +32,14 @@ func (w *World) Equip(id EntityID, inst items.Instance) (items.Instance, bool, e
 	return old, had, nil
 }
 
-// applyGear recomputes stats from the class base and equipment. A change in
+// applyGear recomputes stats from the class base, level and equipment. A change in
 // max health moves current health by the same amount, so swapping gear
 // never heals.
 func (w *World) applyGear(p *Player) {
 	p.stats = baseStats(p.class)
+	for s, v := range p.class.PerLevel {
+		p.stats[s] += v * (p.Level - 1)
+	}
 	for _, inst := range p.Equipment {
 		for s, v := range inst.Stats() {
 			p.stats[s] += v

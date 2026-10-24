@@ -22,6 +22,7 @@ type Class struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`
 	Base      map[items.Stat]int `json:"base"`
+	PerLevel  map[items.Stat]int `json:"per_level"`
 	Resource  Resource           `json:"resource"`
 	Weapons   []items.WeaponType `json:"weapons"`
 	Basic     string             `json:"basic"`
@@ -110,9 +111,55 @@ func (e Effect) Duration() time.Duration { return ms(e.DurationMS) }
 
 func ms(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 
+// Progression is the XP curve and the XP rules. XPToNext[i] is the XP to go
+// from level i+1 to i+2.
+type Progression struct {
+	MaxLevel            int   `json:"max_level"`
+	XPToNext            []int `json:"xp_to_next"`
+	ChestXP             int   `json:"chest_xp"`
+	AssistWindowMS      int   `json:"assist_window_ms"`
+	ExtractBonus        int   `json:"extract_bonus"`
+	ExtractBonusPercent int   `json:"extract_bonus_percent"`
+	DeathKeepPercent    int   `json:"death_keep_percent"`
+}
+
+func (p Progression) AssistWindow() time.Duration { return ms(p.AssistWindowMS) }
+
+// XPToReach is the total XP a character needs to be at level.
+func (p Progression) XPToReach(level int) int {
+	total := 0
+	for _, n := range p.XPToNext[:min(max(level-1, 0), len(p.XPToNext))] {
+		total += n
+	}
+	return total
+}
+
+// LevelFor is the level a total XP gives. XP past the cap still counts but
+// gives no more levels.
+func (p Progression) LevelFor(xp int) int {
+	level := 1
+	for _, n := range p.XPToNext {
+		if xp < n {
+			break
+		}
+		xp -= n
+		level++
+	}
+	return level
+}
+
+// ToNext is the XP from level to the next one. It is 0 at the cap.
+func (p Progression) ToNext(level int) int {
+	if level < 1 || level >= p.MaxLevel {
+		return 0
+	}
+	return p.XPToNext[level-1]
+}
+
 type Data struct {
-	Classes   map[string]Class
-	Abilities map[string]Ability
+	Classes     map[string]Class
+	Abilities   map[string]Ability
+	Progression Progression
 }
 
 //go:embed data/*.json
@@ -128,11 +175,13 @@ func Default() *Data {
 	return d
 }
 
-// Load reads data/classes.json and data/abilities.json from fsys.
+// Load reads data/classes.json, data/abilities.json and
+// data/progression.json from fsys.
 func Load(fsys fs.FS) (*Data, error) {
 	var classes []Class
 	var abilities []Ability
-	for name, v := range map[string]any{"data/classes.json": &classes, "data/abilities.json": &abilities} {
+	var progression Progression
+	for name, v := range map[string]any{"data/classes.json": &classes, "data/abilities.json": &abilities, "data/progression.json": &progression} {
 		b, err := fs.ReadFile(fsys, name)
 		if err != nil {
 			return nil, err
@@ -145,7 +194,7 @@ func Load(fsys fs.FS) (*Data, error) {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	d := &Data{Classes: map[string]Class{}, Abilities: map[string]Ability{}}
+	d := &Data{Classes: map[string]Class{}, Abilities: map[string]Ability{}, Progression: progression}
 	for _, c := range classes {
 		if _, dup := d.Classes[c.ID]; dup {
 			return nil, fmt.Errorf("class %q defined twice", c.ID)
@@ -178,6 +227,14 @@ func (d *Data) validate() error {
 			}
 			if v < 0 {
 				bad("class %q: %s is %d", id, stat, v)
+			}
+		}
+		for stat, v := range c.PerLevel {
+			if !stat.Valid() {
+				bad("class %q: unknown per_level stat %q", id, stat)
+			}
+			if v < 0 {
+				bad("class %q: per_level %s is %d", id, stat, v)
 			}
 		}
 		if c.Base[items.MaxHealth] <= 0 {
@@ -213,6 +270,8 @@ func (d *Data) validate() error {
 		}
 	}
 
+	checkProgression(bad, d.Progression)
+
 	for id, a := range d.Abilities {
 		if id == "" || a.Name == "" {
 			bad("ability %q: needs an id and a name", id)
@@ -232,6 +291,26 @@ func (d *Data) validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func checkProgression(bad func(string, ...any), p Progression) {
+	if p.MaxLevel < 1 {
+		bad("progression: max_level must be at least 1")
+	}
+	if len(p.XPToNext) != p.MaxLevel-1 {
+		bad("progression: xp_to_next needs max_level - 1 entries, has %d", len(p.XPToNext))
+	}
+	for i, n := range p.XPToNext {
+		if n <= 0 {
+			bad("progression: xp_to_next[%d] is %d, must be above 0", i, n)
+		}
+	}
+	if min(p.ChestXP, p.AssistWindowMS, p.ExtractBonus, p.ExtractBonusPercent) < 0 {
+		bad("progression: xp rewards and assist window cannot be negative")
+	}
+	if p.DeathKeepPercent < 0 || p.DeathKeepPercent > 100 {
+		bad("progression: death_keep_percent must be from 0 to 100")
+	}
 }
 
 // checkTarget allows only the shapes the sim can run. Projectile and area
