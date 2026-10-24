@@ -1,7 +1,10 @@
 class_name ServerConnection
 extends Node
 
+# The player entered the cave.
 signal joined(player_id: int)
+# On join and after every run. Gear, bag and stash follow.
+signal lobby_entered
 signal disconnected
 signal extracted(player_id: int)
 signal equipment_received(items: Array[GameV1.Item])
@@ -17,6 +20,8 @@ signal xp_gained(event: GameV1.XpGained)
 signal level_up(event: GameV1.LevelUp)
 # After a death, and on this player's own extraction just before extracted.
 signal run_ended(summary: GameV1.RunSummary)
+signal stash_received(items: Array[GameV1.Item], capacity: int)
+signal stash_move_rejected(event: GameV1.StashMoveRejected)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
@@ -35,8 +40,8 @@ var tick_rate := 20
 var class_info: GameV1.ClassInfo
 # Level and XP as the server last sent them. A run summary replaces it.
 var character: GameV1.CharacterInfo
-# Set once this player leaves through the exit. Stops the reconnect loop until rejoin().
-var has_extracted := false
+# Between runs. player_id is 0 while it is set.
+var in_lobby := false
 
 var _socket := WebSocketPeer.new()
 var _url := DEFAULT_URL
@@ -61,9 +66,23 @@ func is_joined() -> bool:
 	return player_id != 0
 
 
-func rejoin() -> void:
-	has_extracted = false
-	_connect()
+func send_enter_cave() -> void:
+	if not in_lobby:
+		return
+	var msg := _new_message()
+	msg.new_enter_cave()
+	_send(msg)
+
+
+# to is a GameV1.ItemPlace.
+func send_stash_move(item_id: String, to: int) -> void:
+	if not in_lobby:
+		return
+	var msg := _new_message()
+	var move := msg.new_stash_move()
+	move.set_item_id(item_id)
+	move.set_to(to)
+	_send(msg)
 
 
 # Returns the seq it sent, or 0 when not joined.
@@ -171,10 +190,9 @@ func _process(delta: float) -> void:
 			if _was_open:
 				_was_open = false
 				player_id = 0
+				in_lobby = false
 				print("disconnected from %s (%d)" % [_url, _socket.get_close_code()])
 				disconnected.emit()
-			if has_extracted:
-				return
 			_retry_in -= delta
 			if _retry_in <= 0.0:
 				_connect()
@@ -201,8 +219,20 @@ func _handle(bytes: PackedByteArray) -> void:
 	if msg.from_bytes(bytes) != GameV1.PB_ERR.NO_ERRORS:
 		push_warning("dropped a server message that did not decode")
 		return
-	if msg.has_joined():
+	if msg.has_lobby():
+		var lobby := msg.get_lobby()
+		player_id = 0
+		in_lobby = true
+		class_info = lobby.get_class_info()
+		character = lobby.get_character() if lobby.has_character() else null
+		lobby_entered.emit()
+	elif msg.has_stash():
+		stash_received.emit(msg.get_stash().get_items(), msg.get_stash().get_capacity())
+	elif msg.has_stash_move_rejected():
+		stash_move_rejected.emit(msg.get_stash_move_rejected())
+	elif msg.has_joined():
 		var accepted := msg.get_joined()
+		in_lobby = false
 		player_id = accepted.get_player_id()
 		cave = accepted.get_cave()
 		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())
@@ -242,10 +272,8 @@ func _handle(bytes: PackedByteArray) -> void:
 	elif msg.has_extracted():
 		var event := msg.get_extracted()
 		var id := event.get_player_id()
-		if id == player_id:
-			has_extracted = true
-			if event.has_summary():
-				_end_run(event.get_summary())
+		if id == player_id and event.has_summary():
+			_end_run(event.get_summary())
 		extracted.emit(id)
 
 

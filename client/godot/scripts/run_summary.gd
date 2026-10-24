@@ -23,6 +23,10 @@ func show_summary(summary: GameV1.RunSummary) -> void:
 		_list.add_child(ItemRow.make(item, {}))
 	if summary.get_kept().is_empty():
 		_label("nothing").modulate = Color(1, 1, 1, 0.5)
+	if not summary.get_overflow().is_empty():
+		_label("Stash full, left in the bag")
+		for item: GameV1.Item in summary.get_overflow():
+			_list.add_child(ItemRow.make(item, {}))
 	_list.add_child(ItemRow.button("Close", hide))
 	visible = true
 

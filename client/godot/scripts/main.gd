@@ -7,7 +7,6 @@ const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 const LOOT_SCENE := preload("res://scenes/loot.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/projectile.tscn")
-const EXTRACTED_TEXT := "extracted · press E to go again"
 # Where +XP popups start, above the player's head.
 const POPUP_OFFSET := Vector2(-24, -56)
 const POPUP_SPACING := 16.0
@@ -31,6 +30,7 @@ const WINDOWS_GROUP := "windows"
 @onready var _xp_bar: XpBar = $HUD/XpBar
 @onready var _level_up: LevelUpBanner = $HUD/LevelUp
 @onready var _summary: RunSummaryWindow = $HUD/RunSummary
+@onready var _lobby: LobbyWindow = $HUD/Lobby
 
 # Set by main. Tests swap it for a fake.
 var send_attack: Callable
@@ -71,6 +71,13 @@ func _ready() -> void:
 	_loot.send_open = _connection.send_loot_open
 	_loot.send_close = _connection.send_loot_close
 	_loot.send_pickup = _connection.send_pickup
+	_connection.lobby_entered.connect(_on_lobby)
+	_connection.equipment_received.connect(_lobby.show_equipment)
+	_connection.inventory_received.connect(_lobby.show_inventory)
+	_connection.stash_received.connect(_lobby.show_stash)
+	_connection.stash_move_rejected.connect(_lobby.show_rejected)
+	_lobby.send_move = _connection.send_stash_move
+	_lobby.send_enter = _connection.send_enter_cave
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	send_attack = _connection.send_attack
@@ -87,9 +94,7 @@ func _physics_process(_delta: float) -> void:
 		set_debug(not debug)
 	if Input.is_action_just_pressed("close_window"):
 		close_top_window()
-	if _connection.has_extracted:
-		if Input.is_action_just_pressed("interact"):
-			_connection.rejoin()
+	if _connection.in_lobby:
 		return
 	if Input.is_action_just_pressed("inventory"):
 		_inventory.visible = not _inventory.visible
@@ -103,7 +108,7 @@ func _physics_process(_delta: float) -> void:
 # A click on a window is taken by its Controls and never gets here, so the
 # keys and clicks outside a window still attack.
 func _unhandled_input(event: InputEvent) -> void:
-	if _connection.has_extracted:
+	if _connection.in_lobby:
 		return
 	for i in ABILITY_ACTIONS.size():
 		if event.is_action_pressed(ABILITY_ACTIONS[i]):
@@ -114,7 +119,7 @@ func set_debug(on: bool) -> void:
 	debug = on
 	_debug_overlay.visible = on
 	_debug_overlay.text = debug_text()
-	_ghost.visible = on and _connection.is_joined() and not _connection.has_extracted
+	_ghost.visible = on and _connection.is_joined()
 	for view: EntityView in _views.values():
 		view.debug = on
 
@@ -201,21 +206,41 @@ func _on_joined(player_id: int) -> void:
 	if _connection.character:
 		_xp_bar.show_character(_connection.character)
 	_summary.visible = false
+	_lobby.visible = false
 	_status.text = "joined"
 
 
+# A run summary stays open on top of the lobby until it is closed.
+func _on_lobby() -> void:
+	_clear_cave()
+	_player.visible = false
+	_player.alive = false
+	_inventory.visible = false
+	_character.visible = false
+	_character.setup(_connection.character, _connection.class_info)
+	if _connection.character:
+		_xp_bar.show_character(_connection.character)
+	_lobby.show_lobby(_connection.character, _connection.class_info)
+	_status.text = "lobby"
+
+
 func _on_disconnected() -> void:
+	_clear_cave()
+	_character.clear()
+	_xp_bar.clear()
+	_lobby.visible = false
+	_status.text = "offline"
+
+
+func _clear_cave() -> void:
 	_ghost.visible = false
 	for view: EntityView in _views.values():
 		view.queue_free()
 	_views.clear()
 	_equipment.text = ""
 	_inventory.clear()
-	_character.clear()
 	_loot.close()
 	_abilities.clear()
-	_xp_bar.clear()
-	_status.text = EXTRACTED_TEXT if _connection.has_extracted else "offline"
 
 
 # The ghost marks where the server thinks this player is. With prediction it
@@ -323,7 +348,7 @@ func _on_extracted(player_id: int) -> void:
 	_player.alive = false
 	_player.visible = false
 	_ghost.visible = false
-	_status.text = EXTRACTED_TEXT
+	_status.text = "extracted"
 
 
 func _on_xp_gained(event: GameV1.XpGained) -> void:
@@ -344,7 +369,7 @@ func _on_level_up(event: GameV1.LevelUp) -> void:
 	_xp_bar.flash()
 
 
-# Kept open through the disconnect after an extraction. Joining again closes it.
+# Kept open over the lobby. Entering the cave again closes it.
 func _on_run_ended(summary: GameV1.RunSummary) -> void:
 	if summary.has_character():
 		_xp_bar.show_character(summary.get_character())
@@ -352,7 +377,10 @@ func _on_run_ended(summary: GameV1.RunSummary) -> void:
 	_summary.show_summary(summary)
 
 
+# The lobby window shows gear itself, so the HUD only shows it in the cave.
 func _on_equipment(items: Array[GameV1.Item]) -> void:
+	if _connection.in_lobby:
+		return
 	var lines: Array[String] = []
 	for item in items:
 		lines.append(ItemText.line(item))

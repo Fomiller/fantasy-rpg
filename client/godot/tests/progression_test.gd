@@ -72,7 +72,6 @@ func _run() -> void:
 	# Extraction: the summary rides on Extracted and lists the bag.
 	connection._handle(_extracted(1, _character("ann", 3, 40, 200, 0), ["Iron Helm", "Health Potion"]))
 	await _frames(1)
-	_check(connection.has_extracted, "extracted is still handled")
 	_check(summary.visible and _has_text(summary, "Extracted") and _has_text(summary, "Iron Helm") and _has_text(summary, "Health Potion"), "an extraction summary lists the loot kept")
 	_check(not _has_text(summary, "nothing"), "kept loot replaces the old rows")
 	_button(summary, "Close").pressed.emit()
@@ -82,7 +81,6 @@ func _run() -> void:
 	_check(not summary.visible, "another player's extraction shows nothing")
 
 	summary.visible = true
-	connection.has_extracted = false
 	connection._handle(_joined(_character("ann", 3, 40, 200, 0)))
 	_check(not summary.visible, "joining again closes the last summary")
 

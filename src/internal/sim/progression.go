@@ -33,8 +33,9 @@ type RunEnd struct {
 	XP        int
 	Level     int
 	Levels    int
-	// The bag the player left with. Nil on death, since it all drops.
+	// The bag and gear the player left with. Nil on death, since it all drops.
 	Kept []items.Instance
+	Gear []items.Instance
 }
 
 // AddRunXP gives a player XP for this run. It does not change the level, so
@@ -91,7 +92,8 @@ func (w *World) endRun(p *Player, extracted bool) (RunEnd, bool) {
 	levels := w.bank(p, banked)
 	end := RunEnd{Player: p.ID, Class: p.Class, Extracted: extracted, RunXP: run, Banked: banked, XP: p.XP, Level: p.Level, Levels: levels}
 	if extracted {
-		end.Kept = slices.Clone(p.Inventory.Items)
+		l := p.Loadout()
+		end.Kept, end.Gear = l.Items, l.Equipment
 	}
 	return end, true
 }

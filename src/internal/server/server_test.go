@@ -118,13 +118,25 @@ func joinAccepted(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
 	return joinAs(t, conn, fmt.Sprintf("tester%d", testers.Add(1)))
 }
 
+// joinAs joins and goes straight from the lobby into the cave.
 func joinAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.JoinAccepted {
+	t.Helper()
+	lobbyAs(t, conn, name)
+	return enterCave(t, conn)
+}
+
+func lobbyAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.Lobby {
 	t.Helper()
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
 		Join: &gamev1.JoinRequest{Name: name},
 	}})
-	msg := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil })
-	return msg.GetJoined()
+	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil }).GetLobby()
+}
+
+func enterCave(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
+	t.Helper()
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterCave{EnterCave: &gamev1.EnterCaveRequest{}}})
+	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
 }
 
 // waitFor reads until match returns true, or fails after two seconds.
@@ -300,7 +312,7 @@ func TestJoinSendsCaveLayout(t *testing.T) {
 	}
 }
 
-func TestExtractionClosesConnection(t *testing.T) {
+func TestExtractionReturnsToLobby(t *testing.T) {
 	cave := testCave()
 	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
 	cfg := sim.DefaultConfig()
@@ -314,9 +326,13 @@ func TestExtractionClosesConnection(t *testing.T) {
 
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
 	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
-	_, _, err := leaver.Read(context.Background())
-	if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
-		t.Fatalf("got %v, want normal close after extraction", err)
+	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil })
+	waitFor(t, other, func(m *gamev1.ServerMessage) bool {
+		return m.GetSnapshot() != nil && entity(m.GetSnapshot(), id) == nil
+	})
+
+	if again := enterCave(t, leaver); again.GetPlayerId() == id || again.GetPlayerId() == 0 {
+		t.Fatalf("entered again as %d, want a new player after %d", again.GetPlayerId(), id)
 	}
 }
 
@@ -674,7 +690,7 @@ func lootChest(t *testing.T, conn *websocket.Conn) {
 }
 
 // The chest's XP comes first, then the level it gave, then the summary on
-// Extracted, and only then does the connection close.
+// Extracted, and only then the lobby.
 func TestExtractionSendsSummaryLast(t *testing.T) {
 	cave := testCave()
 	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
@@ -718,9 +734,8 @@ func TestExtractionSendsSummaryLast(t *testing.T) {
 	if len(bag) == 0 || !proto.Equal(summary, want) {
 		t.Fatalf("summary = %v, want %v", summary, want)
 	}
-	_, _, err := leaver.Read(context.Background())
-	if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
-		t.Fatalf("got %v, want normal close after the summary", err)
+	if next := waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return true }); next.GetLobby() == nil {
+		t.Fatalf("after the summary got %v, want the lobby", next)
 	}
 
 	seen := waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id }).GetExtracted()
@@ -738,6 +753,9 @@ func TestDeathSendsRunEnded(t *testing.T) {
 	cfg.Archetypes[sim.Melee] = melee
 	h := serve(t, cave, cfg)
 	h.srv.Store.SaveXP(context.Background(), "ann", 99)
+
+	potion := mustMake(t, h.srv, "health_potion")
+	h.srv.Store.SaveStash(context.Background(), "ann", []items.Instance{potion})
 
 	conn := dial(t, h.url)
 	joinAs(t, conn, "ann")
@@ -757,4 +775,28 @@ func TestDeathSendsRunEnded(t *testing.T) {
 	if summary := msgs[2].GetRunEnded().GetSummary(); !proto.Equal(summary, want) {
 		t.Fatalf("summary = %v, want %v", summary, want)
 	}
+
+	// Back in the lobby with the starter kit, an empty bag and the stash as it was.
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil })
+	if eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment(); len(eq.GetItems()) != len(items.StarterKit) {
+		t.Fatalf("lobby gear after death = %v, want the starter kit", eq.GetItems())
+	}
+	if inv := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetInventory() != nil }).GetInventory(); len(inv.GetItems()) != 0 {
+		t.Fatalf("lobby bag after death = %v, want empty", inv.GetItems())
+	}
+	if st := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetStash() != nil }).GetStash(); len(st.GetItems()) != 1 || st.GetItems()[0].GetId() != potion.ID {
+		t.Fatalf("stash after death = %v, want it untouched", st.GetItems())
+	}
+	if l, ok, _ := h.srv.Store.Load(context.Background(), "ann"); !ok || len(l.Items) != 0 || len(l.Equipment) != len(items.StarterKit) || l.Equipment[0].ID == "" {
+		t.Fatalf("saved loadout = %+v, %v, want only a new starter kit", l, ok)
+	}
+}
+
+func mustMake(t *testing.T, s *Server, def string) items.Instance {
+	t.Helper()
+	inst, err := s.loot.Make(def, 1, items.Common)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inst
 }

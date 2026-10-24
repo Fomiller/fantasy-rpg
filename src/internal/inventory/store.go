@@ -4,10 +4,15 @@ import (
 	"context"
 	"slices"
 	"sync"
+
+	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
-// Store keeps each player's loadout by name, so a player who leaves and
-// comes back gets their items again.
+// StashSize is how many entries a stash holds. Stacks count as one, as in the bag.
+const StashSize = 100
+
+// Store keeps each player's loadout and stash by name, so a player who
+// leaves and comes back gets their items again.
 type Store interface {
 	Load(ctx context.Context, name string) (Loadout, bool, error)
 	Save(ctx context.Context, name string, l Loadout) error
@@ -16,6 +21,10 @@ type Store interface {
 	// player loses everything. It is 0 for a new player.
 	LoadXP(ctx context.Context, name string) (int, error)
 	SaveXP(ctx context.Context, name string, xp int) error
+	// The stash is safe between runs. Only extraction and lobby moves change
+	// it, and a death never touches it. It is empty for a new player.
+	LoadStash(ctx context.Context, name string) ([]items.Instance, error)
+	SaveStash(ctx context.Context, name string, stash []items.Instance) error
 }
 
 // Memory is a Store that lasts as long as the process. Postgres replaces it
@@ -24,10 +33,11 @@ type Memory struct {
 	mu       sync.Mutex
 	loadouts map[string]Loadout
 	xp       map[string]int
+	stashes  map[string][]items.Instance
 }
 
 func NewMemory() *Memory {
-	return &Memory{loadouts: map[string]Loadout{}, xp: map[string]int{}}
+	return &Memory{loadouts: map[string]Loadout{}, xp: map[string]int{}, stashes: map[string][]items.Instance{}}
 }
 
 func (m *Memory) Load(_ context.Context, name string) (Loadout, bool, error) {
@@ -61,6 +71,19 @@ func (m *Memory) SaveXP(_ context.Context, name string, xp int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.xp[name] = xp
+	return nil
+}
+
+func (m *Memory) LoadStash(_ context.Context, name string) ([]items.Instance, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.stashes[name]), nil
+}
+
+func (m *Memory) SaveStash(_ context.Context, name string, stash []items.Instance) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.stashes[name] = slices.Clone(stash)
 	return nil
 }
 

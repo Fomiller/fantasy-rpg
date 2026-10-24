@@ -104,8 +104,8 @@ Stats from all equipped items add up. The sim applies them like this:
 | `detect_radius` | Enemies notice the player N% farther away. A downside stat for uniques |
 | `heal` | Health a consumable gives back. Used by FOM-103 |
 
-Every player gets a Common Rusty Sword and Leather Vest on join. This is a
-stand-in until the stash can carry gear into a run.
+A new player gets a Common Rusty Sword and Leather Vest. So does a player
+whose last run ended in death.
 
 ## How one item is rolled
 
@@ -187,7 +187,7 @@ First tables:
 - Everything a player carries in the cave is at risk. On death, it drops as
   one bag at that spot, and anyone can loot it.
 - Items are only safe after extraction. Then they move to the player's
-  stash. Saving the stash is part of FOM-103 and the database work.
+  stash. What a full stash cannot take stays in the bag.
 
 ## Inventory
 
@@ -227,8 +227,7 @@ Saving, for now:
 
 - The server saves a player's loadout under their name after every change.
   Joining with that name again restores it.
-- A player who loses everything, by death or by dropping it all, starts over
-  with the starter kit.
+- A player who dies starts over with the starter kit. The stash is kept.
 - Only one connection per name at a time.
 - The store is in memory, so a server restart forgets it. Postgres replaces
   it in FOM-114. The stash and the at-risk rules above still apply then.
@@ -252,6 +251,6 @@ These can change once the game is playable. Until then:
 
 - No gold. The economy is items and materials only.
 - No durability. Items do not wear out.
-- No stash limit yet. Add one when the stash is saved to the database.
+- The stash holds 100 entries. Stacks count as one.
 - No trading between players yet. Revisit after the stash exists.
 - All gear a player brings into a cave is at risk. Nothing is safe on death.

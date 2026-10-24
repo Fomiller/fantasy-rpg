@@ -16,6 +16,7 @@ class Client:
 
 	func _init(tree: SceneTree, name: String) -> void:
 		connection.player_name = name
+		connection.lobby_entered.connect(connection.send_enter_cave)
 		connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: snapshot = s)
 		connection.damage_received.connect(func(d: GameV1.DamageEvent) -> void:
 			hits.append("%d->%d:%d%s" % [d.get_source_id(), d.get_target_id(), d.get_target_health(), " killed" if d.get_killed() else ""]))

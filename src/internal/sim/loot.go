@@ -141,16 +141,20 @@ func (w *World) Restore(id EntityID, l inventory.Loadout) error {
 	if !ok {
 		return errNoPlayer
 	}
+	w.restore(p, l)
+	return nil
+}
+
+func (w *World) restore(p *Player, l inventory.Loadout) {
 	// Gear the player cannot wear, like a staff saved by another class, goes in the bag.
 	for _, inst := range l.Equipment {
-		if _, _, err := w.Equip(id, inst); err != nil {
+		if _, _, err := w.equip(p, inst); err != nil {
 			p.Inventory.Add(inst)
 		}
 	}
 	for _, inst := range l.Items {
 		p.Inventory.Add(inst)
 	}
-	return nil
 }
 
 // Loadout is what the player owns right now, equipment in slot order.

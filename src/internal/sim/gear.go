@@ -20,11 +20,31 @@ func (w *World) Equip(id EntityID, inst items.Instance) (items.Instance, bool, e
 	if p.Health <= 0 {
 		return items.Instance{}, false, errors.New("dead players cannot equip")
 	}
-	if !inst.Slot.IsGear() {
-		return items.Instance{}, false, errors.New(inst.Name + " cannot be equipped")
+	return w.equip(p, inst)
+}
+
+// CanEquip reports why a player of the class could not wear inst, or nil.
+func (w *World) CanEquip(class string, inst items.Instance) error {
+	c, ok := w.cfg.Classes.Classes[class]
+	if !ok {
+		return fmt.Errorf("unknown class %q", class)
 	}
-	if inst.Slot == items.Weapon && !p.class.CanWield(inst.WeaponType) {
-		return items.Instance{}, false, fmt.Errorf("a %s cannot use %s", p.class.Name, inst.Name)
+	return canEquip(c, inst)
+}
+
+func canEquip(c classes.Class, inst items.Instance) error {
+	if !inst.Slot.IsGear() {
+		return errors.New(inst.Name + " cannot be equipped")
+	}
+	if inst.Slot == items.Weapon && !c.CanWield(inst.WeaponType) {
+		return fmt.Errorf("a %s cannot use %s", c.Name, inst.Name)
+	}
+	return nil
+}
+
+func (w *World) equip(p *Player, inst items.Instance) (items.Instance, bool, error) {
+	if err := canEquip(p.class, inst); err != nil {
+		return items.Instance{}, false, err
 	}
 	old, had := p.Equipment[inst.Slot]
 	p.Equipment[inst.Slot] = inst

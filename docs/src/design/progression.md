@@ -272,6 +272,25 @@ safe before that.
 Stash size: 100 slots for MVP, stacks as in the bag. Loot design said no
 limit until it is saved to the database. That time is now, so set one.
 
+FOM-215 built this loop. Where it differs from the plan above:
+
+- **The lobby is in the cave-server for now.** The world server is still
+  only a health check, so a join lands in a lobby on the same connection.
+  Moving it to the world server later changes where the lobby lives, not
+  the messages.
+- **A full stash.** What does not fit stays in the bag, so it goes into
+  the next run at risk. `RunSummary.overflow` lists it.
+- **After a run the player goes back to the lobby** on the same
+  connection, after extraction and after death. A dead player leaves the
+  cave right after `RunEnded`.
+- The stash is kept by name, like the rest, until accounts exist.
+- In the lobby a move takes a whole entry to the stash, the bag or its
+  gear slot. Gear already in the slot goes where the new gear came from.
+  The server rejects a move with `not_in_lobby`, `unknown_item`, `full`
+  or `cannot_equip`.
+- Stashing every item saves an empty loadout. Only a death clears it, so
+  the starter kit is not handed out again for an empty bag.
+
 ### Disconnects
 
 Today a disconnect keeps all loot. That makes "pull the plug" a free escape.
@@ -357,6 +376,17 @@ FOM-213 and FOM-214 built these.
 
 `RunSummary` holds run_xp, banked_xp, levels_gained, the `CharacterInfo`
 after banking, and `kept`: the bag on extraction, empty on death.
+`overflow` is the part of `kept` the stash had no room for.
+
+FOM-215 added the lobby:
+
+| Message | Field | For |
+| -- | -- | -- |
+| new `Lobby` | `CharacterInfo`, `ClassInfo` | On join and after every run. Gear, bag and stash follow |
+| new `StashContents` | items, capacity | Sent in the lobby whenever the stash changes |
+| new `StashMoveRequest` | item_id, `ItemPlace to` | Stash, bag or gear. Lobby only |
+| new `StashMoveRejected` | item_id, reason | `not_in_lobby`, `unknown_item`, `full`, `cannot_equip` |
+| new `EnterCaveRequest` | none | Leaves the lobby. The answer is `JoinAccepted` |
 
 - `CharacterInfo` sends `level_xp` (XP past the start of the level) and
   `xp_to_next`. The client draws the XP bar from them and never needs the
@@ -364,8 +394,8 @@ after banking, and `kept`: the bag on extraction, empty on death.
 - Level changes only at run end. During a run, run XP shows as a second
   segment on the XP bar.
 - Order at run end: any `XpGained` from that tick, then `LevelUp` if a level
-  was gained, then the summary. On extraction the summary is on `Extracted`,
-  and the connection closes after it.
+  was gained, then the summary. On extraction the summary is on `Extracted`.
+  `Lobby` comes after it.
 - `EntityState.level` stays. Snapshots carry every player's level, so other
   players' levels can be shown later. The ability bar still reads its own
   level from it.
@@ -387,8 +417,8 @@ after banking, and `kept`: the bag on extraction, empty on death.
 
 **Later:**
 
-- The stash and lobby loadout screen. Needs the world server flow and
-  Postgres.
+- The lobby on the world server, and the stash in Postgres. FOM-215 put
+  both in the cave-server and the memory store.
 - Cave levels and deeper zones with higher item level.
 - Ability ranks and talents.
 - Enemy level scaling for XP.
