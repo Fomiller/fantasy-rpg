@@ -12,3 +12,8 @@ image:
 # it in public_hostnames. Clients connect to wss://fantasy-rpg.fomiller.com/ws.
 ingressRoute:
   host: fantasy-rpg.fomiller.com
+
+# The CNPG Cluster and migrate Job. The server reads DATABASE_URL from the
+# Secret CNPG makes, so nothing else here changes.
+postgres:
+  enabled: true
