@@ -23,6 +23,38 @@ func TestDefaultDataLoads(t *testing.T) {
 	if !w.CanWield(items.Sword) || !w.CanWield(items.Axe) || w.CanWield(items.Staff) {
 		t.Fatalf("warrior weapons = %v", w.Weapons)
 	}
+	if w.PerLevel[items.MaxHealth] != 5 {
+		t.Fatalf("warrior per_level = %v", w.PerLevel)
+	}
+}
+
+// The curve from docs/src/design/progression.md.
+func TestXPCurve(t *testing.T) {
+	p := Default().Progression
+	if p.MaxLevel != 10 {
+		t.Fatalf("max level = %d", p.MaxLevel)
+	}
+	reach := []int{0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700}
+	for i, want := range reach {
+		level := i + 1
+		if got := p.XPToReach(level); got != want {
+			t.Errorf("XPToReach(%d) = %d, want %d", level, got, want)
+		}
+		if got := p.LevelFor(want); got != level {
+			t.Errorf("LevelFor(%d) = %d, want %d", want, got, level)
+		}
+		if want > 0 {
+			if got := p.LevelFor(want - 1); got != level-1 {
+				t.Errorf("LevelFor(%d) = %d, want %d", want-1, got, level-1)
+			}
+		}
+	}
+	if got := p.LevelFor(1_000_000); got != 10 {
+		t.Errorf("LevelFor past the cap = %d, want 10", got)
+	}
+	if p.ToNext(1) != 100 || p.ToNext(9) != 500 || p.ToNext(10) != 0 {
+		t.Errorf("ToNext = %d, %d, %d", p.ToNext(1), p.ToNext(9), p.ToNext(10))
+	}
 }
 
 func TestValidateCatchesBadData(t *testing.T) {
@@ -32,6 +64,7 @@ func TestValidateCatchesBadData(t *testing.T) {
 				Starter: {
 					ID: Starter, Name: "Warrior",
 					Base:      map[items.Stat]int{items.MaxHealth: 100},
+					PerLevel:  map[items.Stat]int{items.MaxHealth: 5},
 					Resource:  Resource{Kind: "rage", Max: 100},
 					Weapons:   []items.WeaponType{items.Sword},
 					Basic:     "hit",
@@ -44,6 +77,7 @@ func TestValidateCatchesBadData(t *testing.T) {
 					{Type: Status, Status: Guard, DurationMS: 1000, Amount: 50},
 				}},
 			},
+			Progression: Progression{MaxLevel: 3, XPToNext: []int{100, 150}},
 		}
 	}
 	if err := good().validate(); err != nil {
@@ -70,6 +104,13 @@ func TestValidateCatchesBadData(t *testing.T) {
 			delete(d.Classes, Starter)
 		}, "no \"warrior\""},
 		{"unknown stat", func(d *Data) { class(d, func(c *Class) { c.Base["luck"] = 5 }) }, "unknown stat"},
+		{"unknown per_level stat", func(d *Data) { class(d, func(c *Class) { c.PerLevel["luck"] = 1 }) }, "unknown per_level stat"},
+		{"negative per_level", func(d *Data) { class(d, func(c *Class) { c.PerLevel[items.Armor] = -1 }) }, "per_level armor is -1"},
+		{"no max level", func(d *Data) { d.Progression = Progression{} }, "max_level"},
+		{"short curve", func(d *Data) { d.Progression.XPToNext = []int{100} }, "max_level - 1 entries"},
+		{"zero step", func(d *Data) { d.Progression.XPToNext[1] = 0 }, "must be above 0"},
+		{"negative chest xp", func(d *Data) { d.Progression.ChestXP = -5 }, "cannot be negative"},
+		{"death keep over 100", func(d *Data) { d.Progression.DeathKeepPercent = 150 }, "death_keep_percent"},
 		{"no health", func(d *Data) { class(d, func(c *Class) { delete(c.Base, items.MaxHealth) }) }, "max_health"},
 		{"start over max", func(d *Data) { class(d, func(c *Class) { c.Resource.Start = 200 }) }, "start from 0 to max"},
 		{"negative decay", func(d *Data) { class(d, func(c *Class) { c.Resource.Decay = -1 }) }, "negative"},
@@ -118,8 +159,9 @@ func TestValidateCatchesBadData(t *testing.T) {
 
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	fsys := fstest.MapFS{
-		"data/classes.json":   {Data: []byte(`[]`)},
-		"data/abilities.json": {Data: []byte(`[{"id": "hit", "cooldwn_ms": 500}]`)},
+		"data/classes.json":     {Data: []byte(`[]`)},
+		"data/abilities.json":   {Data: []byte(`[{"id": "hit", "cooldwn_ms": 500}]`)},
+		"data/progression.json": {Data: []byte(`{}`)},
 	}
 	if _, err := Load(fsys); err == nil || !strings.Contains(err.Error(), "cooldwn_ms") {
 		t.Fatalf("got %v, want an unknown field error", err)
@@ -128,8 +170,9 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 
 func TestLoadRejectsDuplicates(t *testing.T) {
 	fsys := fstest.MapFS{
-		"data/classes.json":   {Data: []byte(`[{"id": "warrior"}, {"id": "warrior"}]`)},
-		"data/abilities.json": {Data: []byte(`[]`)},
+		"data/classes.json":     {Data: []byte(`[{"id": "warrior"}, {"id": "warrior"}]`)},
+		"data/abilities.json":   {Data: []byte(`[]`)},
+		"data/progression.json": {Data: []byte(`{}`)},
 	}
 	if _, err := Load(fsys); err == nil || !strings.Contains(err.Error(), "twice") {
 		t.Fatalf("got %v, want a duplicate error", err)

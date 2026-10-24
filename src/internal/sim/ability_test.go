@@ -323,11 +323,11 @@ func TestRestoreBagsWeaponsTheClassCannotUse(t *testing.T) {
 
 func TestAddPlayerAs(t *testing.T) {
 	w := NewWorld(passive(), nil)
-	id, err := w.AddPlayerAs(Vec2{}, "")
+	id, err := w.AddPlayerAs(Vec2{}, "", 0)
 	if p, _ := w.Player(id); err != nil || p.Class != classes.Starter || p.MaxHealth != 120 || p.Health != 120 {
 		t.Fatalf("player = %+v, %v", p, err)
 	}
-	if _, err := w.AddPlayerAs(Vec2{}, "necromancer"); err == nil {
+	if _, err := w.AddPlayerAs(Vec2{}, "necromancer", 0); err == nil {
 		t.Fatal("joined as a class that does not exist")
 	}
 }
@@ -347,6 +347,7 @@ func TestClassComesFromData(t *testing.T) {
 			{ "id": "slash", "name": "Slash", "cost": 0, "cooldown_ms": 500, "windup_ms": 0, "target": { "shape": "arc", "range": 64, "arc_deg": 90 }, "effects": [{ "type": "damage", "power": 100 }] },
 			{ "id": "cleave", "name": "Cleave", "cost": 10, "cooldown_ms": 1000, "windup_ms": 0, "target": { "shape": "arc", "range": 200, "arc_deg": 360 }, "effects": [{ "type": "damage", "power": 300 }] }
 		]`)},
+		"data/progression.json": {Data: []byte(`{ "max_level": 1, "xp_to_next": [] }`)},
 	})
 	if err != nil {
 		t.Fatal(err)

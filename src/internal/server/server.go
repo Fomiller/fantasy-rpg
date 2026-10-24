@@ -258,7 +258,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
-		id, err := s.world.AddPlayerAs(spawn, join.GetClassId())
+		id, err := s.world.AddPlayerAs(spawn, join.GetClassId(), 0)
 		if err != nil {
 			joined <- result{err: err}
 			return

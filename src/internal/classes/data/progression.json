@@ -1,0 +1,9 @@
+{
+  "max_level": 10,
+  "xp_to_next": [100, 150, 200, 250, 300, 350, 400, 450, 500],
+  "chest_xp": 5,
+  "assist_window_ms": 10000,
+  "extract_bonus": 25,
+  "extract_bonus_percent": 25,
+  "death_keep_percent": 25
+}
