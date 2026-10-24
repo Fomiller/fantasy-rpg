@@ -13,7 +13,7 @@ helmCharts:
   # Application syncs once that lands.
   - name: fantasy-rpg-chart
     repo: oci://695434033664.dkr.ecr.us-east-1.amazonaws.com
-    version: 0.1.0
+    version: 0.2.0
     releaseName: fantasy-rpg
     # Shared defaults first, this environment's overrides second. On a key both
     # files set, the later one wins.
