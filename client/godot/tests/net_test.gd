@@ -64,8 +64,8 @@ func _run() -> void:
 	_finish()
 
 
-# Cleave needs rage, and a run starts with none, so the server says no. The
-# basic attack costs nothing, so the server starts it and tells everyone.
+# A new player is level 1 and cleave unlocks at 2, so the server says no. The
+# basic attack is open from level 1, so the server starts it and tells everyone.
 func _test_abilities(main: Node, connection: ServerConnection) -> void:
 	var bar: AbilityBar = main.get_node("HUD/Abilities")
 	_check(bar.visible and bar.slot(0) != null and bar.slot(0).get_id() == "slash", "ability bar is built from the class the server sent")
@@ -75,11 +75,13 @@ func _test_abilities(main: Node, connection: ServerConnection) -> void:
 			seen.used = e)
 	connection.ability_rejected.connect(func(e: GameV1.AbilityRejected) -> void: seen.rejected = e)
 
+	_check(bar.is_locked("cleave") and "Cleave (30)  Lv 2" in bar._list.get_parsed_text(), "the bar shows cleave locked until level 2")
+
 	await _press("ability_1")
-	_check(await _until(func() -> bool: return seen.rejected != null), "server rejects cleave with no rage")
+	_check(await _until(func() -> bool: return seen.rejected != null), "server rejects a locked cleave")
 	if seen.rejected:
-		_check(seen.rejected.get_ability_id() == "cleave" and seen.rejected.get_reason() == "resource", "rejected for want of rage")
-		_check("not enough rage" in bar.rejection(), "HUD says there is not enough rage")
+		_check(seen.rejected.get_ability_id() == "cleave" and seen.rejected.get_reason() == "locked", "rejected as locked")
+		_check("unlocks at Lv 2" in bar.rejection(), "HUD says when cleave unlocks")
 	var player: Player = main.get_node("Player")
 	_check(player._rooted == 0.0 and player._sprite.animation() != "windup", "a rejected cleave releases the root")
 

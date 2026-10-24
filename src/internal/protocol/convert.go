@@ -71,12 +71,13 @@ func ClassInfo(data *classes.Data, id string) *gamev1.ClassInfo {
 	for _, aid := range c.Abilities {
 		a := data.Abilities[aid]
 		info.Abilities = append(info.Abilities, &gamev1.AbilityInfo{
-			Id:         a.ID,
-			Name:       a.Name,
-			Cost:       int32(a.Cost),
-			CooldownMs: uint32(a.CooldownMS),
-			WindupMs:   uint32(a.WindupMS),
-			Root:       a.Root,
+			Id:          a.ID,
+			Name:        a.Name,
+			Cost:        int32(a.Cost),
+			CooldownMs:  uint32(a.CooldownMS),
+			WindupMs:    uint32(a.WindupMS),
+			Root:        a.Root,
+			UnlockLevel: uint32(a.UnlockLevel),
 		})
 	}
 	return info
@@ -123,6 +124,7 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 			// Rounded down, so the bar never shows enough for an ability the server would refuse.
 			Resource:    int32(math.Floor(p.Resource)),
 			MaxResource: int32(p.MaxResource),
+			Level:       uint32(p.Level),
 		})
 	}
 	for _, e := range w.Enemies() {

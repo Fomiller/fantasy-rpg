@@ -982,7 +982,9 @@ type AbilityInfo struct {
 	CooldownMs uint32                 `protobuf:"varint,4,opt,name=cooldown_ms,json=cooldownMs,proto3" json:"cooldown_ms,omitempty"`
 	WindupMs   uint32                 `protobuf:"varint,5,opt,name=windup_ms,json=windupMs,proto3" json:"windup_ms,omitempty"`
 	// The caster cannot move during the windup.
-	Root          bool `protobuf:"varint,6,opt,name=root,proto3" json:"root,omitempty"`
+	Root bool `protobuf:"varint,6,opt,name=root,proto3" json:"root,omitempty"`
+	// Below this character level the server rejects it as locked.
+	UnlockLevel   uint32 `protobuf:"varint,7,opt,name=unlock_level,json=unlockLevel,proto3" json:"unlock_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1057,6 +1059,13 @@ func (x *AbilityInfo) GetRoot() bool {
 		return x.Root
 	}
 	return false
+}
+
+func (x *AbilityInfo) GetUnlockLevel() uint32 {
+	if x != nil {
+		return x.UnlockLevel
+	}
+	return 0
 }
 
 // Extracted is sent to everyone in the cave. The extracting player's
@@ -1314,7 +1323,7 @@ type AbilityRejected struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Seq       uint32                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
 	AbilityId string                 `protobuf:"bytes,2,opt,name=ability_id,json=abilityId,proto3" json:"ability_id,omitempty"`
-	// One of unknown, busy, cooldown, resource, aim.
+	// One of unknown, locked, busy, cooldown, resource, aim.
 	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1470,9 +1479,11 @@ type EntityState struct {
 	// the telegraph from it.
 	Aim *Vec2 `protobuf:"bytes,13,opt,name=aim,proto3" json:"aim,omitempty"`
 	// Players only.
-	ClassId       string `protobuf:"bytes,14,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
-	Resource      int32  `protobuf:"varint,15,opt,name=resource,proto3" json:"resource,omitempty"`
-	MaxResource   int32  `protobuf:"varint,16,opt,name=max_resource,json=maxResource,proto3" json:"max_resource,omitempty"`
+	ClassId     string `protobuf:"bytes,14,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
+	Resource    int32  `protobuf:"varint,15,opt,name=resource,proto3" json:"resource,omitempty"`
+	MaxResource int32  `protobuf:"varint,16,opt,name=max_resource,json=maxResource,proto3" json:"max_resource,omitempty"`
+	// Players only. The client compares it to AbilityInfo.unlock_level.
+	Level         uint32 `protobuf:"varint,17,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1615,6 +1626,13 @@ func (x *EntityState) GetResource() int32 {
 func (x *EntityState) GetMaxResource() int32 {
 	if x != nil {
 		return x.MaxResource
+	}
+	return 0
+}
+
+func (x *EntityState) GetLevel() uint32 {
+	if x != nil {
+		return x.Level
 	}
 	return 0
 }
@@ -2590,7 +2608,7 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\bresource\x18\x03 \x01(\tR\bresource\x12!\n" +
 	"\fmax_resource\x18\x04 \x01(\x05R\vmaxResource\x12\x14\n" +
 	"\x05basic\x18\x05 \x01(\tR\x05basic\x122\n" +
-	"\tabilities\x18\x06 \x03(\v2\x14.game.v1.AbilityInfoR\tabilities\"\x97\x01\n" +
+	"\tabilities\x18\x06 \x03(\v2\x14.game.v1.AbilityInfoR\tabilities\"\xba\x01\n" +
 	"\vAbilityInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2598,7 +2616,8 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\vcooldown_ms\x18\x04 \x01(\rR\n" +
 	"cooldownMs\x12\x1b\n" +
 	"\twindup_ms\x18\x05 \x01(\rR\bwindupMs\x12\x12\n" +
-	"\x04root\x18\x06 \x01(\bR\x04root\"(\n" +
+	"\x04root\x18\x06 \x01(\bR\x04root\x12!\n" +
+	"\funlock_level\x18\a \x01(\rR\vunlockLevel\"(\n" +
 	"\tExtracted\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\"J\n" +
 	"\tMoveInput\x12\x10\n" +
@@ -2628,7 +2647,7 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\ttarget_id\x18\x02 \x01(\x04R\btargetId\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\x05R\x06amount\x12#\n" +
 	"\rtarget_health\x18\x04 \x01(\x05R\ftargetHealth\x12\x16\n" +
-	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xaf\x04\n" +
+	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xc5\x04\n" +
 	"\vEntityState\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.game.v1.EntityKindR\x04kind\x12)\n" +
@@ -2649,7 +2668,8 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x03aim\x18\r \x01(\v2\r.game.v1.Vec2R\x03aim\x12\x19\n" +
 	"\bclass_id\x18\x0e \x01(\tR\aclassId\x12\x1a\n" +
 	"\bresource\x18\x0f \x01(\x05R\bresource\x12!\n" +
-	"\fmax_resource\x18\x10 \x01(\x05R\vmaxResource\"U\n" +
+	"\fmax_resource\x18\x10 \x01(\x05R\vmaxResource\x12\x14\n" +
+	"\x05level\x18\x11 \x01(\rR\x05level\"U\n" +
 	"\rWorldSnapshot\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x120\n" +
 	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\x9b\x01\n" +

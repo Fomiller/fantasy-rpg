@@ -50,14 +50,15 @@ type Resource struct {
 func (r Resource) DecayDelay() time.Duration { return ms(r.DecayDelayMS) }
 
 type Ability struct {
-	ID         string   `json:"id"`
-	Name       string   `json:"name"`
-	Cost       int      `json:"cost"`
-	CooldownMS int      `json:"cooldown_ms"`
-	WindupMS   int      `json:"windup_ms"`
-	Root       bool     `json:"root"`
-	Target     Target   `json:"target"`
-	Effects    []Effect `json:"effects"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Cost        int      `json:"cost"`
+	CooldownMS  int      `json:"cooldown_ms"`
+	WindupMS    int      `json:"windup_ms"`
+	Root        bool     `json:"root"`
+	UnlockLevel int      `json:"unlock_level"`
+	Target      Target   `json:"target"`
+	Effects     []Effect `json:"effects"`
 }
 
 func (a Ability) Cooldown() time.Duration { return ms(a.CooldownMS) }
@@ -264,6 +265,8 @@ func (d *Data) validate() error {
 				bad("class %q: lists %q twice", id, aid)
 			case aid == c.Basic && a.Cost != 0:
 				bad("class %q: basic %q must cost nothing", id, aid)
+			case aid == c.Basic && a.UnlockLevel != 1:
+				bad("class %q: basic %q must unlock at level 1", id, aid)
 			case a.Cost > r.Max:
 				bad("class %q: %q costs more than the resource holds", id, aid)
 			}
@@ -278,6 +281,9 @@ func (d *Data) validate() error {
 		}
 		if a.Cost < 0 || a.CooldownMS < 0 || a.WindupMS < 0 {
 			bad("ability %q: cost, cooldown and windup cannot be negative", id)
+		}
+		if a.UnlockLevel < 1 || a.UnlockLevel > d.Progression.MaxLevel {
+			bad("ability %q: unlock_level must be from 1 to max_level", id)
 		}
 		if a.Root && a.WindupMS == 0 {
 			bad("ability %q: root needs a windup", id)

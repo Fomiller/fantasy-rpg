@@ -466,12 +466,16 @@ func TestAbilitiesOverTheWire(t *testing.T) {
 		t.Fatalf("class = %v", c)
 	}
 
-	// A run starts with no rage.
+	if cleave := joined.GetClassInfo().GetAbilities()[1]; cleave.GetUnlockLevel() != 2 {
+		t.Fatalf("cleave = %v, want it to unlock at level 2", cleave)
+	}
+
+	// A new player is level 1.
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
 		Attack: &gamev1.AttackRequest{Seq: 1, AbilityId: "cleave", Aim: &gamev1.Vec2{X: 1}},
 	}})
 	r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetAbilityRejected() != nil }).GetAbilityRejected()
-	if r.GetSeq() != 1 || r.GetAbilityId() != "cleave" || r.GetReason() != sim.RejectResource {
+	if r.GetSeq() != 1 || r.GetAbilityId() != "cleave" || r.GetReason() != sim.RejectLocked {
 		t.Fatalf("rejected = %v", r)
 	}
 
@@ -488,7 +492,7 @@ func TestAbilitiesOverTheWire(t *testing.T) {
 	}
 	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
 		p := entity(m.GetSnapshot(), joined.GetPlayerId())
-		return p != nil && p.GetClassId() == "warrior" && p.GetResource() == 8 && p.GetMaxResource() == 100
+		return p != nil && p.GetClassId() == "warrior" && p.GetResource() == 8 && p.GetMaxResource() == 100 && p.GetLevel() == 1
 	})
 }
 
@@ -597,8 +601,19 @@ func TestJoinLoadsBankedXP(t *testing.T) {
 	prog := sim.DefaultConfig().Classes.Progression
 	h.srv.Store.SaveXP(context.Background(), "ann", prog.XPToReach(prog.MaxLevel))
 	conn := dial(t, h.url)
-	joinAs(t, conn, "ann")
+	joined := joinAs(t, conn, "ann")
 	if eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment(); stat(eq, "max_health") != 165 {
 		t.Fatalf("max health = %d, want the level 10 bonus", stat(eq, "max_health"))
+	}
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		return entity(m.GetSnapshot(), joined.GetPlayerId()).GetLevel() == 10
+	})
+
+	// Unlocked, so only the empty rage bar stops it.
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
+		Attack: &gamev1.AttackRequest{Seq: 1, AbilityId: "cleave", Aim: &gamev1.Vec2{X: 1}},
+	}})
+	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetAbilityRejected() != nil }).GetAbilityRejected(); r.GetReason() != sim.RejectResource {
+		t.Fatalf("rejected = %v, want resource", r)
 	}
 }

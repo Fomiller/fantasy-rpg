@@ -2,6 +2,7 @@
   {
     "id": "slash",
     "name": "Slash",
+    "unlock_level": 1,
     "cost": 0,
     "cooldown_ms": 500,
     "windup_ms": 100,
@@ -11,6 +12,7 @@
   {
     "id": "cleave",
     "name": "Cleave",
+    "unlock_level": 2,
     "cost": 30,
     "cooldown_ms": 4000,
     "windup_ms": 250,
@@ -21,6 +23,7 @@
   {
     "id": "brace",
     "name": "Brace",
+    "unlock_level": 3,
     "cost": 25,
     "cooldown_ms": 12000,
     "windup_ms": 0,

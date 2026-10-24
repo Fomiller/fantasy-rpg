@@ -16,6 +16,7 @@ const BasicAbility = "basic"
 // Reasons the caster is told an ability did not start.
 const (
 	RejectUnknown  = "unknown"
+	RejectLocked   = "locked"
 	RejectBusy     = "busy"
 	RejectCooldown = "cooldown"
 	RejectResource = "resource"
@@ -73,6 +74,9 @@ func (w *World) applyAttack(c AttackCommand, ev *Events) {
 	switch {
 	case !ok || !slices.Contains(p.class.Abilities, id):
 		reject(RejectUnknown)
+		return
+	case p.Level < a.UnlockLevel:
+		reject(RejectLocked)
 		return
 	case p.cast != nil:
 		reject(RejectBusy)

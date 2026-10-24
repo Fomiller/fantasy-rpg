@@ -2051,6 +2051,11 @@ class AbilityInfo:
 		service.field = __root
 		data[__root.tag] = service
 		
+		__unlock_level = PBField.new("unlock_level", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 7, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __unlock_level
+		data[__unlock_level.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -2130,6 +2135,19 @@ class AbilityInfo:
 		__root.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
 	func set_root(value : bool) -> void:
 		__root.value = value
+	
+	var __unlock_level: PBField
+	func has_unlock_level() -> bool:
+		if __unlock_level.value != null:
+			return true
+		return false
+	func get_unlock_level() -> int:
+		return __unlock_level.value
+	func clear_unlock_level() -> void:
+		data[7].state = PB_SERVICE_STATE.UNFILLED
+		__unlock_level.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_unlock_level(value : int) -> void:
+		__unlock_level.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -2790,6 +2808,11 @@ class EntityState:
 		service.field = __max_resource
 		data[__max_resource.tag] = service
 		
+		__level = PBField.new("level", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 17, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __level
+		data[__level.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -3002,6 +3025,19 @@ class EntityState:
 		__max_resource.value = DEFAULT_VALUES_3[PB_DATA_TYPE.INT32]
 	func set_max_resource(value : int) -> void:
 		__max_resource.value = value
+	
+	var __level: PBField
+	func has_level() -> bool:
+		if __level.value != null:
+			return true
+		return false
+	func get_level() -> int:
+		return __level.value
+	func clear_level() -> void:
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__level.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_level(value : int) -> void:
+		__level.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

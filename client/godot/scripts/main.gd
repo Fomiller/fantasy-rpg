@@ -224,6 +224,7 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_max_health = entity.get_max_health()
 			_extract_progress = entity.get_extract_progress()
 			_abilities.set_resource(entity.get_resource(), entity.get_max_resource())
+			_abilities.set_level(entity.get_level())
 			_character.set_vitals(_health, _max_health, entity.get_resource(), entity.get_max_resource())
 			if _health <= 0 and _player.alive:
 				_player.die()

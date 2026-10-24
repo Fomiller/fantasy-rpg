@@ -50,7 +50,7 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 	if p.GetLastInputSeq() != 3 || p.GetMaxSpeed() != 220 {
 		t.Fatalf("player prediction fields = %v", p)
 	}
-	if p.GetClassId() != "warrior" || p.GetResource() != 0 || p.GetMaxResource() != 100 {
+	if p.GetClassId() != "warrior" || p.GetResource() != 0 || p.GetMaxResource() != 100 || p.GetLevel() != 1 {
 		t.Fatalf("player class fields = %v", p)
 	}
 	if e.GetId() != uint64(enemy) || e.GetKind() != gamev1.EntityKind_ENTITY_KIND_ENEMY || e.GetHealth() != 20 || e.GetMaxHealth() != 20 {
@@ -96,7 +96,7 @@ func TestDamageAndJoined(t *testing.T) {
 	if c.GetId() != "warrior" || c.GetResource() != "rage" || c.GetMaxResource() != 100 || c.GetBasic() != "slash" || len(c.GetAbilities()) != 3 {
 		t.Fatalf("class = %v", c)
 	}
-	if cleave := c.GetAbilities()[1]; cleave.GetId() != "cleave" || cleave.GetCost() != 30 || cleave.GetCooldownMs() != 4000 || cleave.GetWindupMs() != 250 || !cleave.GetRoot() {
+	if cleave := c.GetAbilities()[1]; cleave.GetId() != "cleave" || cleave.GetCost() != 30 || cleave.GetCooldownMs() != 4000 || cleave.GetWindupMs() != 250 || !cleave.GetRoot() || cleave.GetUnlockLevel() != 2 {
 		t.Fatalf("cleave = %v", cleave)
 	}
 	if id := Extracted(5).GetExtracted().GetPlayerId(); id != 5 {

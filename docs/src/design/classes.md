@@ -103,6 +103,7 @@ Every ability has the same fields.
 | `cooldown_ms` | 4000 | Starts when the windup starts |
 | `windup_ms` | 250 | Time from press to effect. 0 is instant |
 | `root` | true | Player cannot move during the windup |
+| `unlock_level` | 2 | First character level that can use it. See [Progression](progression.md) |
 | `target` | see below | Shape and size |
 | `effects` | list | What happens to each thing hit |
 
@@ -389,6 +390,7 @@ no code change. `TestClassComesFromData` in `src/internal/sim` checks that.
   {
     "id": "cleave",
     "name": "Cleave",
+    "unlock_level": 2,
     "cost": 30,
     "cooldown_ms": 4000,
     "windup_ms": 250,
@@ -399,6 +401,7 @@ no code change. `TestClassComesFromData` in `src/internal/sim` checks that.
   {
     "id": "brace",
     "name": "Brace",
+    "unlock_level": 3,
     "cost": 25,
     "cooldown_ms": 12000,
     "windup_ms": 0,
@@ -443,7 +446,7 @@ Added to `proto/game/v1/game.proto` in FOM-100.
 | `EntityState` | `string class_id` | Players only. Picks the look |
 | `EntityState` | `int32 resource`, `int32 max_resource` | Players only. The resource bar. Rounded down |
 | new `AbilityUsed` event | `source_id`, `ability_id`, `aim`, `windup_ms`, `cooldown_ms` | Sent to everyone. Other clients draw the windup and telegraph |
-| new `AbilityRejected` | `seq`, `ability_id`, `reason` | Sent to the caster only. Reason is `unknown`, `busy`, `cooldown`, `resource` or `aim` |
+| new `AbilityRejected` | `seq`, `ability_id`, `reason` | Sent to the caster only. Reason is `unknown`, `locked`, `busy`, `cooldown`, `resource` or `aim` |
 
 - Cooldowns are not in the snapshot. The caster gets `AbilityUsed` and
   counts its `cooldown_ms` down. That is the real cooldown, after

@@ -87,6 +87,8 @@ message AbilityInfo {
   uint32 windup_ms = 5;
   // The caster cannot move during the windup.
   bool root = 6;
+  // Below this character level the server rejects it as locked.
+  uint32 unlock_level = 7;
 }
 
 // Extracted is sent to everyone in the cave. The extracting player's
@@ -129,7 +131,7 @@ message AbilityUsed {
 message AbilityRejected {
   uint32 seq = 1;
   string ability_id = 2;
-  // One of unknown, busy, cooldown, resource, aim.
+  // One of unknown, locked, busy, cooldown, resource, aim.
   string reason = 3;
 }
 
@@ -193,6 +195,8 @@ message EntityState {
   string class_id = 14;
   int32 resource = 15;
   int32 max_resource = 16;
+  // Players only. The client compares it to AbilityInfo.unlock_level.
+  uint32 level = 17;
 }
 
 message WorldSnapshot {
