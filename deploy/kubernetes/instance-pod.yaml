@@ -1,17 +1,17 @@
-# CAVE_ID is replaced by `just cave-start <id>`.
+# INSTANCE_ID is replaced by `just instance-start <id>`.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: cave-CAVE_ID
+  name: instance-INSTANCE_ID
   namespace: fantasy-rpg
   labels:
-    app: cave-server
-    cave-id: "CAVE_ID"
+    app: instance-server
+    instance-id: "INSTANCE_ID"
 spec:
   restartPolicy: Never
   containers:
-    - name: cave-server
-      image: fantasy-rpg/cave-server:dev
+    - name: instance-server
+      image: fantasy-rpg/instance-server:dev
       ports:
         - containerPort: 8080
       readinessProbe:

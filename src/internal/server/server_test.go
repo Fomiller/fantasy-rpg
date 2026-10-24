@@ -137,7 +137,7 @@ func joinAccepted(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
 func joinAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.JoinAccepted {
 	t.Helper()
 	lobbyAs(t, conn, name)
-	return enterCave(t, conn)
+	return enterInstance(t, conn)
 }
 
 func lobbyAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.Lobby {
@@ -148,9 +148,9 @@ func lobbyAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.Lobby {
 	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil }).GetLobby()
 }
 
-func enterCave(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
+func enterInstance(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
 	t.Helper()
-	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterCave{EnterCave: &gamev1.EnterCaveRequest{}}})
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
 	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
 }
 
@@ -310,7 +310,7 @@ func TestTwoClientsKillSameEnemy(t *testing.T) {
 
 }
 
-func TestJoinSendsCaveLayout(t *testing.T) {
+func TestJoinSendsInstanceLayout(t *testing.T) {
 	cave := testCave()
 	cave.Walls = []sim.Rect{{Min: sim.Vec2{X: 100, Y: 100}, Max: sim.Vec2{X: 164, Y: 164}}}
 	cave.PlayerSpawns = []sim.Vec2{{X: 1, Y: 2}, {X: 3, Y: 4}}
@@ -318,7 +318,7 @@ func TestJoinSendsCaveLayout(t *testing.T) {
 
 	first := joinAccepted(t, dial(t, h.url))
 	second := joinAccepted(t, dial(t, h.url))
-	layout := first.GetCave()
+	layout := first.GetLayout()
 	if layout.GetName() != "test" || len(layout.GetWalls()) != 1 || layout.GetExtraction().GetMin().GetX() != 500 {
 		t.Fatalf("layout = %v", layout)
 	}
@@ -346,7 +346,7 @@ func TestExtractionReturnsToLobby(t *testing.T) {
 		return m.GetSnapshot() != nil && entity(m.GetSnapshot(), id) == nil
 	})
 
-	if again := enterCave(t, leaver); again.GetPlayerId() == id || again.GetPlayerId() == 0 {
+	if again := enterInstance(t, leaver); again.GetPlayerId() == id || again.GetPlayerId() == 0 {
 		t.Fatalf("entered again as %d, want a new player after %d", again.GetPlayerId(), id)
 	}
 }

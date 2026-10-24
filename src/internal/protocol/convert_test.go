@@ -88,10 +88,10 @@ func TestDamageAndJoined(t *testing.T) {
 	}
 	cave := caves.Loop()
 	j := Joined(5, cave, cave.PlayerSpawns[0], 30, ClassInfo(classes.Default(), classes.Starter), &gamev1.CharacterInfo{Name: "ann"}).GetJoined()
-	if j.GetPlayerId() != 5 || j.GetTickRate() != 30 || j.GetCharacter().GetName() != "ann" || len(j.GetCave().GetWalls()) != len(cave.Walls) || j.GetCave().GetName() != "loop" {
+	if j.GetPlayerId() != 5 || j.GetTickRate() != 30 || j.GetCharacter().GetName() != "ann" || len(j.GetLayout().GetWalls()) != len(cave.Walls) || j.GetLayout().GetName() != "loop" {
 		t.Fatalf("joined = %v", j)
 	}
-	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetCave().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
+	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetLayout().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
 		t.Fatalf("joined spawn or exit wrong: %v", j)
 	}
 	c := j.GetClassInfo()
@@ -279,7 +279,7 @@ func TestLobbyMessages(t *testing.T) {
 	if r := StashMoveRejected("x", "full").GetStashMoveRejected(); r.GetItemId() != "x" || r.GetReason() != "full" {
 		t.Fatalf("rejected = %v", r)
 	}
-	if r := EnterCaveRejected("saving").GetEnterCaveRejected(); r.GetReason() != "saving" {
+	if r := EnterInstanceRejected("saving").GetEnterInstanceRejected(); r.GetReason() != "saving" {
 		t.Fatalf("enter rejected = %v", r)
 	}
 }

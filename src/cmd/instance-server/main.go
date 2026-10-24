@@ -32,7 +32,7 @@ func main() {
 		cmd = runMigrate
 	}
 	if err := cmd(); err != nil {
-		slog.Error("cave-server stopped", "err", err)
+		slog.Error("instance-server stopped", "err", err)
 		os.Exit(1)
 	}
 }
@@ -80,7 +80,7 @@ func run() error {
 
 	loop := &tick.Loop{
 		Interval: time.Second / time.Duration(rate),
-		Metrics:  tick.NewMetrics(reg, "cave-server"),
+		Metrics:  tick.NewMetrics(reg, "instance-server"),
 		Step:     game.Step,
 	}
 
@@ -105,7 +105,7 @@ func run() error {
 		}
 	}()
 
-	slog.Info("cave-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed)
+	slog.Info("instance-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed)
 	go func() { errc <- loop.Run(ctx) }()
 
 	select {

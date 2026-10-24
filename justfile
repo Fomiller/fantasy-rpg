@@ -45,14 +45,14 @@ deps:
 dev: deps
     go run ./src/cmd/world-server
 
-cave:
-    go run ./src/cmd/cave-server
+instance:
+    go run ./src/cmd/instance-server
 
 migrate: deps
-    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/cave-server migrate
+    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate
 
-cave-db: migrate
-    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/cave-server
+instance-db: migrate
+    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server
 
 up:
     {{compose}} --profile full up -d --build --wait
@@ -62,7 +62,7 @@ down:
 
 images:
     docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .
-    docker build -f deploy/docker/Dockerfile --build-arg BINARY=cave-server -t fantasy-rpg/cave-server:dev .
+    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev .
 
 k8s-up:
     k3d cluster list fantasy-rpg >/dev/null 2>&1 || k3d cluster create fantasy-rpg --wait --kubeconfig-switch-context=false
@@ -71,20 +71,20 @@ k8s-down:
     k3d cluster delete fantasy-rpg
 
 deploy-local: k8s-up images
-    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev fantasy-rpg/cave-server:dev
+    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev fantasy-rpg/instance-server:dev
     {{kube}} apply -f deploy/kubernetes/world-server.yaml
     {{kube}} -n fantasy-rpg rollout restart deployment/world-server
     {{kube}} -n fantasy-rpg rollout status deployment/world-server
 
-cave-start id:
-    sed 's/CAVE_ID/{{id}}/g' deploy/kubernetes/cave-pod.yaml | {{kube}} apply -f -
-    {{kube}} -n fantasy-rpg wait --for=condition=Ready pod/cave-{{id}} --timeout=60s
+instance-start id:
+    sed 's/INSTANCE_ID/{{id}}/g' deploy/kubernetes/instance-pod.yaml | {{kube}} apply -f -
+    {{kube}} -n fantasy-rpg wait --for=condition=Ready pod/instance-{{id}} --timeout=60s
 
-cave-stop id:
-    {{kube}} -n fantasy-rpg delete pod cave-{{id}}
+instance-stop id:
+    {{kube}} -n fantasy-rpg delete pod instance-{{id}}
 
-caves:
-    {{kube}} -n fantasy-rpg get pods -l app=cave-server
+instances:
+    {{kube}} -n fantasy-rpg get pods -l app=instance-server
 
 client:
     {{godot}} --path client/godot --editor
@@ -121,11 +121,11 @@ client-test:
 net-test: build
     #!/usr/bin/env bash
     set -euo pipefail
-    if curl -sf localhost:8080/healthz >/dev/null; then echo "port 8080 is in use. Stop the other cave-server first." >&2; exit 1; fi
+    if curl -sf localhost:8080/healthz >/dev/null; then echo "port 8080 is in use. Stop the other instance-server first." >&2; exit 1; fi
     {{godot}} --headless --path client/godot --import
     # Picked here, not by the server, so a failure can say how to replay it.
     export LOOT_SEED="${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}"
-    ./bin/cave-server & pid=$!
+    ./bin/instance-server & pid=$!
     trap 'status=$?; kill $pid 2>/dev/null || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
     for i in $(seq 50); do curl -sf localhost:8080/healthz >/dev/null && break; sleep 0.1; done
     {{godot}} --headless --path client/godot --script res://tests/net_test.gd

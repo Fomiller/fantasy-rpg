@@ -9,9 +9,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/cave-server ./src/cmd/cave-server
+RUN CGO_ENABLED=0 go build -o /out/instance-server ./src/cmd/instance-server
 
 FROM gcr.io/distroless/static-debian12
-COPY --from=build /out/cave-server /cave-server
+COPY --from=build /out/instance-server /instance-server
 EXPOSE 8080
-ENTRYPOINT ["/cave-server"]
+ENTRYPOINT ["/instance-server"]

@@ -43,12 +43,12 @@ services:
 
   migrate:
     profiles: [full]
-    image: fantasy-rpg/cave-server:dev
+    image: fantasy-rpg/instance-server:dev
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
       args:
-        BINARY: cave-server
+        BINARY: instance-server
     command: ["migrate"]
     environment:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
@@ -56,14 +56,14 @@ services:
       postgres:
         condition: service_healthy
 
-  cave-server:
+  instance-server:
     profiles: [full]
-    image: fantasy-rpg/cave-server:dev
+    image: fantasy-rpg/instance-server:dev
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
       args:
-        BINARY: cave-server
+        BINARY: instance-server
     environment:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
     ports:

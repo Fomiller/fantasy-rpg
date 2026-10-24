@@ -175,7 +175,7 @@ func _rejected(item_id: String, reason: String) -> PackedByteArray:
 
 func _enter_rejected(reason: String) -> PackedByteArray:
 	var msg := _message()
-	msg.new_enter_cave_rejected().set_reason(reason)
+	msg.new_enter_instance_rejected().set_reason(reason)
 	return msg.to_bytes()
 
 
@@ -183,7 +183,7 @@ func _joined() -> PackedByteArray:
 	var msg := _message()
 	var joined := msg.new_joined()
 	joined.set_player_id(1)
-	var cave := joined.new_cave()
+	var cave := joined.new_layout()
 	cave.set_name("test")
 	for rect: GameV1.Rect in [cave.new_bounds(), cave.new_extraction()]:
 		rect.new_min()

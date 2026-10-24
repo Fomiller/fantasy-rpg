@@ -394,8 +394,8 @@ func (s *Server) leave(c *client) {
 // handle runs on the tick loop, which is the only place c.id and c.lobby change.
 func (s *Server) handle(c *client, msg *gamev1.ClientMessage) {
 	switch {
-	case msg.GetEnterCave() != nil:
-		s.enterCave(c)
+	case msg.GetEnterInstance() != nil:
+		s.enterInstance(c)
 	case msg.GetStashMove() != nil:
 		s.moveItem(c, msg.GetStashMove())
 	case c.id != 0:

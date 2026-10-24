@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Needs a fresh cave-server on 127.0.0.1:8080 running the loop cave.
+# Needs a fresh instance-server on 127.0.0.1:8080 running the loop cave.
 # The enemy fights back, so the players must win before they run out of health.
 # `just net-test` starts one.
 const TIMEOUT_MSEC := 10000
@@ -17,7 +17,7 @@ class Client:
 
 	func _init(tree: SceneTree, name: String) -> void:
 		connection.player_name = name
-		connection.lobby_entered.connect(connection.send_enter_cave)
+		connection.lobby_entered.connect(connection.send_enter_instance)
 		connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: snapshot = s)
 		connection.damage_received.connect(func(d: GameV1.DamageEvent) -> void:
 			hits.append("%d->%d:%d%s" % [d.get_source_id(), d.get_target_id(), d.get_target_health(), " killed" if d.get_killed() else ""]))

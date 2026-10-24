@@ -281,7 +281,7 @@ type ClientMessage struct {
 	//	*ClientMessage_Use
 	//	*ClientMessage_LootOpen
 	//	*ClientMessage_LootClose
-	//	*ClientMessage_EnterCave
+	//	*ClientMessage_EnterInstance
 	//	*ClientMessage_StashMove
 	Payload       isClientMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
@@ -422,10 +422,10 @@ func (x *ClientMessage) GetLootClose() *LootCloseRequest {
 	return nil
 }
 
-func (x *ClientMessage) GetEnterCave() *EnterCaveRequest {
+func (x *ClientMessage) GetEnterInstance() *EnterInstanceRequest {
 	if x != nil {
-		if x, ok := x.Payload.(*ClientMessage_EnterCave); ok {
-			return x.EnterCave
+		if x, ok := x.Payload.(*ClientMessage_EnterInstance); ok {
+			return x.EnterInstance
 		}
 	}
 	return nil
@@ -484,8 +484,8 @@ type ClientMessage_LootClose struct {
 	LootClose *LootCloseRequest `protobuf:"bytes,19,opt,name=loot_close,json=lootClose,proto3,oneof"`
 }
 
-type ClientMessage_EnterCave struct {
-	EnterCave *EnterCaveRequest `protobuf:"bytes,20,opt,name=enter_cave,json=enterCave,proto3,oneof"`
+type ClientMessage_EnterInstance struct {
+	EnterInstance *EnterInstanceRequest `protobuf:"bytes,20,opt,name=enter_instance,json=enterInstance,proto3,oneof"`
 }
 
 type ClientMessage_StashMove struct {
@@ -512,7 +512,7 @@ func (*ClientMessage_LootOpen) isClientMessage_Payload() {}
 
 func (*ClientMessage_LootClose) isClientMessage_Payload() {}
 
-func (*ClientMessage_EnterCave) isClientMessage_Payload() {}
+func (*ClientMessage_EnterInstance) isClientMessage_Payload() {}
 
 func (*ClientMessage_StashMove) isClientMessage_Payload() {}
 
@@ -537,7 +537,7 @@ type ServerMessage struct {
 	//	*ServerMessage_Lobby
 	//	*ServerMessage_Stash
 	//	*ServerMessage_StashMoveRejected
-	//	*ServerMessage_EnterCaveRejected
+	//	*ServerMessage_EnterInstanceRejected
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -731,10 +731,10 @@ func (x *ServerMessage) GetStashMoveRejected() *StashMoveRejected {
 	return nil
 }
 
-func (x *ServerMessage) GetEnterCaveRejected() *EnterCaveRejected {
+func (x *ServerMessage) GetEnterInstanceRejected() *EnterInstanceRejected {
 	if x != nil {
-		if x, ok := x.Payload.(*ServerMessage_EnterCaveRejected); ok {
-			return x.EnterCaveRejected
+		if x, ok := x.Payload.(*ServerMessage_EnterInstanceRejected); ok {
+			return x.EnterInstanceRejected
 		}
 	}
 	return nil
@@ -808,8 +808,8 @@ type ServerMessage_StashMoveRejected struct {
 	StashMoveRejected *StashMoveRejected `protobuf:"bytes,25,opt,name=stash_move_rejected,json=stashMoveRejected,proto3,oneof"`
 }
 
-type ServerMessage_EnterCaveRejected struct {
-	EnterCaveRejected *EnterCaveRejected `protobuf:"bytes,26,opt,name=enter_cave_rejected,json=enterCaveRejected,proto3,oneof"`
+type ServerMessage_EnterInstanceRejected struct {
+	EnterInstanceRejected *EnterInstanceRejected `protobuf:"bytes,26,opt,name=enter_instance_rejected,json=enterInstanceRejected,proto3,oneof"`
 }
 
 func (*ServerMessage_Joined) isServerMessage_Payload() {}
@@ -844,7 +844,7 @@ func (*ServerMessage_Stash) isServerMessage_Payload() {}
 
 func (*ServerMessage_StashMoveRejected) isServerMessage_Payload() {}
 
-func (*ServerMessage_EnterCaveRejected) isServerMessage_Payload() {}
+func (*ServerMessage_EnterInstanceRejected) isServerMessage_Payload() {}
 
 type Vec2 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -950,8 +950,8 @@ func (x *Rect) GetMax() *Vec2 {
 	return nil
 }
 
-// JoinRequest puts the player in the lobby. EnterCaveRequest then puts them
-// in the cave.
+// JoinRequest puts the player in the lobby. EnterInstanceRequest then puts
+// them in the instance.
 type JoinRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1005,11 +1005,11 @@ func (x *JoinRequest) GetClassId() string {
 	return ""
 }
 
-// JoinAccepted is sent when the player enters the cave.
+// JoinAccepted is sent when the player enters the instance.
 type JoinAccepted struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	PlayerId uint64                 `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Cave     *CaveLayout            `protobuf:"bytes,2,opt,name=cave,proto3" json:"cave,omitempty"`
+	Layout   *InstanceLayout        `protobuf:"bytes,2,opt,name=layout,proto3" json:"layout,omitempty"`
 	Spawn    *Vec2                  `protobuf:"bytes,3,opt,name=spawn,proto3" json:"spawn,omitempty"`
 	// The client predicts its own movement one step per server tick.
 	TickRate uint32 `protobuf:"varint,4,opt,name=tick_rate,json=tickRate,proto3" json:"tick_rate,omitempty"`
@@ -1058,9 +1058,9 @@ func (x *JoinAccepted) GetPlayerId() uint64 {
 	return 0
 }
 
-func (x *JoinAccepted) GetCave() *CaveLayout {
+func (x *JoinAccepted) GetLayout() *InstanceLayout {
 	if x != nil {
-		return x.Cave
+		return x.Layout
 	}
 	return nil
 }
@@ -2263,9 +2263,9 @@ func (x *WorldSnapshot) GetEntities() []*EntityState {
 	return nil
 }
 
-// CaveLayout is everything the client needs to draw the cave. Bounds is the
-// whole map, and anything outside a wall inside bounds is floor.
-type CaveLayout struct {
+// InstanceLayout is everything the client needs to draw the instance. Bounds
+// is the whole map, and anything outside a wall inside bounds is floor.
+type InstanceLayout struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Bounds        *Rect                  `protobuf:"bytes,2,opt,name=bounds,proto3" json:"bounds,omitempty"`
@@ -2275,20 +2275,20 @@ type CaveLayout struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CaveLayout) Reset() {
-	*x = CaveLayout{}
+func (x *InstanceLayout) Reset() {
+	*x = InstanceLayout{}
 	mi := &file_game_v1_game_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CaveLayout) String() string {
+func (x *InstanceLayout) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CaveLayout) ProtoMessage() {}
+func (*InstanceLayout) ProtoMessage() {}
 
-func (x *CaveLayout) ProtoReflect() protoreflect.Message {
+func (x *InstanceLayout) ProtoReflect() protoreflect.Message {
 	mi := &file_game_v1_game_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2300,33 +2300,33 @@ func (x *CaveLayout) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CaveLayout.ProtoReflect.Descriptor instead.
-func (*CaveLayout) Descriptor() ([]byte, []int) {
+// Deprecated: Use InstanceLayout.ProtoReflect.Descriptor instead.
+func (*InstanceLayout) Descriptor() ([]byte, []int) {
 	return file_game_v1_game_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *CaveLayout) GetName() string {
+func (x *InstanceLayout) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *CaveLayout) GetBounds() *Rect {
+func (x *InstanceLayout) GetBounds() *Rect {
 	if x != nil {
 		return x.Bounds
 	}
 	return nil
 }
 
-func (x *CaveLayout) GetWalls() []*Rect {
+func (x *InstanceLayout) GetWalls() []*Rect {
 	if x != nil {
 		return x.Walls
 	}
 	return nil
 }
 
-func (x *CaveLayout) GetExtraction() *Rect {
+func (x *InstanceLayout) GetExtraction() *Rect {
 	if x != nil {
 		return x.Extraction
 	}
@@ -3127,14 +3127,14 @@ func (x *UseRequest) GetItemId() string {
 }
 
 // Lobby is sent on join and after every run. The player is out of the cave
-// until they send EnterCaveRequest. EquipmentUpdated, InventoryUpdated and
+// until they send EnterInstanceRequest. EquipmentUpdated, InventoryUpdated and
 // StashContents follow it.
 type Lobby struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Character *CharacterInfo         `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	ClassInfo *ClassInfo             `protobuf:"bytes,2,opt,name=class_info,json=classInfo,proto3" json:"class_info,omitempty"`
 	// True while the last run's result is not in the database yet. Lobby moves
-	// and Enter Cave are rejected until a Lobby comes with it false.
+	// and Enter Instance are rejected until a Lobby comes with it false.
 	Saving        bool `protobuf:"varint,3,opt,name=saving,proto3" json:"saving,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3354,27 +3354,27 @@ func (x *StashMoveRejected) GetReason() string {
 	return ""
 }
 
-// EnterCaveRequest leaves the lobby. The server answers with JoinAccepted.
-type EnterCaveRequest struct {
+// EnterInstanceRequest leaves the lobby. The server answers with JoinAccepted.
+type EnterInstanceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *EnterCaveRequest) Reset() {
-	*x = EnterCaveRequest{}
+func (x *EnterInstanceRequest) Reset() {
+	*x = EnterInstanceRequest{}
 	mi := &file_game_v1_game_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EnterCaveRequest) String() string {
+func (x *EnterInstanceRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EnterCaveRequest) ProtoMessage() {}
+func (*EnterInstanceRequest) ProtoMessage() {}
 
-func (x *EnterCaveRequest) ProtoReflect() protoreflect.Message {
+func (x *EnterInstanceRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_game_v1_game_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3386,13 +3386,13 @@ func (x *EnterCaveRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EnterCaveRequest.ProtoReflect.Descriptor instead.
-func (*EnterCaveRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use EnterInstanceRequest.ProtoReflect.Descriptor instead.
+func (*EnterInstanceRequest) Descriptor() ([]byte, []int) {
 	return file_game_v1_game_proto_rawDescGZIP(), []int{40}
 }
 
-// EnterCaveRejected is sent when the player stays in the lobby.
-type EnterCaveRejected struct {
+// EnterInstanceRejected is sent when the player stays in the lobby.
+type EnterInstanceRejected struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// saving: the last run is still being saved.
 	Reason        string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
@@ -3400,20 +3400,20 @@ type EnterCaveRejected struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *EnterCaveRejected) Reset() {
-	*x = EnterCaveRejected{}
+func (x *EnterInstanceRejected) Reset() {
+	*x = EnterInstanceRejected{}
 	mi := &file_game_v1_game_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EnterCaveRejected) String() string {
+func (x *EnterInstanceRejected) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EnterCaveRejected) ProtoMessage() {}
+func (*EnterInstanceRejected) ProtoMessage() {}
 
-func (x *EnterCaveRejected) ProtoReflect() protoreflect.Message {
+func (x *EnterInstanceRejected) ProtoReflect() protoreflect.Message {
 	mi := &file_game_v1_game_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3425,12 +3425,12 @@ func (x *EnterCaveRejected) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EnterCaveRejected.ProtoReflect.Descriptor instead.
-func (*EnterCaveRejected) Descriptor() ([]byte, []int) {
+// Deprecated: Use EnterInstanceRejected.ProtoReflect.Descriptor instead.
+func (*EnterInstanceRejected) Descriptor() ([]byte, []int) {
 	return file_game_v1_game_proto_rawDescGZIP(), []int{41}
 }
 
-func (x *EnterCaveRejected) GetReason() string {
+func (x *EnterInstanceRejected) GetReason() string {
 	if x != nil {
 		return x.Reason
 	}
@@ -3441,7 +3441,7 @@ var File_game_v1_game_proto protoreflect.FileDescriptor
 
 const file_game_v1_game_proto_rawDesc = "" +
 	"\n" +
-	"\x12game/v1/game.proto\x12\agame.v1\"\xa5\x05\n" +
+	"\x12game/v1/game.proto\x12\agame.v1\"\xb1\x05\n" +
 	"\rClientMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12*\n" +
 	"\x04join\x18\n" +
@@ -3455,12 +3455,11 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x03use\x18\x11 \x01(\v2\x13.game.v1.UseRequestH\x00R\x03use\x127\n" +
 	"\tloot_open\x18\x12 \x01(\v2\x18.game.v1.LootOpenRequestH\x00R\blootOpen\x12:\n" +
 	"\n" +
-	"loot_close\x18\x13 \x01(\v2\x19.game.v1.LootCloseRequestH\x00R\tlootClose\x12:\n" +
-	"\n" +
-	"enter_cave\x18\x14 \x01(\v2\x19.game.v1.EnterCaveRequestH\x00R\tenterCave\x12:\n" +
+	"loot_close\x18\x13 \x01(\v2\x19.game.v1.LootCloseRequestH\x00R\tlootClose\x12F\n" +
+	"\x0eenter_instance\x18\x14 \x01(\v2\x1d.game.v1.EnterInstanceRequestH\x00R\renterInstance\x12:\n" +
 	"\n" +
 	"stash_move\x18\x15 \x01(\v2\x19.game.v1.StashMoveRequestH\x00R\tstashMoveB\t\n" +
-	"\apayload\"\x80\b\n" +
+	"\apayload\"\x8c\b\n" +
 	"\rServerMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12/\n" +
 	"\x06joined\x18\n" +
@@ -3479,8 +3478,8 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\trun_ended\x18\x16 \x01(\v2\x11.game.v1.RunEndedH\x00R\brunEnded\x12&\n" +
 	"\x05lobby\x18\x17 \x01(\v2\x0e.game.v1.LobbyH\x00R\x05lobby\x12.\n" +
 	"\x05stash\x18\x18 \x01(\v2\x16.game.v1.StashContentsH\x00R\x05stash\x12L\n" +
-	"\x13stash_move_rejected\x18\x19 \x01(\v2\x1a.game.v1.StashMoveRejectedH\x00R\x11stashMoveRejected\x12L\n" +
-	"\x13enter_cave_rejected\x18\x1a \x01(\v2\x1a.game.v1.EnterCaveRejectedH\x00R\x11enterCaveRejectedB\t\n" +
+	"\x13stash_move_rejected\x18\x19 \x01(\v2\x1a.game.v1.StashMoveRejectedH\x00R\x11stashMoveRejected\x12X\n" +
+	"\x17enter_instance_rejected\x18\x1a \x01(\v2\x1e.game.v1.EnterInstanceRejectedH\x00R\x15enterInstanceRejectedB\t\n" +
 	"\apayload\"\"\n" +
 	"\x04Vec2\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +
@@ -3490,10 +3489,10 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x03max\x18\x02 \x01(\v2\r.game.v1.Vec2R\x03max\"<\n" +
 	"\vJoinRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
-	"\bclass_id\x18\x02 \x01(\tR\aclassId\"\xff\x01\n" +
+	"\bclass_id\x18\x02 \x01(\tR\aclassId\"\x87\x02\n" +
 	"\fJoinAccepted\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\x12'\n" +
-	"\x04cave\x18\x02 \x01(\v2\x13.game.v1.CaveLayoutR\x04cave\x12#\n" +
+	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\x12/\n" +
+	"\x06layout\x18\x02 \x01(\v2\x17.game.v1.InstanceLayoutR\x06layout\x12#\n" +
 	"\x05spawn\x18\x03 \x01(\v2\r.game.v1.Vec2R\x05spawn\x12\x1b\n" +
 	"\ttick_rate\x18\x04 \x01(\rR\btickRate\x121\n" +
 	"\n" +
@@ -3598,9 +3597,8 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x05level\x18\x11 \x01(\rR\x05level\"U\n" +
 	"\rWorldSnapshot\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x120\n" +
-	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\x9b\x01\n" +
-	"\n" +
-	"CaveLayout\x12\x12\n" +
+	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\x9f\x01\n" +
+	"\x0eInstanceLayout\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
 	"\x06bounds\x18\x02 \x01(\v2\r.game.v1.RectR\x06bounds\x12#\n" +
 	"\x05walls\x18\x03 \x03(\v2\r.game.v1.RectR\x05walls\x12-\n" +
@@ -3668,9 +3666,9 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x02to\x18\x02 \x01(\x0e2\x12.game.v1.ItemPlaceR\x02to\"D\n" +
 	"\x11StashMoveRejected\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x12\n" +
-	"\x10EnterCaveRequest\"+\n" +
-	"\x11EnterCaveRejected\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x16\n" +
+	"\x14EnterInstanceRequest\"/\n" +
+	"\x15EnterInstanceRejected\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason*\xa1\x01\n" +
 	"\n" +
 	"EntityKind\x12\x1b\n" +
@@ -3723,52 +3721,52 @@ func file_game_v1_game_proto_rawDescGZIP() []byte {
 var file_game_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_game_v1_game_proto_goTypes = []any{
-	(EntityKind)(0),           // 0: game.v1.EntityKind
-	(EnemyState)(0),           // 1: game.v1.EnemyState
-	(Rarity)(0),               // 2: game.v1.Rarity
-	(ItemPlace)(0),            // 3: game.v1.ItemPlace
-	(*ClientMessage)(nil),     // 4: game.v1.ClientMessage
-	(*ServerMessage)(nil),     // 5: game.v1.ServerMessage
-	(*Vec2)(nil),              // 6: game.v1.Vec2
-	(*Rect)(nil),              // 7: game.v1.Rect
-	(*JoinRequest)(nil),       // 8: game.v1.JoinRequest
-	(*JoinAccepted)(nil),      // 9: game.v1.JoinAccepted
-	(*CharacterInfo)(nil),     // 10: game.v1.CharacterInfo
-	(*ClassInfo)(nil),         // 11: game.v1.ClassInfo
-	(*AbilityInfo)(nil),       // 12: game.v1.AbilityInfo
-	(*Extracted)(nil),         // 13: game.v1.Extracted
-	(*RunEnded)(nil),          // 14: game.v1.RunEnded
-	(*RunSummary)(nil),        // 15: game.v1.RunSummary
-	(*XpGained)(nil),          // 16: game.v1.XpGained
-	(*LevelUp)(nil),           // 17: game.v1.LevelUp
-	(*MoveInput)(nil),         // 18: game.v1.MoveInput
-	(*AttackRequest)(nil),     // 19: game.v1.AttackRequest
-	(*AbilityUsed)(nil),       // 20: game.v1.AbilityUsed
-	(*AbilityRejected)(nil),   // 21: game.v1.AbilityRejected
-	(*DamageEvent)(nil),       // 22: game.v1.DamageEvent
-	(*EntityState)(nil),       // 23: game.v1.EntityState
-	(*WorldSnapshot)(nil),     // 24: game.v1.WorldSnapshot
-	(*CaveLayout)(nil),        // 25: game.v1.CaveLayout
-	(*Item)(nil),              // 26: game.v1.Item
-	(*ItemStat)(nil),          // 27: game.v1.ItemStat
-	(*ItemAffix)(nil),         // 28: game.v1.ItemAffix
-	(*EquipmentUpdated)(nil),  // 29: game.v1.EquipmentUpdated
-	(*InventoryUpdated)(nil),  // 30: game.v1.InventoryUpdated
-	(*PickupRequest)(nil),     // 31: game.v1.PickupRequest
-	(*PickupRejected)(nil),    // 32: game.v1.PickupRejected
-	(*LootOpenRequest)(nil),   // 33: game.v1.LootOpenRequest
-	(*LootCloseRequest)(nil),  // 34: game.v1.LootCloseRequest
-	(*LootContents)(nil),      // 35: game.v1.LootContents
-	(*EquipRequest)(nil),      // 36: game.v1.EquipRequest
-	(*UnequipRequest)(nil),    // 37: game.v1.UnequipRequest
-	(*DropRequest)(nil),       // 38: game.v1.DropRequest
-	(*UseRequest)(nil),        // 39: game.v1.UseRequest
-	(*Lobby)(nil),             // 40: game.v1.Lobby
-	(*StashContents)(nil),     // 41: game.v1.StashContents
-	(*StashMoveRequest)(nil),  // 42: game.v1.StashMoveRequest
-	(*StashMoveRejected)(nil), // 43: game.v1.StashMoveRejected
-	(*EnterCaveRequest)(nil),  // 44: game.v1.EnterCaveRequest
-	(*EnterCaveRejected)(nil), // 45: game.v1.EnterCaveRejected
+	(EntityKind)(0),               // 0: game.v1.EntityKind
+	(EnemyState)(0),               // 1: game.v1.EnemyState
+	(Rarity)(0),                   // 2: game.v1.Rarity
+	(ItemPlace)(0),                // 3: game.v1.ItemPlace
+	(*ClientMessage)(nil),         // 4: game.v1.ClientMessage
+	(*ServerMessage)(nil),         // 5: game.v1.ServerMessage
+	(*Vec2)(nil),                  // 6: game.v1.Vec2
+	(*Rect)(nil),                  // 7: game.v1.Rect
+	(*JoinRequest)(nil),           // 8: game.v1.JoinRequest
+	(*JoinAccepted)(nil),          // 9: game.v1.JoinAccepted
+	(*CharacterInfo)(nil),         // 10: game.v1.CharacterInfo
+	(*ClassInfo)(nil),             // 11: game.v1.ClassInfo
+	(*AbilityInfo)(nil),           // 12: game.v1.AbilityInfo
+	(*Extracted)(nil),             // 13: game.v1.Extracted
+	(*RunEnded)(nil),              // 14: game.v1.RunEnded
+	(*RunSummary)(nil),            // 15: game.v1.RunSummary
+	(*XpGained)(nil),              // 16: game.v1.XpGained
+	(*LevelUp)(nil),               // 17: game.v1.LevelUp
+	(*MoveInput)(nil),             // 18: game.v1.MoveInput
+	(*AttackRequest)(nil),         // 19: game.v1.AttackRequest
+	(*AbilityUsed)(nil),           // 20: game.v1.AbilityUsed
+	(*AbilityRejected)(nil),       // 21: game.v1.AbilityRejected
+	(*DamageEvent)(nil),           // 22: game.v1.DamageEvent
+	(*EntityState)(nil),           // 23: game.v1.EntityState
+	(*WorldSnapshot)(nil),         // 24: game.v1.WorldSnapshot
+	(*InstanceLayout)(nil),        // 25: game.v1.InstanceLayout
+	(*Item)(nil),                  // 26: game.v1.Item
+	(*ItemStat)(nil),              // 27: game.v1.ItemStat
+	(*ItemAffix)(nil),             // 28: game.v1.ItemAffix
+	(*EquipmentUpdated)(nil),      // 29: game.v1.EquipmentUpdated
+	(*InventoryUpdated)(nil),      // 30: game.v1.InventoryUpdated
+	(*PickupRequest)(nil),         // 31: game.v1.PickupRequest
+	(*PickupRejected)(nil),        // 32: game.v1.PickupRejected
+	(*LootOpenRequest)(nil),       // 33: game.v1.LootOpenRequest
+	(*LootCloseRequest)(nil),      // 34: game.v1.LootCloseRequest
+	(*LootContents)(nil),          // 35: game.v1.LootContents
+	(*EquipRequest)(nil),          // 36: game.v1.EquipRequest
+	(*UnequipRequest)(nil),        // 37: game.v1.UnequipRequest
+	(*DropRequest)(nil),           // 38: game.v1.DropRequest
+	(*UseRequest)(nil),            // 39: game.v1.UseRequest
+	(*Lobby)(nil),                 // 40: game.v1.Lobby
+	(*StashContents)(nil),         // 41: game.v1.StashContents
+	(*StashMoveRequest)(nil),      // 42: game.v1.StashMoveRequest
+	(*StashMoveRejected)(nil),     // 43: game.v1.StashMoveRejected
+	(*EnterInstanceRequest)(nil),  // 44: game.v1.EnterInstanceRequest
+	(*EnterInstanceRejected)(nil), // 45: game.v1.EnterInstanceRejected
 }
 var file_game_v1_game_proto_depIdxs = []int32{
 	8,  // 0: game.v1.ClientMessage.join:type_name -> game.v1.JoinRequest
@@ -3781,7 +3779,7 @@ var file_game_v1_game_proto_depIdxs = []int32{
 	39, // 7: game.v1.ClientMessage.use:type_name -> game.v1.UseRequest
 	33, // 8: game.v1.ClientMessage.loot_open:type_name -> game.v1.LootOpenRequest
 	34, // 9: game.v1.ClientMessage.loot_close:type_name -> game.v1.LootCloseRequest
-	44, // 10: game.v1.ClientMessage.enter_cave:type_name -> game.v1.EnterCaveRequest
+	44, // 10: game.v1.ClientMessage.enter_instance:type_name -> game.v1.EnterInstanceRequest
 	42, // 11: game.v1.ClientMessage.stash_move:type_name -> game.v1.StashMoveRequest
 	9,  // 12: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
 	24, // 13: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
@@ -3799,10 +3797,10 @@ var file_game_v1_game_proto_depIdxs = []int32{
 	40, // 25: game.v1.ServerMessage.lobby:type_name -> game.v1.Lobby
 	41, // 26: game.v1.ServerMessage.stash:type_name -> game.v1.StashContents
 	43, // 27: game.v1.ServerMessage.stash_move_rejected:type_name -> game.v1.StashMoveRejected
-	45, // 28: game.v1.ServerMessage.enter_cave_rejected:type_name -> game.v1.EnterCaveRejected
+	45, // 28: game.v1.ServerMessage.enter_instance_rejected:type_name -> game.v1.EnterInstanceRejected
 	6,  // 29: game.v1.Rect.min:type_name -> game.v1.Vec2
 	6,  // 30: game.v1.Rect.max:type_name -> game.v1.Vec2
-	25, // 31: game.v1.JoinAccepted.cave:type_name -> game.v1.CaveLayout
+	25, // 31: game.v1.JoinAccepted.layout:type_name -> game.v1.InstanceLayout
 	6,  // 32: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
 	11, // 33: game.v1.JoinAccepted.class_info:type_name -> game.v1.ClassInfo
 	10, // 34: game.v1.JoinAccepted.character:type_name -> game.v1.CharacterInfo
@@ -3822,9 +3820,9 @@ var file_game_v1_game_proto_depIdxs = []int32{
 	1,  // 48: game.v1.EntityState.enemy_state:type_name -> game.v1.EnemyState
 	6,  // 49: game.v1.EntityState.aim:type_name -> game.v1.Vec2
 	23, // 50: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
-	7,  // 51: game.v1.CaveLayout.bounds:type_name -> game.v1.Rect
-	7,  // 52: game.v1.CaveLayout.walls:type_name -> game.v1.Rect
-	7,  // 53: game.v1.CaveLayout.extraction:type_name -> game.v1.Rect
+	7,  // 51: game.v1.InstanceLayout.bounds:type_name -> game.v1.Rect
+	7,  // 52: game.v1.InstanceLayout.walls:type_name -> game.v1.Rect
+	7,  // 53: game.v1.InstanceLayout.extraction:type_name -> game.v1.Rect
 	2,  // 54: game.v1.Item.rarity:type_name -> game.v1.Rarity
 	27, // 55: game.v1.Item.base:type_name -> game.v1.ItemStat
 	28, // 56: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
@@ -3859,7 +3857,7 @@ func file_game_v1_game_proto_init() {
 		(*ClientMessage_Use)(nil),
 		(*ClientMessage_LootOpen)(nil),
 		(*ClientMessage_LootClose)(nil),
-		(*ClientMessage_EnterCave)(nil),
+		(*ClientMessage_EnterInstance)(nil),
 		(*ClientMessage_StashMove)(nil),
 	}
 	file_game_v1_game_proto_msgTypes[1].OneofWrappers = []any{
@@ -3879,7 +3877,7 @@ func file_game_v1_game_proto_init() {
 		(*ServerMessage_Lobby)(nil),
 		(*ServerMessage_Stash)(nil),
 		(*ServerMessage_StashMoveRejected)(nil),
-		(*ServerMessage_EnterCaveRejected)(nil),
+		(*ServerMessage_EnterInstanceRejected)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

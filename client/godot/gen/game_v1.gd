@@ -751,11 +751,11 @@ class ClientMessage:
 		service.func_ref = Callable(self, "new_loot_close")
 		data[__loot_close.tag] = service
 		
-		__enter_cave = PBField.new("enter_cave", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 20, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		__enter_instance = PBField.new("enter_instance", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 20, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
 		service = PBServiceField.new()
-		service.field = __enter_cave
-		service.func_ref = Callable(self, "new_enter_cave")
-		data[__enter_cave.tag] = service
+		service.field = __enter_instance
+		service.func_ref = Callable(self, "new_enter_instance")
+		data[__enter_instance.tag] = service
 		
 		__stash_move = PBField.new("stash_move", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 21, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
 		service = PBServiceField.new()
@@ -777,7 +777,7 @@ class ClientMessage:
 		USE = 17,
 		LOOT_OPEN = 18,
 		LOOT_CLOSE = 19,
-		ENTER_CAVE = 20,
+		ENTER_INSTANCE = 20,
 		STASH_MOVE = 21,
 	}
 	var _payload_case: int = 0
@@ -824,7 +824,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -860,7 +860,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -896,7 +896,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -932,7 +932,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -968,7 +968,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -1004,7 +1004,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -1040,7 +1040,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -1076,7 +1076,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -1112,7 +1112,7 @@ class ClientMessage:
 		_payload_case = 18
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
@@ -1148,22 +1148,22 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		data[19].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 19
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = LootCloseRequest.new()
 		return __loot_close.value
 	
-	var __enter_cave: PBField
-	func has_enter_cave() -> bool:
+	var __enter_instance: PBField
+	func has_enter_instance() -> bool:
 		return data[20].state == PB_SERVICE_STATE.FILLED
-	func get_enter_cave() -> EnterCaveRequest:
-		return __enter_cave.value
-	func clear_enter_cave() -> void:
+	func get_enter_instance() -> EnterInstanceRequest:
+		return __enter_instance.value
+	func clear_enter_instance() -> void:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-	func new_enter_cave() -> EnterCaveRequest:
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_enter_instance() -> EnterInstanceRequest:
 		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[10].state = PB_SERVICE_STATE.UNFILLED
 		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1188,8 +1188,8 @@ class ClientMessage:
 		_payload_case = 20
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = EnterCaveRequest.new()
-		return __enter_cave.value
+		__enter_instance.value = EnterInstanceRequest.new()
+		return __enter_instance.value
 	
 	var __stash_move: PBField
 	func has_stash_move() -> bool:
@@ -1220,7 +1220,7 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		data[21].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 21
@@ -1355,11 +1355,11 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_stash_move_rejected")
 		data[__stash_move_rejected.tag] = service
 		
-		__enter_cave_rejected = PBField.new("enter_cave_rejected", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 26, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		__enter_instance_rejected = PBField.new("enter_instance_rejected", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 26, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
 		service = PBServiceField.new()
-		service.field = __enter_cave_rejected
-		service.func_ref = Callable(self, "new_enter_cave_rejected")
-		data[__enter_cave_rejected.tag] = service
+		service.field = __enter_instance_rejected
+		service.func_ref = Callable(self, "new_enter_instance_rejected")
+		data[__enter_instance_rejected.tag] = service
 		
 	var data = {}
 	
@@ -1381,7 +1381,7 @@ class ServerMessage:
 		LOBBY = 23,
 		STASH = 24,
 		STASH_MOVE_REJECTED = 25,
-		ENTER_CAVE_REJECTED = 26,
+		ENTER_INSTANCE_REJECTED = 26,
 	}
 	var _payload_case: int = 0
 
@@ -1439,7 +1439,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
@@ -1485,7 +1485,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
@@ -1531,7 +1531,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
@@ -1577,7 +1577,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
@@ -1623,7 +1623,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__extracted.value = Extracted.new()
 		return __extracted.value
@@ -1669,7 +1669,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__equipment.value = EquipmentUpdated.new()
 		return __equipment.value
@@ -1715,7 +1715,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__ability_used.value = AbilityUsed.new()
 		return __ability_used.value
@@ -1761,7 +1761,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = AbilityRejected.new()
 		return __ability_rejected.value
@@ -1807,7 +1807,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__loot.value = LootContents.new()
 		return __loot.value
@@ -1853,7 +1853,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = PickupRejected.new()
 		return __pickup_rejected.value
@@ -1899,7 +1899,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__xp_gained.value = XpGained.new()
 		return __xp_gained.value
@@ -1945,7 +1945,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__level_up.value = LevelUp.new()
 		return __level_up.value
@@ -1991,7 +1991,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = RunEnded.new()
 		return __run_ended.value
@@ -2037,7 +2037,7 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__lobby.value = Lobby.new()
 		return __lobby.value
@@ -2083,7 +2083,7 @@ class ServerMessage:
 		_payload_case = 24
 		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[25].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__stash.value = StashContents.new()
 		return __stash.value
@@ -2129,20 +2129,20 @@ class ServerMessage:
 		data[24].state = PB_SERVICE_STATE.UNFILLED
 		data[25].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 25
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = StashMoveRejected.new()
 		return __stash_move_rejected.value
 	
-	var __enter_cave_rejected: PBField
-	func has_enter_cave_rejected() -> bool:
+	var __enter_instance_rejected: PBField
+	func has_enter_instance_rejected() -> bool:
 		return data[26].state == PB_SERVICE_STATE.FILLED
-	func get_enter_cave_rejected() -> EnterCaveRejected:
-		return __enter_cave_rejected.value
-	func clear_enter_cave_rejected() -> void:
+	func get_enter_instance_rejected() -> EnterInstanceRejected:
+		return __enter_instance_rejected.value
+	func clear_enter_instance_rejected() -> void:
 		data[26].state = PB_SERVICE_STATE.UNFILLED
-		__enter_cave_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-	func new_enter_cave_rejected() -> EnterCaveRejected:
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_enter_instance_rejected() -> EnterInstanceRejected:
 		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[10].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -2177,8 +2177,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		data[26].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 26
-		__enter_cave_rejected.value = EnterCaveRejected.new()
-		return __enter_cave_rejected.value
+		__enter_instance_rejected.value = EnterInstanceRejected.new()
+		return __enter_instance_rejected.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -2405,11 +2405,11 @@ class JoinAccepted:
 		service.field = __player_id
 		data[__player_id.tag] = service
 		
-		__cave = PBField.new("cave", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		__layout = PBField.new("layout", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
 		service = PBServiceField.new()
-		service.field = __cave
-		service.func_ref = Callable(self, "new_cave")
-		data[__cave.tag] = service
+		service.field = __layout
+		service.func_ref = Callable(self, "new_layout")
+		data[__layout.tag] = service
 		
 		__spawn = PBField.new("spawn", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
 		service = PBServiceField.new()
@@ -2449,19 +2449,19 @@ class JoinAccepted:
 	func set_player_id(value : int) -> void:
 		__player_id.value = value
 	
-	var __cave: PBField
-	func has_cave() -> bool:
-		if __cave.value != null:
+	var __layout: PBField
+	func has_layout() -> bool:
+		if __layout.value != null:
 			return true
 		return false
-	func get_cave() -> CaveLayout:
-		return __cave.value
-	func clear_cave() -> void:
+	func get_layout() -> InstanceLayout:
+		return __layout.value
+	func clear_layout() -> void:
 		data[2].state = PB_SERVICE_STATE.UNFILLED
-		__cave.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-	func new_cave() -> CaveLayout:
-		__cave.value = CaveLayout.new()
-		return __cave.value
+		__layout.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_layout() -> InstanceLayout:
+		__layout.value = InstanceLayout.new()
+		return __layout.value
 	
 	var __spawn: PBField
 	func has_spawn() -> bool:
@@ -4301,7 +4301,7 @@ class WorldSnapshot:
 			return PB_ERR.PARSE_INCOMPLETE
 		return result
 	
-class CaveLayout:
+class InstanceLayout:
 	func _init():
 		var service
 		
@@ -5666,7 +5666,7 @@ class StashMoveRejected:
 			return PB_ERR.PARSE_INCOMPLETE
 		return result
 	
-class EnterCaveRequest:
+class EnterInstanceRequest:
 	func _init():
 		var service
 		
@@ -5693,7 +5693,7 @@ class EnterCaveRequest:
 			return PB_ERR.PARSE_INCOMPLETE
 		return result
 	
-class EnterCaveRejected:
+class EnterInstanceRejected:
 	func _init():
 		var service
 		

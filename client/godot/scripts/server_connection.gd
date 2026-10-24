@@ -22,7 +22,7 @@ signal level_up(event: GameV1.LevelUp)
 signal run_ended(summary: GameV1.RunSummary)
 signal stash_received(items: Array[GameV1.Item], capacity: int)
 signal stash_move_rejected(event: GameV1.StashMoveRejected)
-signal enter_cave_rejected(event: GameV1.EnterCaveRejected)
+signal enter_instance_rejected(event: GameV1.EnterInstanceRejected)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
@@ -35,7 +35,7 @@ const RETRY_SECONDS := 2.0
 @export var class_id := ""
 
 var player_id := 0
-var cave: GameV1.CaveLayout
+var layout: GameV1.InstanceLayout
 var spawn := Vector2.ZERO
 var tick_rate := 20
 var class_info: GameV1.ClassInfo
@@ -71,11 +71,11 @@ func is_joined() -> bool:
 	return player_id != 0
 
 
-func send_enter_cave() -> void:
+func send_enter_instance() -> void:
 	if not in_lobby:
 		return
 	var msg := _new_message()
-	msg.new_enter_cave()
+	msg.new_enter_instance()
 	_send(msg)
 
 
@@ -242,19 +242,19 @@ func _handle(bytes: PackedByteArray) -> void:
 		stash_received.emit(msg.get_stash().get_items(), msg.get_stash().get_capacity())
 	elif msg.has_stash_move_rejected():
 		stash_move_rejected.emit(msg.get_stash_move_rejected())
-	elif msg.has_enter_cave_rejected():
-		enter_cave_rejected.emit(msg.get_enter_cave_rejected())
+	elif msg.has_enter_instance_rejected():
+		enter_instance_rejected.emit(msg.get_enter_instance_rejected())
 	elif msg.has_joined():
 		var accepted := msg.get_joined()
 		in_lobby = false
 		player_id = accepted.get_player_id()
-		cave = accepted.get_cave()
+		layout = accepted.get_layout()
 		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())
 		if accepted.get_tick_rate() > 0:
 			tick_rate = accepted.get_tick_rate()
 		class_info = accepted.get_class_info()
 		character = accepted.get_character() if accepted.has_character() else null
-		print("joined %s as player %d in %s" % [_url, player_id, cave.get_name()])
+		print("joined %s as player %d in %s" % [_url, player_id, layout.get_name()])
 		joined.emit(player_id)
 	elif msg.has_snapshot():
 		snapshot_received.emit(msg.get_snapshot())

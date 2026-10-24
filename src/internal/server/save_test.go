@@ -309,9 +309,9 @@ func TestPendingRunEndHoldsTheLobby(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterCave{EnterCave: &gamev1.EnterCaveRequest{}}})
-	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterCaveRejected() != nil }).GetEnterCaveRejected(); r.GetReason() != MoveSaving {
-		t.Fatalf("enter cave rejected = %v, want saving", r)
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
+	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterInstanceRejected() != nil }).GetEnterInstanceRejected(); r.GetReason() != MoveSaving {
+		t.Fatalf("enter instance rejected = %v, want saving", r)
 	}
 	moveTo(t, conn, eq.GetItems()[0].GetId(), toStash)
 	if r := rejected(t, conn); r.GetReason() != MoveSaving {
@@ -325,7 +325,7 @@ func TestPendingRunEndHoldsTheLobby(t *testing.T) {
 	waitFor(t, conn, saving(false))
 	waitPending(t, h, 0)
 	waitSaved(t, h, "ann", func(c inventory.Character) bool { return c.XP == cfg.Classes.Progression.ExtractBonus })
-	enterCave(t, conn)
+	enterInstance(t, conn)
 }
 
 // A rejoin while the run end is pending opens the lobby from it, without a

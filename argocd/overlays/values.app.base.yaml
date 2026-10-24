@@ -8,12 +8,12 @@ fullnameOverride: fantasy-rpg
 
 replicas: 1
 
-# The cave-server image. The tag lives in the environment's values.app.yaml,
+# The instance-server image. The tag lives in the environment's values.app.yaml,
 # where Kargo writes it.
 image:
   repository: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
 
-# http-echo takes its port and text as args. The cave-server does not.
+# http-echo takes its port and text as args. The instance-server does not.
 args: []
 
 # That registry is private, so the kubelet needs a credential to pull from it.

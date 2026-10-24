@@ -18,7 +18,7 @@ message ClientMessage {
     UseRequest use = 17;
     LootOpenRequest loot_open = 18;
     LootCloseRequest loot_close = 19;
-    EnterCaveRequest enter_cave = 20;
+    EnterInstanceRequest enter_instance = 20;
     StashMoveRequest stash_move = 21;
   }
 }
@@ -42,7 +42,7 @@ message ServerMessage {
     Lobby lobby = 23;
     StashContents stash = 24;
     StashMoveRejected stash_move_rejected = 25;
-    EnterCaveRejected enter_cave_rejected = 26;
+    EnterInstanceRejected enter_instance_rejected = 26;
   }
 }
 
@@ -58,18 +58,18 @@ message Rect {
 
 // Player
 
-// JoinRequest puts the player in the lobby. EnterCaveRequest then puts them
-// in the cave.
+// JoinRequest puts the player in the lobby. EnterInstanceRequest then puts
+// them in the instance.
 message JoinRequest {
   string name = 1;
   // Empty means warrior. An unknown class closes the connection.
   string class_id = 2;
 }
 
-// JoinAccepted is sent when the player enters the cave.
+// JoinAccepted is sent when the player enters the instance.
 message JoinAccepted {
   uint64 player_id = 1;
-  CaveLayout cave = 2;
+  InstanceLayout layout = 2;
   Vec2 spawn = 3;
   // The client predicts its own movement one step per server tick.
   uint32 tick_rate = 4;
@@ -272,11 +272,11 @@ message WorldSnapshot {
   repeated EntityState entities = 2;
 }
 
-// Cave
+// Instance
 
-// CaveLayout is everything the client needs to draw the cave. Bounds is the
-// whole map, and anything outside a wall inside bounds is floor.
-message CaveLayout {
+// InstanceLayout is everything the client needs to draw the instance. Bounds
+// is the whole map, and anything outside a wall inside bounds is floor.
+message InstanceLayout {
   string name = 1;
   Rect bounds = 2;
   repeated Rect walls = 3;
@@ -401,13 +401,13 @@ message UseRequest {
 // Lobby
 
 // Lobby is sent on join and after every run. The player is out of the cave
-// until they send EnterCaveRequest. EquipmentUpdated, InventoryUpdated and
+// until they send EnterInstanceRequest. EquipmentUpdated, InventoryUpdated and
 // StashContents follow it.
 message Lobby {
   CharacterInfo character = 1;
   ClassInfo class_info = 2;
   // True while the last run's result is not in the database yet. Lobby moves
-  // and Enter Cave are rejected until a Lobby comes with it false.
+  // and Enter Instance are rejected until a Lobby comes with it false.
   bool saving = 3;
 }
 
@@ -440,11 +440,11 @@ message StashMoveRejected {
   string reason = 2;
 }
 
-// EnterCaveRequest leaves the lobby. The server answers with JoinAccepted.
-message EnterCaveRequest {}
+// EnterInstanceRequest leaves the lobby. The server answers with JoinAccepted.
+message EnterInstanceRequest {}
 
-// EnterCaveRejected is sent when the player stays in the lobby.
-message EnterCaveRejected {
+// EnterInstanceRejected is sent when the player stays in the lobby.
+message EnterInstanceRejected {
   // saving: the last run is still being saved.
   string reason = 1;
 }
