@@ -19,6 +19,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
@@ -49,22 +50,32 @@ func start(t *testing.T) harness {
 
 func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	t.Helper()
-	// Enemy stays put and cannot reach anyone, so the only damage in these
-	// tests comes from players.
+	return serve(t, cave, calm(cfg))
+}
+
+// calm stops enemies moving or reaching anyone, so the only damage in these
+// tests comes from players.
+func calm(cfg sim.Config) sim.Config {
 	for id, a := range cfg.Archetypes {
 		a.DetectRadius, a.PatrolSpeed, a.Speed, a.AttackRange, a.Special = 0, 0, 0, 0, sim.SpecialNone
 		cfg.Archetypes[id] = a
 	}
-	return serve(t, cave, cfg)
+	return cfg
 }
 
 // serve leaves the enemy as cfg has it.
 func serve(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	t.Helper()
+	return serveWith(t, cave, cfg, inventory.NewMemory())
+}
+
+func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.Store) harness {
+	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
 	world := cave.NewWorld(cfg, loot)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, sim.Melee)
 	srv := New(world, cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv.Store = store
 
 	ctx, cancel := context.WithCancel(context.Background())
 	loop := &tick.Loop{
@@ -614,15 +625,13 @@ func TestExtractionSavesXP(t *testing.T) {
 	id := joinAs(t, conn, "ann").GetPlayerId()
 	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
 	// An empty run still banks the flat extraction bonus.
-	if xp, err := h.srv.Store.LoadXP(context.Background(), "ann"); err != nil || xp != cfg.Classes.Progression.ExtractBonus {
-		t.Fatalf("saved xp = %d, %v", xp, err)
-	}
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return c.XP == cfg.Classes.Progression.ExtractBonus })
 }
 
 func TestJoinLoadsBankedXP(t *testing.T) {
 	h := start(t)
 	prog := sim.DefaultConfig().Classes.Progression
-	h.srv.Store.SaveXP(context.Background(), "ann", prog.XPToReach(prog.MaxLevel))
+	seed(t, h, inventory.Character{Name: "ann", XP: prog.XPToReach(prog.MaxLevel), Loadout: h.srv.starterKit()})
 	conn := dial(t, h.url)
 	joined := joinAs(t, conn, "ann")
 	if eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment(); stat(eq, "max_health") != 165 {
@@ -643,7 +652,7 @@ func TestJoinLoadsBankedXP(t *testing.T) {
 
 func TestJoinSendsCharacter(t *testing.T) {
 	h := start(t)
-	h.srv.Store.SaveXP(context.Background(), "ann", 120)
+	seed(t, h, inventory.Character{Name: "ann", XP: 120, Loadout: h.srv.starterKit()})
 	c := joinAs(t, dial(t, h.url), "ann").GetCharacter()
 	want := &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 2, Xp: 120, LevelXp: 20, XpToNext: 150}
 	if !proto.Equal(c, want) {
@@ -698,7 +707,7 @@ func TestExtractionSendsSummaryLast(t *testing.T) {
 	cfg := sim.DefaultConfig()
 	cfg.ExtractTime = 500 * time.Millisecond
 	h := startCave(t, cave, cfg)
-	h.srv.Store.SaveXP(context.Background(), "ann", 90)
+	seed(t, h, inventory.Character{Name: "ann", XP: 90, Loadout: h.srv.starterKit()})
 
 	leaver, other := dial(t, h.url), dial(t, h.url)
 	id := joinAs(t, leaver, "ann").GetPlayerId()
@@ -752,10 +761,9 @@ func TestDeathSendsRunEnded(t *testing.T) {
 	melee.Damage = 10000
 	cfg.Archetypes[sim.Melee] = melee
 	h := serve(t, cave, cfg)
-	h.srv.Store.SaveXP(context.Background(), "ann", 99)
-
 	potion := mustMake(t, h.srv, "health_potion")
-	h.srv.Store.SaveStash(context.Background(), "ann", []items.Instance{potion})
+	kit := h.srv.starterKit()
+	seed(t, h, inventory.Character{Name: "ann", XP: 99, Loadout: kit, Stash: []items.Instance{potion}})
 
 	conn := dial(t, h.url)
 	joinAs(t, conn, "ann")
@@ -787,9 +795,10 @@ func TestDeathSendsRunEnded(t *testing.T) {
 	if st := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetStash() != nil }).GetStash(); len(st.GetItems()) != 1 || st.GetItems()[0].GetId() != potion.ID {
 		t.Fatalf("stash after death = %v, want it untouched", st.GetItems())
 	}
-	if l, ok, _ := h.srv.Store.Load(context.Background(), "ann"); !ok || len(l.Items) != 0 || len(l.Equipment) != len(items.StarterKit) || l.Equipment[0].ID == "" {
-		t.Fatalf("saved loadout = %+v, %v, want only a new starter kit", l, ok)
-	}
+	waitSaved(t, h, "ann", func(c inventory.Character) bool {
+		l := c.Loadout
+		return c.XP == 100 && len(l.Items) == 0 && len(l.Equipment) == len(items.StarterKit) && l.Equipment[0].ID != "" && l.Equipment[0].ID != kit.Equipment[0].ID && len(c.Stash) == 1
+	})
 }
 
 func mustMake(t *testing.T, s *Server, def string) items.Instance {

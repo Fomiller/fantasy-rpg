@@ -37,7 +37,8 @@ const (
 type Server struct {
 	// TickRate is sent to clients on join. It must match the tick loop.
 	TickRate int
-	// Store keeps loadouts, stashes and banked XP by player name. Set it before serving.
+	// Store keeps characters and stashes by player name. Set it before
+	// serving. Only connection and writer goroutines call it, never the tick.
 	Store  inventory.Store
 	world  *sim.World
 	cave   caves.Cave
@@ -47,7 +48,8 @@ type Server struct {
 	inbox  chan func()
 	done   chan struct{}
 	stop   sync.Once
-	// conns has every connected player by name. clients has only those in the cave.
+	// conns has every connected player by name, until their last write lands.
+	// clients has only those in the cave.
 	conns   map[string]*client
 	clients map[sim.EntityID]*client
 }
@@ -57,9 +59,13 @@ type client struct {
 	class  string
 	out    chan []byte
 	cancel context.CancelFunc
+	writes *writer
 	// id is the player's entity in the cave. In the lobby it is 0 and lobby is set.
 	id    sim.EntityID
 	lobby *lobby
+	// runID and stash are set from cave entry, so the run end needs no read.
+	runID string
+	stash []items.Instance
 }
 
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
@@ -112,14 +118,14 @@ func (s *Server) Step(dt time.Duration) {
 	// An extracting player's summary rides on their Extracted, which has to
 	// come after the XP above and before the lobby.
 	summaries := map[sim.EntityID]*gamev1.RunSummary{}
+	after := map[sim.EntityID]inventory.Character{}
 	for _, end := range events.RunEnded {
-		s.saveXP(end)
-		summaries[end.Player] = s.endRun(end)
+		summaries[end.Player], after[end.Player] = s.endRun(end)
 	}
 	for _, id := range events.Extracted {
 		s.sendTo(id, protocol.Extracted(id, summaries[id]))
 		s.broadcastExcept(id, protocol.Extracted(id, nil))
-		s.toLobby(id)
+		s.toLobby(id, after[id])
 		s.log.Info("player extracted", "player", id)
 	}
 	for _, id := range events.Inventory {
@@ -133,8 +139,7 @@ func (s *Server) Step(dt time.Duration) {
 	}
 }
 
-// sendItems tells the player what they carry and saves it. Saving on every
-// change means a disconnect never loses anything.
+// sendItems tells the player what they carry. Nothing is saved until the run ends.
 func (s *Server) sendItems(id sim.EntityID) {
 	c, ok := s.clients[id]
 	p, alive := s.world.Player(id)
@@ -143,46 +148,38 @@ func (s *Server) sendItems(id sim.EntityID) {
 	}
 	s.sendToClient(c, protocol.Equipment(s.world, p))
 	s.sendToClient(c, protocol.Inventory(p))
-	if err := s.Store.Save(context.Background(), c.name, p.Loadout()); err != nil {
-		s.log.Error("save loadout", "player", id, "name", c.name, "err", err)
-	}
 }
 
-func (s *Server) saveXP(end sim.RunEnd) {
+// endRun tells the player about any new level and saves the run's result in
+// one write. A death's summary goes out here and the player goes back to the
+// lobby. An extraction's summary goes out with Extracted instead, and the
+// character returned is the lobby to open after it.
+func (s *Server) endRun(end sim.RunEnd) (*gamev1.RunSummary, inventory.Character) {
 	c, ok := s.clients[end.Player]
 	if !ok {
-		return
-	}
-	if err := s.Store.SaveXP(context.Background(), c.name, end.XP); err != nil {
-		s.log.Error("save xp", "player", end.Player, "name", c.name, "err", err)
-	}
-}
-
-// endRun tells the player about any new level and moves an extracted bag to
-// the stash. A death's summary goes out here and the player goes back to the
-// lobby. An extraction's summary goes out with Extracted instead.
-func (s *Server) endRun(end sim.RunEnd) *gamev1.RunSummary {
-	c, ok := s.clients[end.Player]
-	if !ok {
-		return nil
+		return nil, inventory.Character{}
 	}
 	if end.Levels > 0 {
 		s.sendTo(end.Player, protocol.LevelUp(end.Level, protocol.ClassInfo(s.world.Classes(), end.Class)))
 	}
 	summary := protocol.RunSummary(s.world.Classes().Progression, c.name, end)
+	ch := inventory.Character{Name: c.name, Class: c.class, XP: end.XP}
 	if end.Extracted {
-		summary.Overflow = protocol.Items(s.stashKept(c.name, end.Kept, end.Gear))
-		return summary
+		var overflow []items.Instance
+		ch.Stash, overflow = stashKept(c.stash, end.Kept)
+		ch.Loadout = inventory.Loadout{Equipment: end.Gear, Items: overflow}
+		summary.Overflow = protocol.Items(overflow)
+		s.saveRun(c, ch)
+		return summary, ch
 	}
 	s.sendTo(end.Player, protocol.RunEnded(summary))
 	// The gear and bag already lie on the ground, so the next lobby starts
 	// from the starter kit. The stash is untouched.
-	if err := s.Store.Delete(context.Background(), c.name); err != nil {
-		s.log.Error("delete loadout", "player", end.Player, "name", c.name, "err", err)
-	}
+	ch.Loadout, ch.Stash = s.starterKit(), c.stash
+	s.saveRun(c, ch)
 	s.world.RemovePlayer(end.Player)
-	s.toLobby(end.Player)
-	return summary
+	s.toLobby(end.Player, ch)
+	return summary, ch
 }
 
 func (s *Server) sendTo(id sim.EntityID, msg *gamev1.ServerMessage) {
@@ -271,34 +268,30 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if class == "" {
 		class = classes.Starter
 	}
-	c := &client{name: name, class: class, out: make(chan []byte, outboxSize), cancel: cancel}
-	joined := make(chan error, 1)
+	c := &client{name: name, class: class, out: make(chan []byte, outboxSize), cancel: cancel, writes: newWriter()}
+	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
 		// save the same items.
 		if _, ok := s.conns[name]; ok {
-			joined <- errors.New("name already playing")
+			claimed <- errors.New("name already playing")
 			return
 		}
 		if _, ok := s.world.Classes().Classes[class]; !ok {
-			joined <- fmt.Errorf("unknown class %q", class)
-			return
-		}
-		if err := s.openLobby(c); err != nil {
-			joined <- err
+			claimed <- fmt.Errorf("unknown class %q", class)
 			return
 		}
 		s.conns[name] = c
-		joined <- nil
+		claimed <- nil
 	})
 	if !ok {
 		conn.Close(websocket.StatusGoingAway, "server shutting down")
 		return
 	}
-
+	// Wait even if the client goes, or a late claim would hold the name forever.
 	select {
-	case err = <-joined:
-	case <-ctx.Done():
+	case err = <-claimed:
+	case <-s.done:
 		return
 	}
 	if err != nil {
@@ -306,19 +299,24 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log := s.log.With("name", name)
-	log.Info("player joined")
+	go s.saveLoop(c)
 	defer func() {
-		s.enqueue(func() {
-			if c.id != 0 {
-				if end, ok := s.world.RemovePlayer(c.id); ok {
-					s.saveXP(end)
-				}
-				delete(s.clients, c.id)
-			}
-			delete(s.conns, name)
-		})
+		s.enqueue(func() { s.leave(c) })
 		log.Info("player left")
 	}()
+
+	ch, err := s.loadCharacter(ctx, name, class)
+	if err != nil {
+		log.Error("load character", "err", err)
+		// Never fall back to a starter kit, which would later save over real gear.
+		conn.Close(websocket.StatusTryAgainLater, "characters unavailable")
+		return
+	}
+	if !s.enqueue(func() { s.openLobby(c, ch) }) {
+		conn.Close(websocket.StatusGoingAway, "server shutting down")
+		return
+	}
+	log.Info("player joined")
 
 	go s.writeLoop(ctx, conn, c, cancel)
 
@@ -339,6 +337,20 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// leave runs on the tick loop once the connection is gone. A run in progress
+// ends as a death would for XP, but keeps what the player carried until the
+// 30 s rule in FOM-217.
+func (s *Server) leave(c *client) {
+	if c.id != 0 {
+		p, _ := s.world.Player(c.id)
+		if end, ok := s.world.RemovePlayer(c.id); ok {
+			s.saveRun(c, inventory.Character{Name: c.name, Class: c.class, XP: end.XP, Loadout: p.Loadout(), Stash: c.stash})
+		}
+		delete(s.clients, c.id)
+	}
+	c.writes.close()
 }
 
 // handle runs on the tick loop, which is the only place c.id and c.lobby change.

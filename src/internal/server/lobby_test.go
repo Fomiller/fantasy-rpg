@@ -128,7 +128,7 @@ func rejected(t *testing.T, conn *websocket.Conn) *gamev1.StashMoveRejected {
 // A joined player is in the lobby, not the cave, until they enter.
 func TestJoinLandsInLobby(t *testing.T) {
 	h := start(t)
-	h.srv.Store.SaveXP(context.Background(), "ann", 120)
+	seed(t, h, inventory.Character{Name: "ann", XP: 120, Loadout: h.srv.starterKit()})
 	other := dial(t, h.url)
 	otherID := join(t, other)
 
@@ -176,7 +176,7 @@ func cfgPerLevel(t *testing.T, stat string) int32 {
 func TestLobbyMovesOverTheWire(t *testing.T) {
 	h := start(t)
 	potion := mustMake(t, h.srv, "health_potion")
-	h.srv.Store.SaveStash(context.Background(), "ann", []items.Instance{potion})
+	seed(t, h, inventory.Character{Name: "ann", Loadout: h.srv.starterKit(), Stash: []items.Instance{potion}})
 	conn := dial(t, h.url)
 	lobbyAs(t, conn, "ann")
 	eq, _, _ := lobbyItems(t, conn)
@@ -195,13 +195,9 @@ func TestLobbyMovesOverTheWire(t *testing.T) {
 		t.Fatalf("bag = %v", inv.GetItems())
 	}
 
-	ctx := context.Background()
-	if stash, _ := h.srv.Store.LoadStash(ctx, "ann"); len(stash) != 1 || stash[0].ID != sword.GetId() {
-		t.Fatalf("saved stash = %v", ids(stash))
-	}
-	if l, _, _ := h.srv.Store.Load(ctx, "ann"); len(l.Items) != 1 || l.Items[0].ID != potion.ID {
-		t.Fatalf("saved loadout = %+v", l)
-	}
+	waitSaved(t, h, "ann", func(c inventory.Character) bool {
+		return fmt.Sprint(ids(c.Stash)) == fmt.Sprintf("[%s:1]", sword.GetId()) && len(c.Loadout.Items) == 1 && c.Loadout.Items[0].ID == potion.ID
+	})
 
 	moveTo(t, conn, potion.ID, toGear)
 	if r := rejected(t, conn); r.GetItemId() != potion.ID || r.GetReason() != MoveCannotEquip {
@@ -276,7 +272,7 @@ func startExtract(t *testing.T) harness {
 func TestExtractionMovesBagToStash(t *testing.T) {
 	h := startExtract(t)
 	potion := mustMake(t, h.srv, "health_potion")
-	h.srv.Store.Save(context.Background(), "ann", inventory.Loadout{Equipment: h.srv.starterKit().Equipment, Items: []items.Instance{potion}})
+	seed(t, h, inventory.Character{Name: "ann", Loadout: inventory.Loadout{Equipment: h.srv.starterKit().Equipment, Items: []items.Instance{potion}}})
 
 	conn := dial(t, h.url)
 	joinAs(t, conn, "ann")
@@ -290,22 +286,18 @@ func TestExtractionMovesBagToStash(t *testing.T) {
 	if len(eq.GetItems()) != len(items.StarterKit) || len(inv.GetItems()) != 0 || len(st.GetItems()) != 1 || st.GetItems()[0].GetId() != potion.ID {
 		t.Fatalf("lobby after extraction: gear %v, bag %v, stash %v", eq.GetItems(), inv.GetItems(), st.GetItems())
 	}
-	if stash, _ := h.srv.Store.LoadStash(context.Background(), "ann"); len(stash) != 1 {
-		t.Fatalf("saved stash = %v", ids(stash))
-	}
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return len(c.Stash) == 1 && len(c.Loadout.Items) == 0 })
 }
 
 // What a full stash cannot take stays in the bag, and the summary says so.
 func TestExtractionIntoFullStash(t *testing.T) {
 	h := startExtract(t)
-	ctx := context.Background()
 	var full []items.Instance
 	for i := range inventory.StashSize - 1 {
 		full = append(full, helm(fmt.Sprint(i)))
 	}
-	h.srv.Store.SaveStash(ctx, "ann", full)
 	fits, spills := mustMake(t, h.srv, "health_potion"), mustMake(t, h.srv, "rusty_sword")
-	h.srv.Store.Save(ctx, "ann", inventory.Loadout{Items: []items.Instance{fits, spills}})
+	seed(t, h, inventory.Character{Name: "ann", Loadout: inventory.Loadout{Items: []items.Instance{fits, spills}}, Stash: full})
 
 	conn := dial(t, h.url)
 	joinAs(t, conn, "ann")
@@ -318,7 +310,7 @@ func TestExtractionIntoFullStash(t *testing.T) {
 	if len(inv.GetItems()) != 1 || inv.GetItems()[0].GetId() != spills.ID {
 		t.Fatalf("bag = %v, want the overflow", inv.GetItems())
 	}
-	if stash, _ := h.srv.Store.LoadStash(ctx, "ann"); len(stash) != inventory.StashSize || stash[len(stash)-1].ID != fits.ID {
-		t.Fatalf("saved stash has %d, want it full with the potion last", len(stash))
-	}
+	waitSaved(t, h, "ann", func(c inventory.Character) bool {
+		return len(c.Stash) == inventory.StashSize && c.Stash[len(c.Stash)-1].ID == fits.ID && fmt.Sprint(ids(c.Loadout.Items)) == fmt.Sprintf("[%s:1]", spills.ID)
+	})
 }

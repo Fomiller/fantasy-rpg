@@ -290,8 +290,9 @@ FOM-215 built this loop. Where it differs from the plan above:
   gear slot. Gear already in the slot goes where the new gear came from.
   The server rejects a move with `not_in_lobby`, `unknown_item`, `full`
   or `cannot_equip`.
-- Stashing every item saves an empty loadout. Only a death clears it, so
-  the starter kit is not handed out again for an empty bag.
+- Stashing every item saves an empty loadout. Only a death replaces it,
+  with a new starter kit, so the kit is not handed out again for an empty
+  bag.
 
 ### Disconnects
 

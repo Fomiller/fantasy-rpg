@@ -2,6 +2,8 @@ package inventory
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -11,79 +13,128 @@ import (
 // StashSize is how many entries a stash holds. Stacks count as one, as in the bag.
 const StashSize = 100
 
-// Store keeps each player's loadout and stash by name, so a player who
-// leaves and comes back gets their items again.
+var (
+	ErrNoCharacter = errors.New("no such character")
+	ErrNoRunID     = errors.New("run id is empty")
+)
+
+// Character is what the store keeps for one class of one account. Level is
+// not kept, since it comes from XP. Stash belongs to the account, so every
+// class of that account shares it.
+type Character struct {
+	Name    string
+	Class   string
+	XP      int
+	Loadout Loadout
+	Stash   []items.Instance
+}
+
+// Store keeps characters between connections. Each write is one call that
+// replaces whole values, so a crash never leaves the stash and the
+// character disagreeing.
 type Store interface {
-	Load(ctx context.Context, name string) (Loadout, bool, error)
-	Save(ctx context.Context, name string, l Loadout) error
-	Delete(ctx context.Context, name string) error
-	// Banked XP is kept apart from the loadout, which is deleted when a
-	// player loses everything. It is 0 for a new player.
-	LoadXP(ctx context.Context, name string) (int, error)
-	SaveXP(ctx context.Context, name string, xp int) error
-	// The stash is safe between runs. Only extraction and lobby moves change
-	// it, and a death never touches it. It is empty for a new player.
-	LoadStash(ctx context.Context, name string) ([]items.Instance, error)
-	SaveStash(ctx context.Context, name string, stash []items.Instance) error
+	// Load returns false for a name and class that have never joined. The
+	// stash is filled even then if the account has one.
+	Load(ctx context.Context, name, class string) (Character, bool, error)
+	// Create saves a new character with its starter kit. It is a no-op if the
+	// character already exists, so two racing joins cannot both hand out a kit.
+	// A new account starts with c.Stash; an existing one keeps its own.
+	Create(ctx context.Context, c Character) error
+	// SaveLobby writes the loadout and stash after a lobby move.
+	SaveLobby(ctx context.Context, name, class string, l Loadout, stash []items.Instance) error
+	// EndRun writes XP, loadout and stash after a run. Writing the same run id
+	// twice is a no-op, so a retry after a lost reply cannot apply it twice.
+	EndRun(ctx context.Context, runID string, c Character) error
 }
 
 // Memory is a Store that lasts as long as the process. Postgres replaces it
-// in FOM-114.
+// in FOM-216.
 type Memory struct {
-	mu       sync.Mutex
-	loadouts map[string]Loadout
-	xp       map[string]int
-	stashes  map[string][]items.Instance
+	mu         sync.Mutex
+	stashes    map[string][]items.Instance
+	characters map[charKey]*saved
+}
+
+type charKey struct{ name, class string }
+
+type saved struct {
+	xp      int
+	loadout Loadout
+	lastRun string
 }
 
 func NewMemory() *Memory {
-	return &Memory{loadouts: map[string]Loadout{}, xp: map[string]int{}, stashes: map[string][]items.Instance{}}
+	return &Memory{stashes: map[string][]items.Instance{}, characters: map[charKey]*saved{}}
 }
 
-func (m *Memory) Load(_ context.Context, name string) (Loadout, bool, error) {
+func (m *Memory) Load(_ context.Context, name, class string) (Character, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	l, ok := m.loadouts[name]
-	return l.clone(), ok, nil
+	c := Character{Name: name, Class: class, Stash: slices.Clone(m.stashes[name])}
+	s, ok := m.characters[charKey{name, class}]
+	if !ok {
+		return c, false, nil
+	}
+	c.XP, c.Loadout = s.xp, s.loadout.clone()
+	return c, true, nil
 }
 
-func (m *Memory) Save(_ context.Context, name string, l Loadout) error {
+func (m *Memory) Create(_ context.Context, c Character) error {
+	if err := checkStash(c.Stash); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.loadouts[name] = l.clone()
+	if _, ok := m.stashes[c.Name]; !ok {
+		m.stashes[c.Name] = slices.Clone(c.Stash)
+	}
+	key := charKey{c.Name, c.Class}
+	if _, ok := m.characters[key]; !ok {
+		m.characters[key] = &saved{xp: c.XP, loadout: c.Loadout.clone()}
+	}
 	return nil
 }
 
-func (m *Memory) Delete(_ context.Context, name string) error {
+func (m *Memory) SaveLobby(_ context.Context, name, class string, l Loadout, stash []items.Instance) error {
+	if err := checkStash(stash); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.loadouts, name)
-	return nil
-}
-
-func (m *Memory) LoadXP(_ context.Context, name string) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.xp[name], nil
-}
-
-func (m *Memory) SaveXP(_ context.Context, name string, xp int) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.xp[name] = xp
-	return nil
-}
-
-func (m *Memory) LoadStash(_ context.Context, name string) ([]items.Instance, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return slices.Clone(m.stashes[name]), nil
-}
-
-func (m *Memory) SaveStash(_ context.Context, name string, stash []items.Instance) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	s, ok := m.characters[charKey{name, class}]
+	if !ok {
+		return fmt.Errorf("%w: %s %s", ErrNoCharacter, name, class)
+	}
+	s.loadout = l.clone()
 	m.stashes[name] = slices.Clone(stash)
+	return nil
+}
+
+func (m *Memory) EndRun(_ context.Context, runID string, c Character) error {
+	if runID == "" {
+		return ErrNoRunID
+	}
+	if err := checkStash(c.Stash); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.characters[charKey{c.Name, c.Class}]
+	if !ok {
+		return fmt.Errorf("%w: %s %s", ErrNoCharacter, c.Name, c.Class)
+	}
+	if s.lastRun == runID {
+		return nil
+	}
+	s.xp, s.loadout, s.lastRun = c.XP, c.Loadout.clone(), runID
+	m.stashes[c.Name] = slices.Clone(c.Stash)
+	return nil
+}
+
+func checkStash(stash []items.Instance) error {
+	if len(stash) > StashSize {
+		return fmt.Errorf("stash has %d entries, the limit is %d", len(stash), StashSize)
+	}
 	return nil
 }
 
