@@ -238,7 +238,9 @@ No respec cost, so a bad pick is never a trap.
 ## Persistence model
 
 Today the inventory store saves a `Loadout` by player name, in memory. This
-section is the target for FOM-113 and FOM-114.
+section is the target for FOM-113 and FOM-114. [Persistence](persistence.md)
+sets the schema and store interface. It keeps items as JSONB lists, not the
+row tables in "What to save" below.
 
 ### Three scopes
 
