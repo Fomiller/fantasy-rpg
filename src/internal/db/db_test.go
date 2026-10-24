@@ -115,6 +115,16 @@ func dropDB(name string) {
 // newDB returns a fresh database. Pass migrated false for an empty one.
 func newDB(t *testing.T, migrated bool) *sql.DB {
 	t.Helper()
+	conn, err := Open(newDBURL(t, migrated))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+func newDBURL(t *testing.T, migrated bool) string {
+	t.Helper()
 	if setupErr != nil {
 		if !noDocker || os.Getenv("CI") != "" {
 			t.Fatalf("no postgres for tests: %v", setupErr)
@@ -130,12 +140,7 @@ func newDB(t *testing.T, migrated bool) *sql.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { dropDB(name) })
-	conn, err := Open(dbURL(name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { conn.Close() })
-	return conn
+	return dbURL(name)
 }
 
 func TestMigrateEmptyDatabase(t *testing.T) {

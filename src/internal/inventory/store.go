@@ -47,8 +47,8 @@ type Store interface {
 	EndRun(ctx context.Context, runID string, c Character) error
 }
 
-// Memory is a Store that lasts as long as the process. Postgres replaces it
-// in FOM-216.
+// Memory is a Store that lasts as long as the process. db.Store is the
+// Postgres one.
 type Memory struct {
 	mu         sync.Mutex
 	stashes    map[string][]items.Instance

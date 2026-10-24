@@ -149,6 +149,13 @@ adding a rarity never shifts the ones already saved.
 }
 ```
 
+- The struct is `item` in `src/internal/db/items.go`. `TestItemJSONShape`
+  pins the exact bytes, so a change to it fails a test.
+- `weapon` is left out for anything but a weapon. `base` and `affixes` are
+  left out when empty.
+- A rarity name the server does not know fails the `Load`. The join is then
+  rejected like any other load error, instead of handing out a wrong item.
+
 A data change to items is a migration that rewrites the JSON in SQL, for
 example with `jsonb_set`.
 
@@ -203,6 +210,9 @@ type Store interface {
 - `Delete`, `LoadXP`, `SaveXP`, `LoadStash` and `SaveStash` go away.
 - `Memory` implements the same four calls with the same rules. One
   contract test suite runs against both stores.
+- `db.Store` is the Postgres one, on a `pgxpool.Pool`. `SaveLobby` and
+  `EndRun` each run in one transaction. `EndRun` locks the character row,
+  and returns early when `last_run_id` already equals `runID`.
 
 ### When the server writes
 
@@ -265,7 +275,9 @@ it delays saves.
   the cave and kills every run. Neither helps a database outage.
 - Metrics: `store_duration_seconds` by call, `store_errors_total` by call,
   and `store_pending_saves`. An alert on pending saves above 0 for 5 minutes
-  catches an outage.
+  catches an outage. FOM-216 adds the first two with `inventory.Metered`,
+  on both stores. Each retry counts as its own call. `store_pending_saves`
+  waits for FOM-223.
 
 FOM-220 does the join row: close code 1013 and no starter kit. `EndRun`
 retries for 10 s, then logs the error and drops the result. A failed

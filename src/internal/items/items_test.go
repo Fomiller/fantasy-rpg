@@ -75,3 +75,14 @@ func TestValidateCatchesBadData(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRarityRoundTrips(t *testing.T) {
+	for r := Common; r <= Unique; r++ {
+		if got, err := ParseRarity(r.String()); err != nil || got != r {
+			t.Fatalf("ParseRarity(%q) = %v, %v", r.String(), got, err)
+		}
+	}
+	if _, err := ParseRarity("legendary"); err == nil {
+		t.Fatal("parsed a rarity that does not exist")
+	}
+}
