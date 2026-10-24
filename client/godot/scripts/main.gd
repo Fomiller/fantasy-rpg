@@ -14,6 +14,10 @@ const POPUP_SPACING := 16.0
 const ABILITY_ACTIONS := ["attack", "ability_1", "ability_2", "ability_3"]
 # Any Control in this group is a window that Escape closes.
 const WINDOWS_GROUP := "windows"
+# Close reasons the server sends, as the join screen says them.
+const CLOSE_TEXT := {
+	"characters unavailable": "Can't load your character. Try again in a minute.",
+}
 
 @onready var _connection: ServerConnection = $ServerConnection
 @onready var _cave: Cave = $Cave
@@ -76,6 +80,7 @@ func _ready() -> void:
 	_connection.inventory_received.connect(_lobby.show_inventory)
 	_connection.stash_received.connect(_lobby.show_stash)
 	_connection.stash_move_rejected.connect(_lobby.show_rejected)
+	_connection.enter_cave_rejected.connect(_lobby.show_enter_rejected)
 	_lobby.send_move = _connection.send_stash_move
 	_lobby.send_enter = _connection.send_enter_cave
 	_player.cave = _cave
@@ -220,7 +225,7 @@ func _on_lobby() -> void:
 	_character.setup(_connection.character, _connection.class_info)
 	if _connection.character:
 		_xp_bar.show_character(_connection.character)
-	_lobby.show_lobby(_connection.character, _connection.class_info)
+	_lobby.show_lobby(_connection.character, _connection.class_info, _connection.saving)
 	_status.text = "lobby"
 
 
@@ -229,7 +234,8 @@ func _on_disconnected() -> void:
 	_character.clear()
 	_xp_bar.clear()
 	_lobby.visible = false
-	_status.text = "offline"
+	var reason := _connection.close_reason
+	_status.text = "offline" if reason == "" else "offline · %s" % CLOSE_TEXT.get(reason, reason)
 
 
 func _clear_cave() -> void:

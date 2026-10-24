@@ -248,7 +248,9 @@ progress".
   roller is not safe to share.
 - The name stays claimed until the writer has run the player's last write.
   A rejoin before then gets "name already playing", so it can never load a
-  character that a queued `EndRun` is about to change.
+  character that a queued `EndRun` is about to change. The one exception is
+  a run end that has not landed: the rejoin takes over the writer and opens
+  the lobby from that result.
 - Each call gets a 2 s timeout. Join has 5 s in total today
   (`joinTimeout`), which still fits.
 
@@ -276,18 +278,22 @@ it delays saves.
 - Metrics: `store_duration_seconds` by call, `store_errors_total` by call,
   and `store_pending_saves`. An alert on pending saves above 0 for 5 minutes
   catches an outage. FOM-216 adds the first two with `inventory.Metered`,
-  on both stores. Each retry counts as its own call. `store_pending_saves`
-  waits for FOM-223.
+  on both stores. Each retry counts as its own call. FOM-223 adds
+  `store_pending_saves`, a gauge on `Server` of run ends past their 10 s.
 
-FOM-220 does the join row: close code 1013 and no starter kit. `EndRun`
-retries for 10 s, then logs the error and drops the result. A failed
-`SaveLobby` is only logged. The pending save, the undo and the `saving`
-reason wait for FOM-223.
+FOM-220 did the join row: close code 1013 and no starter kit. FOM-223 did
+the rest:
 
-The `saving` state needs two protocol changes: a `saving` field on `Lobby`
-and a new `saving` reason on `StashMoveRejected`. The client also needs to
-show the WebSocket close reason on the join screen. Today
-`server_connection.gd` only prints the close code.
+- `Lobby.saving` is true from the run end until `EndRun` lands, not only
+  after the 10 s. The server sends `Lobby` again when it lands.
+- Lobby moves while saving get `StashMoveRejected` with reason `saving`.
+  Enter Cave gets the new `EnterCaveRejected`, also with reason `saving`.
+- A failed `SaveLobby` puts the lobby back to what the store has and sends
+  `StashMoveRejected` with reason `saving`. A newer queued save decides
+  instead, since it writes the whole lobby again.
+- The join screen shows the close reason. `characters unavailable` reads
+  "Can't load your character. Try again in a minute." Other reasons show as
+  the server sent them.
 
 ## Migrations
 

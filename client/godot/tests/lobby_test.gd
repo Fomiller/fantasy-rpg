@@ -58,6 +58,20 @@ func _run() -> void:
 	await _frames(2)
 	_check(lobby.visible, "escape does not close the lobby")
 
+	connection._handle(_lobby(true))
+	await _frames(1)
+	_check(connection.saving and _has_text(lobby, "Saving..."), "a run still saving shows Saving...")
+	_check(_button(lobby, "", "Enter cave").disabled, "enter cave is off while saving")
+	connection._handle(_enter_rejected("saving"))
+	await _frames(1)
+	_check(_has_text(lobby, "Still saving your last run"), "a rejected enter cave says why")
+	connection._handle(_rejected("helm", "saving"))
+	await _frames(1)
+	_check(_has_text(lobby, "Couldn't save, try again"), "a move the server could not save says so")
+	connection._handle(_lobby())
+	await _frames(1)
+	_check(not connection.saving and not _has_text(lobby, "Saving...") and not _button(lobby, "", "Enter cave").disabled, "the save landing turns enter cave back on")
+
 	_button(lobby, "", "Enter cave").pressed.emit()
 	_check(_sent == ["enter"], "enter cave asks the server")
 
@@ -78,6 +92,14 @@ func _run() -> void:
 	await _frames(2)
 	_check(not summary.visible and lobby.visible, "escape closes the summary and leaves the lobby")
 
+	var status: Label = main.get_node("HUD/Status")
+	connection._closed(1013, "characters unavailable")
+	await _frames(1)
+	_check(status.text == "offline · Can't load your character. Try again in a minute.", "the join screen says why the server closed (got %s)" % status.text)
+	connection._closed(1008, "name already playing")
+	await _frames(1)
+	_check(status.text == "offline · name already playing", "a reason with no text of its own is shown as sent (got %s)" % status.text)
+
 	print("lobby_test: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -88,9 +110,10 @@ func _message() -> GameV1.ServerMessage:
 	return msg
 
 
-func _lobby() -> PackedByteArray:
+func _lobby(saving := false) -> PackedByteArray:
 	var msg := _message()
 	var lobby := msg.new_lobby()
+	lobby.set_saving(saving)
 	var info := lobby.new_class_info()
 	info.set_name("Warrior")
 	info.set_basic("slash")
@@ -147,6 +170,12 @@ func _rejected(item_id: String, reason: String) -> PackedByteArray:
 	var r := msg.new_stash_move_rejected()
 	r.set_item_id(item_id)
 	r.set_reason(reason)
+	return msg.to_bytes()
+
+
+func _enter_rejected(reason: String) -> PackedByteArray:
+	var msg := _message()
+	msg.new_enter_cave_rejected().set_reason(reason)
 	return msg.to_bytes()
 
 

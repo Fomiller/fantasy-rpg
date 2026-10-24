@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/prometheus/client_golang/prometheus"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
@@ -52,6 +53,12 @@ type Server struct {
 	// clients has only those in the cave.
 	conns   map[string]*client
 	clients map[sim.EntityID]*client
+
+	// PendingSaves counts run ends that are past their patience and still
+	// retrying. Register it to export it.
+	PendingSaves prometheus.Gauge
+	// Tests shorten these.
+	endRunPatience, pendingRetry time.Duration
 }
 
 type client struct {
@@ -66,6 +73,12 @@ type client struct {
 	// runID and stash are set from cave entry, so the run end needs no read.
 	runID string
 	stash []items.Instance
+	// pending is the run end not in the store yet.
+	pending *inventory.Character
+	// saved is the lobby as the store has it once queued writes land. A failed
+	// lobby save goes back to it. The seqs order lobby saves.
+	saved              inventory.Character
+	lobbySeq, savedSeq int
 }
 
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
@@ -80,6 +93,13 @@ func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger
 		done:     make(chan struct{}),
 		conns:    map[string]*client{},
 		clients:  map[sim.EntityID]*client{},
+
+		PendingSaves: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "store_pending_saves",
+			Help: "Run end saves that failed for longer than their patience and are still retrying.",
+		}),
+		endRunPatience: endRunPatience,
+		pendingRetry:   pendingRetry,
 	}
 }
 
@@ -270,11 +290,21 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	c := &client{name: name, class: class, out: make(chan []byte, outboxSize), cancel: cancel, writes: newWriter()}
 	claimed := make(chan error, 1)
+	// resume is set when the join takes over a run end that is still saving.
+	var resume *inventory.Character
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
 		// save the same items.
-		if _, ok := s.conns[name]; ok {
-			claimed <- errors.New("name already playing")
+		if old, ok := s.conns[name]; ok {
+			if old.pending == nil || old.class != class || !old.writes.reopen() {
+				claimed <- errors.New("name already playing")
+				return
+			}
+			c.writes, c.pending = old.writes, old.pending
+			s.conns[name] = c
+			ch := cloneCharacter(*c.pending)
+			resume = &ch
+			claimed <- nil
 			return
 		}
 		if _, ok := s.world.Classes().Classes[class]; !ok {
@@ -299,13 +329,21 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log := s.log.With("name", name)
-	go s.saveLoop(c)
+	if resume == nil {
+		go s.saveLoop(name, c.writes)
+	}
 	defer func() {
 		s.enqueue(func() { s.leave(c) })
 		log.Info("player left")
 	}()
 
-	ch, err := s.loadCharacter(ctx, name, class)
+	// A pending save is newer than the store, so it is what the lobby opens from.
+	var ch inventory.Character
+	if resume != nil {
+		ch = *resume
+	} else {
+		ch, err = s.loadCharacter(ctx, name, class)
+	}
 	if err != nil {
 		log.Error("load character", "err", err)
 		// Never fall back to a starter kit, which would later save over real gear.

@@ -22,6 +22,7 @@ signal level_up(event: GameV1.LevelUp)
 signal run_ended(summary: GameV1.RunSummary)
 signal stash_received(items: Array[GameV1.Item], capacity: int)
 signal stash_move_rejected(event: GameV1.StashMoveRejected)
+signal enter_cave_rejected(event: GameV1.EnterCaveRejected)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
@@ -42,6 +43,10 @@ var class_info: GameV1.ClassInfo
 var character: GameV1.CharacterInfo
 # Between runs. player_id is 0 while it is set.
 var in_lobby := false
+# The last run is not in the database yet, so the server turns away Enter Cave.
+var saving := false
+# Why the server last closed the socket. Empty when it gave no reason.
+var close_reason := ""
 
 var _socket := WebSocketPeer.new()
 var _url := DEFAULT_URL
@@ -188,14 +193,20 @@ func _process(delta: float) -> void:
 				_handle(_socket.get_packet())
 		WebSocketPeer.STATE_CLOSED:
 			if _was_open:
-				_was_open = false
-				player_id = 0
-				in_lobby = false
-				print("disconnected from %s (%d)" % [_url, _socket.get_close_code()])
-				disconnected.emit()
+				_closed(_socket.get_close_code(), _socket.get_close_reason())
 			_retry_in -= delta
 			if _retry_in <= 0.0:
 				_connect()
+
+
+func _closed(code: int, reason: String) -> void:
+	_was_open = false
+	player_id = 0
+	in_lobby = false
+	saving = false
+	close_reason = reason
+	print("disconnected from %s (%d %s)" % [_url, code, reason])
+	disconnected.emit()
 
 
 func _connect() -> void:
@@ -223,6 +234,7 @@ func _handle(bytes: PackedByteArray) -> void:
 		var lobby := msg.get_lobby()
 		player_id = 0
 		in_lobby = true
+		saving = lobby.get_saving()
 		class_info = lobby.get_class_info()
 		character = lobby.get_character() if lobby.has_character() else null
 		lobby_entered.emit()
@@ -230,6 +242,8 @@ func _handle(bytes: PackedByteArray) -> void:
 		stash_received.emit(msg.get_stash().get_items(), msg.get_stash().get_capacity())
 	elif msg.has_stash_move_rejected():
 		stash_move_rejected.emit(msg.get_stash_move_rejected())
+	elif msg.has_enter_cave_rejected():
+		enter_cave_rejected.emit(msg.get_enter_cave_rejected())
 	elif msg.has_joined():
 		var accepted := msg.get_joined()
 		in_lobby = false

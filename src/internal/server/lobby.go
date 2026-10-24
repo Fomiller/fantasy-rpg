@@ -17,6 +17,8 @@ const (
 	MoveFull         = "full"
 	MoveCannotEquip  = "cannot_equip"
 	MoveUnknownPlace = "unknown_place"
+	// MoveSaving is also why Enter Cave did nothing.
+	MoveSaving = "saving"
 )
 
 // lobby is a player between runs. Their items live here, not in the world,
@@ -138,11 +140,17 @@ func (lb *lobby) bagAt(place gamev1.ItemPlace) *inventory.Bag {
 func (s *Server) openLobby(c *client, ch inventory.Character) {
 	c.lobby = newLobby(ch.XP, s.world.BagSize(), ch.Loadout, ch.Stash)
 	c.runID, c.stash = "", nil
-
-	prog := s.world.Classes().Progression
-	level := prog.LevelFor(ch.XP)
-	s.sendToClient(c, protocol.Lobby(protocol.Character(prog, c.name, c.class, level, ch.XP, 0), protocol.ClassInfo(s.world.Classes(), c.class)))
+	// A lobby save from before this lobby must not count as what is saved now.
+	c.lobbySeq++
+	c.saved, c.savedSeq = cloneCharacter(ch), c.lobbySeq
+	s.sendLobby(c)
 	s.sendLobbyItems(c)
+}
+
+func (s *Server) sendLobby(c *client) {
+	prog := s.world.Classes().Progression
+	character := protocol.Character(prog, c.name, c.class, prog.LevelFor(c.lobby.xp), c.lobby.xp, 0)
+	s.sendToClient(c, protocol.Lobby(character, protocol.ClassInfo(s.world.Classes(), c.class), c.pending != nil))
 }
 
 func (s *Server) sendLobbyItems(c *client) {
@@ -159,20 +167,28 @@ func (s *Server) sendLobbyItems(c *client) {
 // moveItem checks a lobby move and saves what changed.
 func (s *Server) moveItem(c *client, req *gamev1.StashMoveRequest) {
 	reason := MoveNotInLobby
-	if c.lobby != nil {
+	switch {
+	case c.lobby != nil && c.pending != nil:
+		// Saving on top of a run that has not landed could lose the run.
+		reason = MoveSaving
+	case c.lobby != nil:
 		reason = c.lobby.move(req.GetItemId(), req.GetTo(), func(inst items.Instance) error { return s.world.CanEquip(c.class, inst) })
 	}
 	if reason != "" {
 		s.sendToClient(c, protocol.StashMoveRejected(req.GetItemId(), reason))
 		return
 	}
-	s.saveLobby(c)
+	s.saveLobby(c, req.GetItemId())
 	s.sendLobbyItems(c)
 }
 
 // enterCave spawns a lobby player with everything they have on them.
 func (s *Server) enterCave(c *client) {
 	if c.lobby == nil {
+		return
+	}
+	if c.pending != nil {
+		s.sendToClient(c, protocol.EnterCaveRejected(MoveSaving))
 		return
 	}
 	spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]

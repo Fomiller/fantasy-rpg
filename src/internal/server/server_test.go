@@ -69,13 +69,17 @@ func serve(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	return serveWith(t, cave, cfg, inventory.NewMemory())
 }
 
-func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.Store) harness {
+// configure runs before the server starts, so it can set what the tick reads.
+func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.Store, configure ...func(*Server)) harness {
 	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
 	world := cave.NewWorld(cfg, loot)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, sim.Melee)
 	srv := New(world, cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	srv.Store = store
+	for _, f := range configure {
+		f(srv)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	loop := &tick.Loop{
@@ -337,7 +341,7 @@ func TestExtractionReturnsToLobby(t *testing.T) {
 
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
 	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
-	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil })
+	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil && !m.GetLobby().GetSaving() })
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool {
 		return m.GetSnapshot() != nil && entity(m.GetSnapshot(), id) == nil
 	})

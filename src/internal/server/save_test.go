@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
@@ -52,9 +54,10 @@ type spyStore struct {
 	*inventory.Memory
 	mu sync.Mutex
 	// ops is every call in order.
-	ops         []string
-	loadDown    bool
-	endRunFails int
+	ops            []string
+	loadDown       bool
+	endRunFails    int
+	saveLobbyFails int
 	// hold, when set, makes EndRun wait until it is closed.
 	hold chan struct{}
 }
@@ -91,7 +94,26 @@ func (s *spyStore) Create(ctx context.Context, c inventory.Character) error {
 
 func (s *spyStore) SaveLobby(ctx context.Context, name, class string, l inventory.Loadout, stash []items.Instance) error {
 	s.record("save lobby")
+	s.mu.Lock()
+	fail := s.saveLobbyFails > 0
+	if fail {
+		s.saveLobbyFails--
+	}
+	s.mu.Unlock()
+	if fail {
+		return errDown
+	}
 	return s.Memory.SaveLobby(ctx, name, class, l, stash)
+}
+
+func (s *spyStore) failEndRuns(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endRunFails = n
+}
+
+func (s *spyStore) count(op string) int {
+	return len(slices.DeleteFunc(s.calls(), func(o string) bool { return o != op }))
 }
 
 func (s *spyStore) EndRun(ctx context.Context, runID string, c inventory.Character) error {
@@ -188,9 +210,9 @@ func TestJoinFailsWhenStoreIsDown(t *testing.T) {
 	rejoin(t, h.url, "ann")
 }
 
-// A slow run end write stalls nobody else, and holds the name until it
-// lands so a rejoin cannot load the old character.
-func TestSlowRunEndHoldsTheName(t *testing.T) {
+// A slow run end write stalls nobody else. A rejoin before it lands gets the
+// lobby from the run, not the old character from the store.
+func TestSlowRunEndServesTheRejoin(t *testing.T) {
 	spy := newSpy()
 	spy.hold = make(chan struct{})
 	h := serveWith(t, testCave(), calm(sim.DefaultConfig()), spy)
@@ -207,15 +229,159 @@ func TestSlowRunEndHoldsTheName(t *testing.T) {
 	for range 5 {
 		waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetSnapshot() != nil })
 	}
-	again := dial(t, h.url)
-	send(t, again, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
-	if _, _, err := again.Read(context.Background()); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
-		t.Fatalf("rejoin while saving: %v, want name in use", err)
+	back, lobby := rejoinLobby(t, h.url, "ann")
+	if !lobby.GetSaving() {
+		t.Fatalf("lobby on rejoin = %v, want saving", lobby)
 	}
-
-	close(spy.hold)
-	back := rejoin(t, h.url, "ann")
 	if inv := waitFor(t, back, func(m *gamev1.ServerMessage) bool { return m.GetInventory() != nil }).GetInventory(); len(inv.GetItems()) != 1 {
 		t.Fatalf("bag after rejoin = %v, want the sword from the run", inv.GetItems())
 	}
+
+	close(spy.hold)
+	waitFor(t, back, saving(false))
+	if n := spy.count("load"); n != 4 {
+		t.Fatalf("loads = %d, want only the two first joins", n)
+	}
+}
+
+// A second connection for a name that is still playing is turned away.
+func TestNameAlreadyPlaying(t *testing.T) {
+	h := start(t)
+	conn := dial(t, h.url)
+	lobbyAs(t, conn, "ann")
+	again := dial(t, h.url)
+	send(t, again, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
+	_, _, err := again.Read(context.Background())
+	var closed websocket.CloseError
+	if !errors.As(err, &closed) || closed.Code != websocket.StatusPolicyViolation || closed.Reason != "name already playing" {
+		t.Fatalf("second join: %v, want name already playing", err)
+	}
+}
+
+// extractAtSpawn starts a server where every run extracts at once, and run
+// ends go pending after 50 ms instead of 10 s.
+func extractAtSpawn(t *testing.T, spy *spyStore) (harness, sim.Config) {
+	t.Helper()
+	cave := testCave()
+	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
+	cfg := sim.DefaultConfig()
+	cfg.ExtractTime = 100 * time.Millisecond
+	h := serveWith(t, cave, calm(cfg), spy, func(s *Server) {
+		s.endRunPatience, s.pendingRetry = 50*time.Millisecond, 10*time.Millisecond
+	})
+	return h, cfg
+}
+
+func waitPending(t *testing.T, h harness, want float64) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for testutil.ToFloat64(h.srv.PendingSaves) != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("pending saves = %v, want %v", testutil.ToFloat64(h.srv.PendingSaves), want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func saving(saving bool) func(*gamev1.ServerMessage) bool {
+	return func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil && m.GetLobby().GetSaving() == saving }
+}
+
+// A run end that fails past its patience is kept and retried. Until it lands
+// the lobby says saving and turns away moves and Enter Cave.
+func TestPendingRunEndHoldsTheLobby(t *testing.T) {
+	spy := newSpy()
+	spy.endRunFails = math.MaxInt
+	h, cfg := extractAtSpawn(t, spy)
+
+	conn := dial(t, h.url)
+	joinAs(t, conn, "ann")
+	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted() != nil })
+	waitFor(t, conn, saving(true))
+	eq, _, _ := lobbyItems(t, conn)
+	waitPending(t, h, 1)
+	tries := spy.count("end run")
+	deadline := time.Now().Add(2 * time.Second)
+	for spy.count("end run") < tries+3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("run end calls = %d, want retries past the patience", spy.count("end run"))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterCave{EnterCave: &gamev1.EnterCaveRequest{}}})
+	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterCaveRejected() != nil }).GetEnterCaveRejected(); r.GetReason() != MoveSaving {
+		t.Fatalf("enter cave rejected = %v, want saving", r)
+	}
+	moveTo(t, conn, eq.GetItems()[0].GetId(), toStash)
+	if r := rejected(t, conn); r.GetReason() != MoveSaving {
+		t.Fatalf("move rejected = %v, want saving", r)
+	}
+	if slices.Contains(spy.calls(), "save lobby") {
+		t.Fatalf("store calls = %v, want no lobby save on top of the run", spy.calls())
+	}
+
+	spy.failEndRuns(0)
+	waitFor(t, conn, saving(false))
+	waitPending(t, h, 0)
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return c.XP == cfg.Classes.Progression.ExtractBonus })
+	enterCave(t, conn)
+}
+
+// A rejoin while the run end is pending opens the lobby from it, without a
+// load, and the save keeps going.
+func TestRejoinWithPendingSave(t *testing.T) {
+	spy := newSpy()
+	spy.endRunFails = math.MaxInt
+	h, cfg := extractAtSpawn(t, spy)
+
+	conn := dial(t, h.url)
+	joinAs(t, conn, "ann")
+	waitFor(t, conn, saving(true))
+	waitPending(t, h, 1)
+	conn.Close(websocket.StatusNormalClosure, "")
+	spy.mu.Lock()
+	spy.loadDown = true
+	spy.mu.Unlock()
+	loads := spy.count("load")
+
+	back, lobby := rejoinLobby(t, h.url, "ann")
+	if !lobby.GetSaving() || lobby.GetCharacter().GetXp() != uint32(cfg.Classes.Progression.ExtractBonus) {
+		t.Fatalf("lobby on rejoin = %v, want the pending run, still saving", lobby)
+	}
+	if n := spy.count("load"); n != loads {
+		t.Fatalf("loads = %d, want none on a rejoin with a pending save", n-loads)
+	}
+
+	spy.mu.Lock()
+	spy.loadDown = false
+	spy.mu.Unlock()
+	spy.failEndRuns(0)
+	waitFor(t, back, saving(false))
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return c.XP == cfg.Classes.Progression.ExtractBonus })
+}
+
+// A lobby save that fails puts the item back and says why.
+func TestFailedLobbySaveIsUndone(t *testing.T) {
+	spy := newSpy()
+	spy.saveLobbyFails = 1
+	h := serveWith(t, testCave(), calm(sim.DefaultConfig()), spy)
+	conn := dial(t, h.url)
+	lobbyAs(t, conn, "ann")
+	eq, _, _ := lobbyItems(t, conn)
+	id := eq.GetItems()[0].GetId()
+
+	moveTo(t, conn, id, toStash)
+	if st := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetStash() != nil }).GetStash(); len(st.GetItems()) != 1 {
+		t.Fatalf("stash after the move = %v", st.GetItems())
+	}
+	if r := rejected(t, conn); r.GetItemId() != id || r.GetReason() != MoveSaving {
+		t.Fatalf("rejected = %v, want saving", r)
+	}
+	if eq, _, st := lobbyItems(t, conn); len(eq.GetItems()) != len(items.StarterKit) || len(st.GetItems()) != 0 {
+		t.Fatalf("after the failed save: gear %v, stash %v, want it back", eq.GetItems(), st.GetItems())
+	}
+
+	moveTo(t, conn, id, toStash)
+	waitSaved(t, h, "ann", func(c inventory.Character) bool { return len(c.Stash) == 1 && c.Stash[0].ID == id })
 }

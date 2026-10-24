@@ -272,8 +272,8 @@ func PickupRejected(r sim.PickupRejection) *gamev1.ServerMessage {
 	}}}
 }
 
-func Lobby(character *gamev1.CharacterInfo, class *gamev1.ClassInfo) *gamev1.ServerMessage {
-	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Lobby{Lobby: &gamev1.Lobby{Character: character, ClassInfo: class}}}
+func Lobby(character *gamev1.CharacterInfo, class *gamev1.ClassInfo, saving bool) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Lobby{Lobby: &gamev1.Lobby{Character: character, ClassInfo: class, Saving: saving}}}
 }
 
 func Stash(b inventory.Bag) *gamev1.ServerMessage {
@@ -282,6 +282,10 @@ func Stash(b inventory.Bag) *gamev1.ServerMessage {
 
 func StashMoveRejected(item, reason string) *gamev1.ServerMessage {
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_StashMoveRejected{StashMoveRejected: &gamev1.StashMoveRejected{ItemId: item, Reason: reason}}}
+}
+
+func EnterCaveRejected(reason string) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_EnterCaveRejected{EnterCaveRejected: &gamev1.EnterCaveRejected{Reason: reason}}}
 }
 
 func Items(insts []items.Instance) []*gamev1.Item {

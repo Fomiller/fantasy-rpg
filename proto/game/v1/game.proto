@@ -42,6 +42,7 @@ message ServerMessage {
     Lobby lobby = 23;
     StashContents stash = 24;
     StashMoveRejected stash_move_rejected = 25;
+    EnterCaveRejected enter_cave_rejected = 26;
   }
 }
 
@@ -405,6 +406,9 @@ message UseRequest {
 message Lobby {
   CharacterInfo character = 1;
   ClassInfo class_info = 2;
+  // True while the last run's result is not in the database yet. Lobby moves
+  // and Enter Cave are rejected until a Lobby comes with it false.
+  bool saving = 3;
 }
 
 // StashContents is everything in the player's stash. It is sent in the lobby
@@ -432,9 +436,15 @@ message StashMoveRequest {
 // StashMoveRejected is sent to the player whose move did nothing.
 message StashMoveRejected {
   string item_id = 1;
-  // One of not_in_lobby, unknown_item, full, cannot_equip.
+  // One of not_in_lobby, unknown_item, full, cannot_equip, saving.
   string reason = 2;
 }
 
 // EnterCaveRequest leaves the lobby. The server answers with JoinAccepted.
 message EnterCaveRequest {}
+
+// EnterCaveRejected is sent when the player stays in the lobby.
+message EnterCaveRejected {
+  // saving: the last run is still being saved.
+  string reason = 1;
+}
