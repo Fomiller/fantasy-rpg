@@ -2,7 +2,7 @@ name: fantasy-rpg
 
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_USER: fantasy
       POSTGRES_PASSWORD: fantasy
@@ -10,7 +10,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # The 18 image keeps its data under a versioned dir in here. A 17 volume
+      # will not start on it: reset it with `docker compose down -v`.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "fantasy"]
       interval: 2s
@@ -39,6 +41,21 @@ services:
       nats:
         condition: service_started
 
+  migrate:
+    profiles: [full]
+    image: fantasy-rpg/cave-server:dev
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BINARY: cave-server
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   cave-server:
     profiles: [full]
     image: fantasy-rpg/cave-server:dev
@@ -47,10 +64,15 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BINARY: cave-server
+    environment:
+      DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
     ports:
       - "8081:8080"
     depends_on:
-      - world-server
+      world-server:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:

@@ -40,6 +40,8 @@
     # deploy-infra.yml runs `just infraDir=<dir> plan-all`, and setting this list
     # here replaces golden-infra's, so it is restated.
     { name = "infraDir"; value = "infra/live/dev"; }
+    # The Compose Postgres from `just deps`.
+    { name = "databaseUrl"; value = "postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable"; }
   ];
 
   # Setting this list here replaces the pack recipes, so build and test are restated.
@@ -53,6 +55,8 @@
     "deps:\n    {{compose}} up -d --wait postgres nats"
     "dev: deps\n    go run ./src/cmd/world-server"
     "cave:\n    go run ./src/cmd/cave-server"
+    "migrate: deps\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/cave-server migrate"
+    "cave-db: migrate\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/cave-server"
     "up:\n    {{compose}} --profile full up -d --build --wait"
     "down:\n    {{compose}} --profile full down"
     "images:\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=cave-server -t fantasy-rpg/cave-server:dev ."
