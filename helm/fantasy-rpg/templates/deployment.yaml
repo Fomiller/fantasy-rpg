@@ -3,6 +3,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "chart.fullname" . }}
+  annotations:
+    {{- /* After the Cluster (-1) and the migrate Job (0), so the server never
+           starts on a schema older than its own. */}}
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   replicas: {{ .Values.replicas }}
   {{- /* One cave lives in one process's memory. A rolling update would run two
@@ -32,9 +36,14 @@ spec:
           {{- end }}
           ports:
             - containerPort: 8080
-          {{- with .Values.env }}
+          {{- if or .Values.env .Values.postgres.enabled }}
           env:
+            {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.postgres.enabled }}
+            {{- include "chart.databaseEnv" . | nindent 12 }}
+            {{- end }}
           {{- end }}
           readinessProbe:
             httpGet:

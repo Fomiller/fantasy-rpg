@@ -37,3 +37,23 @@ ingressRoute:
 #         name: aws-clustersecretstore
 #       remoteKey: dev/fomiller/homelab/fantasy-rpg-application-secret
 externalSecrets: {}
+
+# A CloudNativePG Cluster for player data, plus the migrate Job that runs
+# before every server rollout. Off by default for the same reason as
+# externalSecrets: a plain render should not need the CNPG operator. With it
+# off the server keeps the memory store.
+postgres:
+  enabled: false
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+  database: fantasy
+  owner: fantasy
+  # Longhorn grows a volume but never shrinks one, so start small.
+  storage:
+    size: 2Gi
+    storageClass: longhorn
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

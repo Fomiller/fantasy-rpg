@@ -22,3 +22,15 @@
 app.kubernetes.io/name: {{ include "chart.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
+
+{{- define "chart.dbName" -}}
+{{- printf "%s-db" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "chart.databaseEnv" -}}
+- name: DATABASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "chart.dbName" . }}-app
+      key: uri
+{{- end -}}

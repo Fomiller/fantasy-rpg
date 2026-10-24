@@ -1,0 +1,34 @@
+{{- /* The game's Postgres, run by the CloudNativePG operator the homelab
+       already installs. CNPG writes <cluster>-app with a ready `uri`, so no
+       password lives in git or the secret store. */ -}}
+{{- if .Values.postgres.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "chart.dbName" . }}
+  labels:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    {{- /* CNPG owns the PVC through the Cluster, so a prune deletes the data.
+           Removing the database is a job for a person. */}}
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  instances: 1
+  {{- /* Pinned: CNPG never does an implicit major upgrade, so a floating tag
+         can strand the cluster on an operator bump. */}}
+  imageName: {{ .Values.postgres.imageName }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgres.database }}
+      owner: {{ .Values.postgres.owner }}
+  storage:
+    size: {{ .Values.postgres.storage.size }}
+    storageClass: {{ .Values.postgres.storage.storageClass }}
+  {{- with .Values.postgres.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  monitoring:
+    enablePodMonitor: true
+{{- end }}

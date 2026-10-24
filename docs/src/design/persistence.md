@@ -325,15 +325,18 @@ namespaced kind, so no homelab change is needed.
 | -- | -- | -- |
 | CNPG `Cluster` | `fantasy-rpg-db` | `postgres.enabled` |
 | `Job`, Argo CD Sync hook | `fantasy-rpg-migrate` | `postgres.enabled` |
-| `ExternalSecret` (existing template) | `fantasy-rpg-db-backup` | an entry in `externalSecrets` |
-| barman-cloud `ObjectStore` | `fantasy-rpg-db-backup` | `postgres.backup.enabled` |
-| `ScheduledBackup` | `fantasy-rpg-db-nightly` | `postgres.backup.enabled` |
+| `ExternalSecret` (existing template) | `fantasy-rpg-db-backup` | an entry in `externalSecrets`. Not built yet |
+| barman-cloud `ObjectStore` | `fantasy-rpg-db-backup` | `postgres.backup.enabled`. Not built yet |
+| `ScheduledBackup` | `fantasy-rpg-db-nightly` | `postgres.backup.enabled`. Not built yet |
+
+FOM-221 builds the Cluster and the migrate Job. The backup rows wait for
+FOM-222.
 
 `postgres.enabled` is false in the chart's `values.yaml` and true in
-`argocd/overlays/values.app.base.yaml`. That follows the chart's rule that a
+`argocd/overlays/dev/values.app.yaml`. That follows the chart's rule that a
 plain render should not need anything from the cluster, like
-`externalSecrets: {}`. `postgres.backup.enabled` is false in both until the
-backup credentials exist.
+`externalSecrets: {}`. It is on per environment, so a new environment
+starts on the memory store until someone turns it on.
 
 The Cluster follows `attic-db-cnpg` in the homelab:
 
@@ -345,7 +348,9 @@ The Cluster follows `attic-db-cnpg` in the homelab:
 - `bootstrap.initdb` with database `fantasy`, owner `fantasy`.
 - `storage.size: 2Gi` on `longhorn`. One character is about 10 KB. Longhorn
   can grow a volume but not shrink it, so start small.
-- `monitoring.enablePodMonitor: true`.
+- `monitoring.enablePodMonitor: true`. CNPG marks this field deprecated
+  and warns on apply. attic and directus use it too. Swap all three for a
+  hand-written `PodMonitor` before CNPG removes it.
 - The annotation `argocd.argoproj.io/sync-options: Delete=false,Prune=false`.
   CNPG owns the PVC through the Cluster, so pruning the Cluster deletes the
   data. Removing it has to be done by hand.
@@ -357,6 +362,8 @@ The Cluster follows `attic-db-cnpg` in the homelab:
   `secretKeyRef`. No password is in git, Doppler or AWS.
 - The server uses Postgres when `DATABASE_URL` is set, and the memory store
   when it is not. The chart sets it only when `postgres.enabled` is true.
+  Until FOM-216 lands, the server only checks the schema version with it
+  and still plays on the memory store.
 - Backup credentials come through the chart's existing `externalSecrets`
   map. See Backups.
 
@@ -400,6 +407,48 @@ Check it on the first sync: `argocd app get fantasy-rpg` should show the
 Job starting only after the Cluster turns Healthy. If it ever starts early,
 `cave-server migrate` still waits 2 minutes for the database, so the Job is
 slower but does not fail.
+
+### Runbook
+
+There are no backups until FOM-222. The Longhorn volume is the only copy
+of the data. Do not delete the Cluster or its PVC.
+
+Check the database:
+
+```sh
+kubectl --context admin@homelab -n fantasy-rpg get cluster fantasy-rpg-db
+nix shell nixpkgs#kubectl-cnpg -c \
+  kubectl cnpg --context admin@homelab -n fantasy-rpg status fantasy-rpg-db
+```
+
+`STATUS` should read `Cluster in healthy state`.
+
+Check the last migration:
+
+```sh
+kubectl --context admin@homelab -n fantasy-rpg logs job/fantasy-rpg-migrate
+```
+
+Open `psql` as the `postgres` user, inside the database pod:
+
+```sh
+nix shell nixpkgs#kubectl-cnpg -c \
+  kubectl cnpg --context admin@homelab -n fantasy-rpg psql fantasy-rpg-db -- -d fantasy
+```
+
+Without the plugin, `kubectl exec` does the same:
+
+```sh
+kubectl --context admin@homelab -n fantasy-rpg exec -it fantasy-rpg-db-1 -c postgres -- psql -d fantasy
+```
+
+For a client on your machine, port-forward the read-write Service and use
+the `uri` from `fantasy-rpg-db-app`, with the host changed to `localhost`:
+
+```sh
+kubectl --context admin@homelab -n fantasy-rpg port-forward svc/fantasy-rpg-db-rw 5432:5432
+kubectl --context admin@homelab -n fantasy-rpg get secret fantasy-rpg-db-app -o jsonpath='{.data.uri}' | base64 -d
+```
 
 ### Backups
 
