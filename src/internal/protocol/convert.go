@@ -52,7 +52,7 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 }
 
 func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, class *gamev1.ClassInfo, character *gamev1.CharacterInfo) *gamev1.ServerMessage {
-	layout := &gamev1.CaveLayout{
+	layout := &gamev1.InstanceLayout{
 		Name:       cave.Name,
 		Bounds:     rect(cave.Bounds),
 		Extraction: rect(cave.Extraction),
@@ -61,7 +61,7 @@ func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, 
 		layout.Walls = append(layout.Walls, rect(w))
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Joined{
-		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Cave: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class, Character: character},
+		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Layout: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class, Character: character},
 	}}
 }
 
@@ -284,8 +284,8 @@ func StashMoveRejected(item, reason string) *gamev1.ServerMessage {
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_StashMoveRejected{StashMoveRejected: &gamev1.StashMoveRejected{ItemId: item, Reason: reason}}}
 }
 
-func EnterCaveRejected(reason string) *gamev1.ServerMessage {
-	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_EnterCaveRejected{EnterCaveRejected: &gamev1.EnterCaveRejected{Reason: reason}}}
+func EnterInstanceRejected(reason string) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_EnterInstanceRejected{EnterInstanceRejected: &gamev1.EnterInstanceRejected{Reason: reason}}}
 }
 
 func Items(insts []items.Instance) []*gamev1.Item {

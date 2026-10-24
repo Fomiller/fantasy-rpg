@@ -182,19 +182,19 @@ func (s *Server) moveItem(c *client, req *gamev1.StashMoveRequest) {
 	s.sendLobbyItems(c)
 }
 
-// enterCave spawns a lobby player with everything they have on them.
-func (s *Server) enterCave(c *client) {
+// enterInstance spawns a lobby player with everything they have on them.
+func (s *Server) enterInstance(c *client) {
 	if c.lobby == nil {
 		return
 	}
 	if c.pending != nil {
-		s.sendToClient(c, protocol.EnterCaveRejected(MoveSaving))
+		s.sendToClient(c, protocol.EnterInstanceRejected(MoveSaving))
 		return
 	}
 	spawn := s.cave.PlayerSpawns[s.spawns%len(s.cave.PlayerSpawns)]
 	id, err := s.world.AddPlayerAs(spawn, c.class, c.lobby.xp)
 	if err != nil {
-		s.log.Error("enter cave", "name", c.name, "err", err)
+		s.log.Error("enter instance", "name", c.name, "err", err)
 		return
 	}
 	if err := s.world.Restore(id, c.lobby.loadout()); err != nil {

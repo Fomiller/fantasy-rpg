@@ -69,7 +69,7 @@ func show_rejected(event: GameV1.StashMoveRejected) -> void:
 	_rebuild()
 
 
-func show_enter_rejected(event: GameV1.EnterCaveRejected) -> void:
+func show_enter_rejected(event: GameV1.EnterInstanceRejected) -> void:
 	message = ENTER_REJECTED_TEXT.get(event.get_reason(), event.get_reason())
 	_rebuild()
 

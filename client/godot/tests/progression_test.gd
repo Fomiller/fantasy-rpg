@@ -111,7 +111,7 @@ func _joined(c: Dictionary) -> PackedByteArray:
 	var msg := _message()
 	var joined := msg.new_joined()
 	joined.set_player_id(1)
-	var cave := joined.new_cave()
+	var cave := joined.new_layout()
 	cave.set_name("test")
 	for rect: GameV1.Rect in [cave.new_bounds(), cave.new_extraction()]:
 		rect.new_min()

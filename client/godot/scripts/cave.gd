@@ -12,7 +12,7 @@ var walls: Array[Rect2] = []
 
 
 # Rebuilds the cave from the layout the server sent on join.
-func build(layout: GameV1.CaveLayout) -> void:
+func build(layout: GameV1.InstanceLayout) -> void:
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()

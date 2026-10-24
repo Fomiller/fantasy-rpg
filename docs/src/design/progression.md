@@ -276,7 +276,7 @@ limit until it is saved to the database. That time is now, so set one.
 
 FOM-215 built this loop. Where it differs from the plan above:
 
-- **The lobby is in the cave-server for now.** The world server is still
+- **The lobby is in the instance-server for now.** The world server is still
   only a health check, so a join lands in a lobby on the same connection.
   Moving it to the world server later changes where the lobby lives, not
   the messages.
@@ -389,7 +389,7 @@ FOM-215 added the lobby:
 | new `StashContents` | items, capacity | Sent in the lobby whenever the stash changes |
 | new `StashMoveRequest` | item_id, `ItemPlace to` | Stash, bag or gear. Lobby only |
 | new `StashMoveRejected` | item_id, reason | `not_in_lobby`, `unknown_item`, `full`, `cannot_equip` |
-| new `EnterCaveRequest` | none | Leaves the lobby. The answer is `JoinAccepted` |
+| new `EnterInstanceRequest` | none | Leaves the lobby. The answer is `JoinAccepted` |
 
 - `CharacterInfo` sends `level_xp` (XP past the start of the level) and
   `xp_to_next`. The client draws the XP bar from them and never needs the
@@ -421,7 +421,7 @@ FOM-215 added the lobby:
 **Later:**
 
 - The lobby on the world server, and the stash in Postgres. FOM-215 put
-  both in the cave-server and the memory store.
+  both in the instance-server and the memory store.
 - Cave levels and deeper zones with higher item level.
 - Ability ranks and talents.
 - Enemy level scaling for XP.

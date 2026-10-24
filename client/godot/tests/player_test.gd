@@ -45,8 +45,8 @@ func _run() -> void:
 
 
 # Matches testRoomWalls in src/internal/sim/world_test.go.
-func _test_room() -> GameV1.CaveLayout:
-	var layout := GameV1.CaveLayout.new()
+func _test_room() -> GameV1.InstanceLayout:
+	var layout := GameV1.InstanceLayout.new()
 	_set_rect(layout.new_bounds(), -600, -320, 600, 320)
 	_set_rect(layout.new_extraction(), 500, 220, 600, 320)
 	for r in [[-616, -352, 616, -320], [-616, 320, 616, 352], [-632, -320, -600, 320], [600, -320, 632, 320], [168, -32, 232, 32]]:

@@ -57,7 +57,7 @@ func CheckVersion(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	if current < target {
-		return fmt.Errorf("schema version %d is older than %d, run cave-server migrate", current, target)
+		return fmt.Errorf("schema version %d is older than %d, run instance-server migrate", current, target)
 	}
 	return nil
 }

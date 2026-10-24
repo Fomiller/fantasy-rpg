@@ -127,7 +127,7 @@ tick rate is fixed for a run (20 by default, `TICK_RATE`).
   seeds it from the run seed with a fixed second word (`aiStream`), so it
   never shares a stream with the loot roller. Adding an AI roll does not
   change which loot drops.
-- The run seed is the one `cave-server` already logs. `LOOT_SEED` replays
+- The run seed is the one `instance-server` already logs. `LOOT_SEED` replays
   both loot and AI.
 - AI rolls only happen in the tick loop, in enemy ID order.
 - What uses it, for now: `IdleTime` jitter (plus or minus 25%), and the

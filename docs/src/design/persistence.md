@@ -18,7 +18,7 @@ It builds on the save model in [Progression](progression.md). FOM-114
   cave for everyone.
 - Migrations only go forward. Each one works with both the old and the new
   server.
-- Do not add a system until a feature needs it. One cave-server process and
+- Do not add a system until a feature needs it. One instance-server process and
   one Postgres is the MVP.
 
 ## Data ownership
@@ -26,7 +26,7 @@ It builds on the save model in [Progression](progression.md). FOM-114
 | Store | Owns | MVP |
 | -- | -- | -- |
 | PostgreSQL | Accounts (by name until auth), characters (class, XP, equipped gear, bag), the stash | Yes |
-| Cave-server memory | Run state: positions, health, run XP, ground items, chests, enemies, the seed. Also who is connected | Yes. Lost on a crash, by design |
+| Instance-server memory | Run state: positions, health, run XP, ground items, chests, enemies, the seed. Also who is connected | Yes. Lost on a crash, by design |
 | Prometheus | Metrics only. Tick time, players online, store latency and errors | Yes. Already scraped |
 | Redis | Short-lived shared state once there is more than one server: sessions, presence, a matchmaking queue | Not needed for MVP |
 | NATS JetStream | Events between the world server and caves: run started, run ended, player moved | Not needed for MVP |
@@ -35,7 +35,7 @@ It builds on the save model in [Progression](progression.md). FOM-114
 - Run state stays in memory. It changes 20 times a second and is worthless
   once the run ends. Writing it anywhere would cost a lot and buy nothing.
 - Redis and NATS only make sense once there are two processes to share
-  state between. Today the lobby and the cave live in one cave-server, and
+  state between. Today the lobby and the cave live in one instance-server, and
   `Server.conns` already does what presence would.
 - NATS is in `deploy/compose/compose.yaml` already. Leave it there, but
   nothing connects to it for MVP. When it is used, it carries events, never
@@ -287,7 +287,7 @@ the rest:
 - `Lobby.saving` is true from the run end until `EndRun` lands, not only
   after the 10 s. The server sends `Lobby` again when it lands.
 - Lobby moves while saving get `StashMoveRejected` with reason `saving`.
-  Enter Cave gets the new `EnterCaveRejected`, also with reason `saving`.
+  Enter Cave gets the new `EnterInstanceRejected`, also with reason `saving`.
 - A failed `SaveLobby` puts the lobby back to what the store has and sends
   `StashMoveRejected` with reason `saving`. A newer queued save decides
   instead, since it writes the whole lobby again.
@@ -302,7 +302,7 @@ the rest:
   store).
 - SQL files in `src/internal/db/migrations/`, numbered `00001_accounts.sql`
   and up, embedded with `embed`.
-- A `cave-server migrate` subcommand runs them. It reads `DATABASE_URL`,
+- An `instance-server migrate` subcommand runs them. It reads `DATABASE_URL`,
   waits up to 2 minutes for the database to accept a connection, applies
   every pending migration and exits. The same binary and image as the
   server, so the migration and the code always match.
@@ -411,7 +411,7 @@ healthy once they are applied.
 
 Check it on the first sync: `argocd app get fantasy-rpg` should show the
 Job starting only after the Cluster turns Healthy. If it ever starts early,
-`cave-server migrate` still waits 2 minutes for the database, so the Job is
+`instance-server migrate` still waits 2 minutes for the database, so the Job is
 slower but does not fail.
 
 ### Runbook
@@ -493,15 +493,15 @@ FOM-114 changes it:
 
 ```just
 migrate: deps
-    DATABASE_URL=postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable go run ./src/cmd/cave-server migrate
+    DATABASE_URL=postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable go run ./src/cmd/instance-server migrate
 
-cave-db: migrate
-    DATABASE_URL=postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable go run ./src/cmd/cave-server
+instance-db: migrate
+    DATABASE_URL=postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable go run ./src/cmd/instance-server
 ```
 
-- `just cave` stays on the memory store, so client work needs no Docker.
+- `just instance` stays on the memory store, so client work needs no Docker.
 - The `full` Compose profile gets a one-shot `migrate` service. The
-  `cave-server` service depends on it with
+  `instance-server` service depends on it with
   `condition: service_completed_successfully` and sets `DATABASE_URL`.
 - The k3d setup (`just deploy-local`) stays on the memory store. It tests
   pods and images, not the database. The real chart path is tested by the
@@ -533,7 +533,7 @@ cave-db: migrate
 
 - **Auth.** Add an auth subject column to `accounts` (expand), fill it on
   the next login, then make it the key. Names become display names.
-- **More than one cave-server.** "One connection per name" lives in one
+- **More than one instance-server.** "One connection per name" lives in one
   process's memory today. Two processes need a lease on the account row,
   for example an `active_server` column taken in the join transaction. That
   is also when Redis for presence might earn its place.
@@ -555,9 +555,9 @@ In order. Each one can merge on its own.
    Postgres yet. This is the risky part of FOM-216, so it lands first,
    where it is easy to test.
 2. **FOM-114: schema, migrations, local Postgres.** `src/internal/db` with
-   the embedded goose migrations above, `cave-server migrate`, the schema
+   the embedded goose migrations above, `instance-server migrate`, the schema
    version check at start, Compose on `postgres:18` with the `migrate`
-   service, `just migrate` and `just cave-db`.
+   service, `just migrate` and `just instance-db`.
 3. **FOM-216: Postgres store.** `pgxpool` store behind the interface from
    ticket 1, the JSON item shape, `DATABASE_URL` switch in `main.go`,
    testcontainers setup, contract and migration tests, store metrics.

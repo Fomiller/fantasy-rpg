@@ -80,9 +80,9 @@ func _ready() -> void:
 	_connection.inventory_received.connect(_lobby.show_inventory)
 	_connection.stash_received.connect(_lobby.show_stash)
 	_connection.stash_move_rejected.connect(_lobby.show_rejected)
-	_connection.enter_cave_rejected.connect(_lobby.show_enter_rejected)
+	_connection.enter_instance_rejected.connect(_lobby.show_enter_rejected)
 	_lobby.send_move = _connection.send_stash_move
-	_lobby.send_enter = _connection.send_enter_cave
+	_lobby.send_enter = _connection.send_enter_instance
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	send_attack = _connection.send_attack
@@ -200,7 +200,7 @@ func _nearest(from: Vector2, max_distance: float, wanted: Callable) -> EntityVie
 
 
 func _on_joined(player_id: int) -> void:
-	_cave.build(_connection.cave)
+	_cave.build(_connection.layout)
 	_player.tick_seconds = 1.0 / _connection.tick_rate
 	_player.place(_connection.spawn)
 	_player.visible = true

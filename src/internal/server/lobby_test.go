@@ -165,7 +165,7 @@ func TestJoinLandsInLobby(t *testing.T) {
 		t.Fatalf("snapshot has %d players, want only the one in the cave", players)
 	}
 
-	joined := enterCave(t, conn)
+	joined := enterInstance(t, conn)
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), joined.GetPlayerId()) != nil })
 }
 
@@ -210,7 +210,7 @@ func TestLobbyMovesOverTheWire(t *testing.T) {
 	}
 
 	// Whatever is packed goes into the cave, and the stash cannot be touched there.
-	enterCave(t, conn)
+	enterInstance(t, conn)
 	waitFor(t, conn, inventoryWith("health_potion"))
 	moveTo(t, conn, sword.GetId(), toGear)
 	if r := rejected(t, conn); r.GetReason() != MoveNotInLobby {

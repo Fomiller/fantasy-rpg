@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Needs a cave-server on 127.0.0.1:8080. `just net-test` starts one.
+# Needs an instance-server on 127.0.0.1:8080. `just net-test` starts one.
 const TIMEOUT_MSEC := 5000
 
 var _failures := 0
@@ -44,7 +44,7 @@ func _run() -> void:
 
 	var cave: Cave = main.get_node("Cave")
 	var player: Player = main.get_node("Player")
-	_check(cave.get_child_count() > 10 and connection.cave.get_walls().size() > 10, "built the cave the server sent")
+	_check(cave.get_child_count() > 10 and connection.layout.get_walls().size() > 10, "built the cave the server sent")
 	_check(player.position.distance_to(connection.spawn) < 1.0 and connection.spawn != Vector2.ZERO, "player starts at the server spawn")
 	_check(cave.extraction.has_area(), "cave has an extraction zone")
 	await _test_chest(main, connection, latest)

@@ -26,9 +26,9 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
 
-// caveServer is a cave-server on store whose players spawn inside the exit,
-// so every run extracts. stop shuts it down as a restart would.
-func caveServer(t *testing.T, store inventory.Store) (url string, stop func()) {
+// instanceServer is an instance-server on store whose players spawn inside
+// the exit, so every run extracts. stop shuts it down as a restart would.
+func instanceServer(t *testing.T, store inventory.Store) (url string, stop func()) {
 	t.Helper()
 	cave := caves.Cave{
 		Name:         "restart",
@@ -153,9 +153,9 @@ func TestRestartKeepsCharacters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	wsURL, stop := caveServer(t, first)
+	wsURL, stop := instanceServer(t, first)
 	conn, _, _ := joinLobby(t, wsURL, "ann")
-	send(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_EnterCave{EnterCave: &gamev1.EnterCaveRequest{}}})
+	send(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
 	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted() != nil })
 	// Extraction banks XP and moves the bag to the stash.
 	saved := waitLoaded(t, first, "ann", func(c inventory.Character) bool { return c.XP > 40 && len(c.Stash) == 3 })
@@ -163,7 +163,7 @@ func TestRestartKeepsCharacters(t *testing.T) {
 	first.Close()
 
 	second := newStore(t, url)
-	wsURL, _ = caveServer(t, second)
+	wsURL, _ = instanceServer(t, second)
 	_, lobby, stash := joinLobby(t, wsURL, "ann")
 	if got := lobby.GetCharacter().GetXp(); int(got) != saved.XP {
 		t.Fatalf("lobby xp after restart = %d, want %d", got, saved.XP)
