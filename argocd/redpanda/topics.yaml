@@ -1,0 +1,71 @@
+# The topics in docs/src/design/instance-manager.md. One broker, so one
+# replica. Partitions can grow later but never shrink, so start at 3.
+#
+# Deleting a Topic here deletes the topic and its data, and the Application
+# prunes.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: player.session
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  partitions: 3
+  replicationFactor: 1
+  additionalConfig:
+    retention.ms: "86400000"
+---
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: instance.join
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  partitions: 3
+  replicationFactor: 1
+  additionalConfig:
+    retention.ms: "86400000"
+---
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: instance.lifecycle
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  partitions: 3
+  replicationFactor: 1
+  additionalConfig:
+    retention.ms: "86400000"
+---
+# The one topic that must not lose a message. inventory can be down for days
+# and still apply every result when it comes back.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: run.ended
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  partitions: 3
+  replicationFactor: 1
+  additionalConfig:
+    retention.ms: "604800000"
+---
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: inventory.applied
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  partitions: 3
+  replicationFactor: 1
+  additionalConfig:
+    retention.ms: "86400000"

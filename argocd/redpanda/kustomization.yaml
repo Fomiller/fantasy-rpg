@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Deployed as part of argocd/overlays/dev, so it syncs with the fantasy-rpg
+# Application. The game's own cluster, beside the services that use it, at
+# redpanda.fantasy-rpg.svc:9093.
+namespace: fantasy-rpg
+
+resources:
+- redpanda.yaml
+- topics.yaml
+- console.yaml
+- ingressroute.yaml
