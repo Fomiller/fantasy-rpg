@@ -31,6 +31,17 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- /* Soft, so a one-node cluster still runs every pod. Two on one node
+             also make the descheduler's RemoveDuplicates pick on them. */}}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "chart.instanceSelectorLabels" . | nindent 20 }}
       containers:
         - name: instance
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -67,6 +78,21 @@ spec:
               port: 8080
             periodSeconds: 20
             failureThreshold: 3
+---
+{{- /* An eviction kills every run in the instance, and run state is only in
+       memory. The descheduler and node drains evict through the eviction
+       API, so this stops both. FOM-112 owns draining an instance gracefully. */}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.instanceSelectorLabels" . | nindent 4 }}
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "chart.instanceSelectorLabels" . | nindent 6 }}
 ---
 {{- /* The StatefulSet's governing Service. Nothing connects through it. */}}
 apiVersion: v1
