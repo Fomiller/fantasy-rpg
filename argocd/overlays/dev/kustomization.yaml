@@ -21,6 +21,9 @@ helmCharts:
     repo: oci://695434033664.dkr.ecr.us-east-1.amazonaws.com
     version: 0.7.1
     releaseName: fantasy-rpg
+    # Without it the chart renders .Release.Namespace as default, and the
+    # manager's RoleBinding points at a ServiceAccount that is not there.
+    namespace: fantasy-rpg
     # Shared defaults first, this environment's overrides second. On a key both
     # files set, the later one wins.
     valuesFile: ../values.app.base.yaml
