@@ -78,6 +78,9 @@ type Lobby struct {
 	// PendingSaves counts run ends that are past their patience and still
 	// retrying. Register it to export it.
 	PendingSaves prometheus.Gauge
+	// Metrics are set by NewLobby or New. Register their Collectors to
+	// export them.
+	Metrics *Metrics
 	// Tests shorten these.
 	endRunPatience, pendingRetry, leaseRetry, closeGrace time.Duration
 }
@@ -89,6 +92,7 @@ type client struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	writes *writer
+	slow   prometheus.Counter
 	// kick closes the connection once the outbox is written.
 	kick chan closeMsg
 	// gone is set once the connection has closed.
@@ -125,6 +129,7 @@ type client struct {
 func NewLobby(town caves.Cave, cfg sim.Config, loot *items.Roller, log *slog.Logger) *Lobby {
 	s := newShared(town.NewWorld(cfg, nil), loot, log)
 	s.town = town
+	s.Metrics = newMetrics("town_players", "Players with a body in the town.")
 	return s
 }
 
@@ -159,6 +164,7 @@ func (s *Lobby) Step(dt time.Duration) {
 	s.drain()
 	s.rules.Step(dt)
 	s.checkEntrance()
+	s.Metrics.Players.Set(float64(len(s.inTown)))
 	if len(s.inTown) == 0 {
 		return
 	}
@@ -209,8 +215,8 @@ type closeMsg struct {
 	reason string
 }
 
-func newClient(name, class string, ctx context.Context, cancel context.CancelFunc) *client {
-	return &client{name: name, class: class, out: make(chan []byte, outboxSize), kick: make(chan closeMsg, 1), applied: make(chan struct{}, 1), ctx: ctx, cancel: cancel, writes: newWriter()}
+func (s *Lobby) newClient(name, class string, ctx context.Context, cancel context.CancelFunc) *client {
+	return &client{name: name, class: class, out: make(chan []byte, outboxSize), kick: make(chan closeMsg, 1), applied: make(chan struct{}, 1), ctx: ctx, cancel: cancel, writes: newWriter(), slow: s.Metrics.SlowKicks}
 }
 
 // close sends what is queued, then closes with reason. Only the first call counts.
@@ -227,6 +233,9 @@ func (c *client) send(b []byte) {
 	select {
 	case c.out <- b:
 	default:
+		if c.ctx.Err() == nil {
+			c.slow.Inc()
+		}
 		c.cancel()
 	}
 }
@@ -267,7 +276,7 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if class == "" {
 		class = classes.Starter
 	}
-	c := newClient(name, class, ctx, cancel)
+	c := s.newClient(name, class, ctx, cancel)
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
@@ -336,6 +345,7 @@ func (s *Lobby) readLoop(ctx context.Context, conn *websocket.Conn, log *slog.Lo
 			}
 			return
 		}
+		s.Metrics.ReceivedBytes.Add(float64(len(b)))
 		msg, err := protocol.DecodeClient(b)
 		if err != nil {
 			conn.Close(websocket.StatusPolicyViolation, err.Error())
@@ -445,13 +455,16 @@ func (s *Lobby) writeLoop(ctx context.Context, conn *websocket.Conn, c *client, 
 			if err := conn.Write(ctx, websocket.MessageBinary, b); err != nil {
 				return
 			}
+			s.Metrics.SentBytes.Add(float64(len(b)))
 		case k := <-c.kick:
 			// Everything sent before the close is already in the outbox, and
 			// this is its only reader.
 			for len(c.out) > 0 {
-				if err := conn.Write(ctx, websocket.MessageBinary, <-c.out); err != nil {
+				b := <-c.out
+				if err := conn.Write(ctx, websocket.MessageBinary, b); err != nil {
 					return
 				}
+				s.Metrics.SentBytes.Add(float64(len(b)))
 			}
 			conn.Close(k.code, k.reason)
 			return

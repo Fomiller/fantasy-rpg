@@ -88,6 +88,7 @@ func run() error {
 	lobby.Events = bus
 	lobby.WorldID = worldID
 	reg.MustRegister(lobby.PendingSaves)
+	reg.MustRegister(lobby.Metrics.Collectors()...)
 	defer lobby.Close()
 
 	loop := &tick.Loop{

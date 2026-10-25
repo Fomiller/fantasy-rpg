@@ -115,6 +115,7 @@ func run() error {
 		return newWorld(cave, next)
 	}
 	reg.MustRegister(game.PendingSaves)
+	reg.MustRegister(game.Metrics.Collectors()...)
 	defer game.Close()
 
 	if os.Getenv("AGONES_SDK_GRPC_PORT") != "" {

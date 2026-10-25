@@ -97,6 +97,7 @@ func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger
 		clients:    map[sim.EntityID]*client{},
 		sdk:        &sdkQueue{wake: make(chan struct{}, 1)},
 	}
+	s.Metrics = newMetrics("instance_players", "Players in the cave.")
 	s.GameServer = s.localGameServer()
 	s.released = s.release
 	go s.sdk.run(s.done)
@@ -134,6 +135,7 @@ func (s *Server) Step(dt time.Duration) {
 	s.stopIfEmpty(now)
 
 	events := s.world.Step(dt)
+	s.Metrics.Players.Set(float64(len(s.clients)))
 
 	s.broadcast(protocol.Snapshot(s.world))
 	for _, ev := range events.Abilities {
@@ -257,7 +259,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		conn.Close(websocket.StatusPolicyViolation, err.Error())
 		return
 	}
-	c := newClient(claims.Name, claims.Class, ctx, cancel)
+	c := s.newClient(claims.Name, claims.Class, ctx, cancel)
 	c.runID = claims.Run
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {

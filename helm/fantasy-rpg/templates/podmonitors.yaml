@@ -1,0 +1,34 @@
+{{- /* One PodMonitor per kind of pod, all on the named http port. Off by
+       default, since a plain render should not need the Prometheus
+       operator's CRDs. */ -}}
+{{- if .Values.metrics.podMonitors }}
+{{- $monitors := list (dict "name" "instance" "selector" (include "chart.instanceSelectorLabels" .)) }}
+{{- if .Values.world.enabled }}
+{{- $monitors = append $monitors (dict "name" "world" "selector" (include "chart.worldSelectorLabels" .)) }}
+{{- $monitors = append $monitors (dict "name" "instance-manager" "selector" (include "chart.managerSelectorLabels" .)) }}
+{{- $monitors = append $monitors (dict "name" "inventory" "selector" (include "chart.inventorySelectorLabels" .)) }}
+{{- end }}
+{{- range $monitors }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "chart.fullname" $ }}-{{ .name }}
+  labels:
+    {{- .selector | nindent 4 }}
+    {{- with $.Values.metrics.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- .selector | nindent 6 }}
+      {{- if eq .name "instance" }}
+      agones.dev/role: gameserver
+      {{- end }}
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: {{ $.Values.metrics.interval }}
+{{- end }}
+{{- end }}

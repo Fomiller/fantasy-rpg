@@ -101,13 +101,17 @@ Today's metrics, and the few to add first.
 | `instance_allocation_seconds`, `instance_startup_seconds`, `instance_routing_errors_total` | manager | Exists |
 | Go and process collectors | all | Exists |
 | CNPG, Agones controller, Redpanda | operators | Need scraping turned on |
-| `town_players` | world | Add. Gauge, players with a body in the town |
-| `instance_players` | instance | Add. Gauge, players in the cave |
-| `ws_sent_bytes_total` | world, instance | Add. Counter |
-| `ws_slow_kicks_total` | world, instance | Add. A full outbox closes the client today with no count |
+| `town_players` | world | Exists. Gauge, players with a body in the town |
+| `instance_players` | instance | Exists. Gauge, players in the cave |
+| `ws_sent_bytes_total`, `ws_received_bytes_total` | world, instance | Exists. Counters |
+| `ws_slow_kicks_total` | world, instance | Exists. Clients closed for a full outbox |
 | `inventory_consumer_lag` | inventory | Add with the `run.ended` consumer, as Instance manager says |
 
 CPU and memory per pod come from cAdvisor through kube-prometheus-stack.
+
+The chart has a PodMonitor for each server, behind `metrics.podMonitors`.
+Each scrapes `/metrics` on the container port named `http`. dev turns
+them on with the `release: prometheus` label.
 
 ### Grafana
 
