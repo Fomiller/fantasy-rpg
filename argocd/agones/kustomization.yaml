@@ -1,10 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Agones is cluster-wide: CRDs, webhooks, an APIService. So it is its own
-# Application, k8s/apps/agones in homelab, and not part of the dev overlay.
-# The services AppProject would refuse those kinds, and a second stage would
-# install Agones twice.
+# Deployed as part of argocd/overlays/dev, so it syncs with the fantasy-rpg
+# Application.
 #
 # No top-level namespace. The chart puts a PDB and the SDK's RBAC into each
 # namespace in gameservers.namespaces, and a namespace transformer would pull
@@ -33,3 +31,12 @@ patches:
       name: unused
       annotations:
         argocd.argoproj.io/sync-options: ServerSideApply=true
+# The chart leaves the namespace off this one PDB, and this Application's
+# destination is fantasy-rpg.
+- target:
+    kind: PodDisruptionBudget
+    name: agones-extensions-pdb
+  patch: |-
+    - op: add
+      path: /metadata/namespace
+      value: agones-system
