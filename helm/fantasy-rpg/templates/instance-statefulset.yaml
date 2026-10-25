@@ -42,6 +42,9 @@ spec:
                 labelSelector:
                   matchLabels:
                     {{- include "chart.instanceSelectorLabels" . | nindent 20 }}
+      {{- /* DRAIN_TIMEOUT's 600 s for runs to finish, then time for the last
+             run ends to land. */}}
+      terminationGracePeriodSeconds: 630
       containers:
         - name: instance
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

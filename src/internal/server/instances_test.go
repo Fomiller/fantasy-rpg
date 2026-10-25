@@ -70,6 +70,21 @@ func TestReservePicksTheBusiestWithRoom(t *testing.T) {
 	}
 }
 
+// A draining instance is never picked, even with room.
+func TestReserveSkipsDraining(t *testing.T) {
+	d := directory(
+		InstanceStatus{ID: "a", Boot: "1", Players: 1, Capacity: 8},
+		InstanceStatus{ID: "b", Boot: "1", Players: 6, Capacity: 8, Draining: true},
+	)
+	if inst, _, ok := d.Reserve([]string{"r1"}, time.Now()); !ok || inst.ID != "a" {
+		t.Fatalf("pick = %v, %v, want a, since b is draining", inst, ok)
+	}
+	d = directory(InstanceStatus{ID: "b", Boot: "1", Capacity: 8, Draining: true})
+	if inst, _, ok := d.Reserve([]string{"r1"}, time.Now()); ok {
+		t.Fatalf("pick = %v, want none with only a draining instance", inst)
+	}
+}
+
 // A party goes to one instance with room for all of them, or nowhere.
 func TestReserveKeepsAPartyTogether(t *testing.T) {
 	now := time.Now()

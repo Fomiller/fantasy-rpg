@@ -24,6 +24,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/gameserver"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
@@ -37,12 +38,14 @@ const (
 	reasonInRun       = "already in a run"
 	reasonFull        = "instance full"
 	reasonRunOver     = "run over"
+	reasonDraining    = "instance draining"
 )
 
 var (
 	errJoinOnWorld = errors.New(reasonJoinOnWorld)
 	errInRun       = errors.New(reasonInRun)
 	errFull        = errors.New(reasonFull)
+	errDraining    = errors.New(reasonDraining)
 )
 
 // Server is an instance server. A player joins with a token from the world
@@ -59,18 +62,30 @@ type Server struct {
 	Tokens *jointoken.Verifier
 	// Reset builds the world for the next group once the instance empties,
 	// so nobody walks into a looted cave. Nil keeps the old world.
-	Reset   func() (*sim.World, *items.Roller)
-	boot    string
-	world   *sim.World
-	cave    caves.Cave
-	spawns  int
-	clients map[sim.EntityID]*client
+	Reset func() (*sim.World, *items.Roller)
+	// GameServer is Agones or the local stand in New sets, whose Shutdown
+	// resets the world. Set it before serving.
+	GameServer gameserver.GameServer
+	boot       string
+	world      *sim.World
+	cave       caves.Cave
+	spawns     int
+	clients    map[sim.EntityID]*client
 	// used is set once anyone has played in this world.
 	used bool
+	// draining is set from SIGTERM on. No one new joins.
+	draining bool
+	// stopping is set while a shutdown on empty is under way.
+	stopping             bool
+	nextStop, lastHealth time.Time
+	sdk                  *sdkQueue
+	// unjoined is when each listed run with no player was first seen. Only
+	// the SDK goroutine touches it.
+	unjoined map[string]time.Time
 }
 
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
-	return &Server{
+	s := &Server{
 		Lobby:      newShared(world, loot, log),
 		ID:         "instance-0",
 		MaxPlayers: 8,
@@ -78,13 +93,30 @@ func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger
 		world:      world,
 		cave:       cave,
 		clients:    map[sim.EntityID]*client{},
+		sdk:        &sdkQueue{wake: make(chan struct{}, 1)},
 	}
+	s.GameServer = s.localGameServer()
+	s.released = s.release
+	go s.sdk.run(s.done)
+	return s
+}
+
+// localGameServer stands in for Agones. Its Shutdown resets the world.
+func (s *Server) localGameServer() *gameserver.Local {
+	l := gameserver.NewLocal(int64(s.MaxPlayers))
+	l.OnShutdown = func() { s.enqueue(s.resetWorld) }
+	return l
 }
 
 func bootID() string {
 	b := make([]byte, 3)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// Boot is new on every start, like 3f9a1c.
+func (s *Server) Boot() string {
+	return s.boot
 }
 
 // Instance is the id and boot id, like instance-0@3f9a1c.
@@ -95,7 +127,9 @@ func (s *Server) Instance() string {
 // Step runs on the tick loop goroutine.
 func (s *Server) Step(dt time.Duration) {
 	s.drain()
-	s.resetIfEmpty()
+	now := time.Now()
+	s.pingHealth(now)
+	s.stopIfEmpty(now)
 
 	events := s.world.Step(dt)
 
@@ -225,6 +259,10 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	c.runID = claims.Run
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
+		if s.draining {
+			claimed <- errDraining
+			return
+		}
 		// A name still here has a run that has not ended, so its lease is held.
 		if _, ok := s.conns[c.name]; ok {
 			claimed <- errInRun
@@ -236,6 +274,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		s.conns[c.name] = c
 		c.entering = true
+		s.addRun(c.runID)
 		claimed <- nil
 	})
 	if !ok {
@@ -246,6 +285,10 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	select {
 	case err = <-claimed:
 	case <-s.done:
+		return
+	}
+	if errors.Is(err, errDraining) {
+		conn.Close(websocket.StatusTryAgainLater, err.Error())
 		return
 	}
 	if err != nil {
@@ -395,18 +438,6 @@ func (s *Server) finish(id sim.EntityID) {
 	time.AfterFunc(s.closeGrace, func() { c.close(websocket.StatusNormalClosure, reasonRunOver) })
 }
 
-// resetIfEmpty builds a fresh world once the last player is gone and their
-// writes have landed. The boot id stays, since it is the same process.
-func (s *Server) resetIfEmpty() {
-	if !s.used || s.Reset == nil || len(s.conns) > 0 {
-		return
-	}
-	s.world, s.loot = s.Reset()
-	s.rules = s.world
-	s.used, s.spawns = false, 0
-	s.log.Info("instance reset")
-}
-
 // HandleStatus answers the world server's poll. It is on the internal port
 // only, never behind the public route.
 func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
@@ -426,7 +457,7 @@ func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) status() InstanceStatus {
-	st := InstanceStatus{ID: s.ID, Boot: s.boot, Players: s.players(), Capacity: s.MaxPlayers, Runs: []string{}}
+	st := InstanceStatus{ID: s.ID, Boot: s.boot, Players: s.players(), Capacity: s.MaxPlayers, Draining: s.draining, Runs: []string{}}
 	for _, c := range s.conns {
 		if c.runID != "" {
 			st.Runs = append(st.Runs, c.runID)

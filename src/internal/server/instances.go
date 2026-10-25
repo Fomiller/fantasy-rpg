@@ -27,6 +27,8 @@ type InstanceStatus struct {
 	Boot     string `json:"boot"`
 	Players  int    `json:"players"`
 	Capacity int    `json:"capacity"`
+	// Draining is set once the instance got SIGTERM. It takes no one new.
+	Draining bool `json:"draining"`
 	// Runs is every run the process still has, including run ends that have
 	// not landed.
 	Runs []string `json:"runs"`
@@ -139,8 +141,9 @@ func (d *Directory) fetch(ctx context.Context, inst Instance) (InstanceStatus, e
 
 // Reserve picks one instance with room for every run in runs and counts
 // them against it until their tokens expire. Of those with room it takes
-// the one with the most players, so one cave fills before the next. A party
-// passes one run per member, so they all land together.
+// the one with the most players, so one cave fills before the next. A
+// draining instance is never picked. A party passes one run per member, so
+// they all land together.
 func (d *Directory) Reserve(runs []string, now time.Time) (Instance, InstanceStatus, bool) {
 	if d == nil {
 		return Instance{}, InstanceStatus{}, false
@@ -150,7 +153,7 @@ func (d *Directory) Reserve(runs []string, now time.Time) (Instance, InstanceSta
 	best, bestPlayers := -1, -1
 	for i, inst := range d.list {
 		st, ok := d.status[inst.ID]
-		if !ok || st.Players+d.inFlight(inst.ID, st, now)+len(runs) > st.Capacity {
+		if !ok || st.Draining || st.Players+d.inFlight(inst.ID, st, now)+len(runs) > st.Capacity {
 			continue
 		}
 		if st.Players > bestPlayers {

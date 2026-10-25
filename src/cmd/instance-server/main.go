@@ -21,6 +21,7 @@ import (
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
+	"github.com/Fomiller/fantasy-rpg/src/internal/gameserver"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
@@ -40,8 +41,11 @@ func main() {
 }
 
 func run() error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Serving outlives the signal, so runs play on while the server drains.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	rate, err := positive("TICK_RATE", 20)
 	if err != nil {
@@ -52,6 +56,10 @@ func run() error {
 		return err
 	}
 	maxPlayers, err := positive("MAX_PLAYERS", 8)
+	if err != nil {
+		return err
+	}
+	drainTimeout, err := duration("DRAIN_TIMEOUT", 600*time.Second)
 	if err != nil {
 		return err
 	}
@@ -92,6 +100,19 @@ func run() error {
 	reg.MustRegister(game.PendingSaves)
 	defer game.Close()
 
+	if os.Getenv("AGONES_SDK_GRPC_PORT") != "" {
+		if game.GameServer, err = gameserver.NewAgones(); err != nil {
+			return err
+		}
+	}
+	gs := game.GameServer
+	if err := gs.SetAnnotation(gameserver.BootKey, game.Boot()); err != nil {
+		return err
+	}
+	if err := gs.SetRunCapacity(int64(maxPlayers)); err != nil {
+		return err
+	}
+
 	loop := &tick.Loop{
 		Interval: time.Second / time.Duration(rate),
 		Metrics:  tick.NewMetrics(reg, "instance-server"),
@@ -115,28 +136,43 @@ func run() error {
 		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 
-	errc := make(chan error, 1)
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		return err
+	}
+	errc := make(chan error, 2)
 	go func() {
-		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}
 	}()
-
-	slog.Info("instance-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed, "instance", game.Instance())
 	go func() { errc <- loop.Run(ctx) }()
+	if err := gs.Ready(); err != nil {
+		return err
+	}
+	slog.Info("instance-server listening", "addr", srv.Addr, "tick_rate", rate, "cave", cave.Name, "loot_seed", seed, "instance", game.Instance())
 
 	select {
-	case <-ctx.Done():
+	case <-sig.Done():
 	case err := <-errc:
-		if !errors.Is(err, context.Canceled) {
-			return err
-		}
+		return err
 	}
+	// A second signal stops at once.
+	stop()
+	slog.Info("draining", "timeout", drainTimeout)
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), drainTimeout+runEndGrace)
+	defer cancelDrain()
+	game.Drain(drainCtx, drainTimeout)
+	cancel()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
 	return srv.Shutdown(shutdownCtx)
 }
+
+// runEndGrace is how long the last run ends get to land after the drain
+// times out. With the drain, it fits in the pod's termination grace period.
+const runEndGrace = 20 * time.Second
 
 func runMigrate() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -154,6 +190,18 @@ func positive(name string, fallback int) (int, error) {
 		return 0, errors.New(name + " must be a positive integer")
 	}
 	return n, nil
+}
+
+func duration(name string, fallback time.Duration) (time.Duration, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, errors.New(name + " must be a positive duration, like 600s")
+	}
+	return d, nil
 }
 
 func newWorld(cave caves.Cave, seed uint64) (*sim.World, *items.Roller) {
