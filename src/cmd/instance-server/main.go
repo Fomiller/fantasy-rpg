@@ -73,7 +73,7 @@ func run() error {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	inventoryURL := os.Getenv("INVENTORY_URL")
-	store, storeName, closeStore, err := httpstore.Open(ctx, inventoryURL, os.Getenv("DATABASE_URL"), reg)
+	store, storeName, closeStore, err := httpstore.Open(ctx, inventoryURL, os.Getenv("DATABASE_URL"), os.Getenv("STORE"), reg)
 	if err != nil {
 		return err
 	}

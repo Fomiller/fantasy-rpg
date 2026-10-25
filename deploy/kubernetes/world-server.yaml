@@ -24,6 +24,9 @@ spec:
           env:
             - name: JOIN_TOKEN_KEY
               value: dev-only
+            # k3d has no database. Without this the server refuses to start.
+            - name: STORE
+              value: memory
           ports:
             - containerPort: 8080
           readinessProbe:

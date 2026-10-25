@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -9,11 +11,24 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 )
 
-// OpenStore is the Postgres store when url is set and the memory store when
-// it is not, metered on reg. inventory uses it, and so do world and
+// Memory is the STORE value that allows the memory store. Nothing falls back
+// to it, so a pod missing its store config crash-loops instead of losing loot.
+const Memory = "memory"
+
+// ErrNoStore is a start with no store configured.
+var ErrNoStore = errors.New("no character store")
+
+// OpenStore is the Postgres store when url is set, else the memory store when
+// store is Memory, metered on reg. inventory uses it, and so do world and
 // instance servers when INVENTORY_URL is empty.
-func OpenStore(ctx context.Context, url string, reg prometheus.Registerer) (store inventory.Store, name string, closeFn func(), err error) {
+func OpenStore(ctx context.Context, url, store string, reg prometheus.Registerer) (inventory.Store, string, func(), error) {
+	if store != "" && store != Memory {
+		return nil, "", nil, fmt.Errorf("STORE %q is not %q", store, Memory)
+	}
 	if url == "" {
+		if store != Memory {
+			return nil, "", nil, fmt.Errorf("%w: set DATABASE_URL, or STORE=memory for local dev", ErrNoStore)
+		}
 		return inventory.Metered(inventory.NewMemory(), reg), "memory", func() {}, nil
 	}
 	if err := checkSchema(ctx, url); err != nil {

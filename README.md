@@ -42,7 +42,7 @@ just migrate                 # apply database migrations to the Compose postgres
 just inventory               # the inventory service on :8070
 ```
 
-The client connects to the world server on :8080 by default. The player walks around the hub town there, uses the stash chest, and walks into the cave entrance to get a ticket. The client then moves to that instance server for the run. When the run ends the client goes back to the town. All three processes share the Compose database and the dev join key. To go through the inventory service as the cluster does, run `just inventory` and start the others with `INVENTORY_URL=http://localhost:8070`.
+The client connects to the world server on :8080 by default. The player walks around the hub town there, uses the stash chest, and walks into the cave entrance to get a ticket. The client then moves to that instance server for the run. When the run ends the client goes back to the town. All three processes share the Compose database and the dev join key. To go through the inventory service as the cluster does, run `just inventory` and start the others with `INVENTORY_URL=http://localhost:8070`. A server with neither `INVENTORY_URL` nor `DATABASE_URL` exits, unless `STORE=memory` is set. Then it keeps characters in memory and loses them on restart.
 
 **2. Full Compose.** Every server runs as a container.
 
