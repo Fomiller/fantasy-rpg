@@ -39,6 +39,11 @@ world:
 joinKey:
   secretName: ""
 
+# Redpanda for both servers' events, as host:port[,host:port]. Empty turns
+# events off, so the servers run without a broker.
+events:
+  brokers: ""
+
 # No host means no IngressRoute. The overlay that owns the hostname sets it.
 ingressRoute:
   host: ""

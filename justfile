@@ -12,6 +12,8 @@ kube := "kubectl --context k3d-fantasy-rpg"
 godot := "/Applications/Godot.app/Contents/MacOS/Godot"
 infraDir := "infra/live/dev"
 databaseUrl := "postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable"
+kafkaBrokers := "localhost:19092"
+topics := "player.session instance.join instance.lifecycle run.ended inventory.applied"
 
 fetch:
     curl -sSfL https://raw.githubusercontent.com/Fomiller/justfiles/refs/heads/main/base.just > just/base.just
@@ -40,18 +42,19 @@ fmt:
     gofmt -w src
 
 deps:
-    {{compose}} up -d --wait postgres nats
+    {{compose}} up -d --wait postgres redpanda
+    {{compose}} exec -T redpanda rpk topic create --if-not-exists -X brokers=localhost:9092 {{topics}}
 
 dev: migrate
-    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
+    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
 
 instance id port:
-    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
+    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
 
 migrate: deps
     DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate
 
-up:
+up: deps
     {{compose}} --profile full up -d --build --wait
 
 down:
@@ -126,9 +129,13 @@ net-test: build
     export LOOT_SEED="${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}"
     # A throwaway Postgres, so the servers share a store and nothing from an earlier run or `just dev` leaks in.
     pg=$(docker run -d --rm -e POSTGRES_USER=fantasy -e POSTGRES_PASSWORD=fantasy -e POSTGRES_DB=fantasy -p 127.0.0.1::5432 postgres:18)
-    pids=()
-    trap 'status=$?; kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f "$pg" >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
+    pids=() rp=""
+    trap 'status=$?; kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f "$pg" $rp >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
     export DATABASE_URL="postgres://fantasy:fantasy@127.0.0.1:$(docker port "$pg" 5432/tcp | head -1 | cut -d: -f2)/fantasy?sslmode=disable" JOIN_TOKEN_KEY=net-test
+    # And a throwaway Redpanda. Its port is fixed, since the broker hands its address to clients.
+    rp=$(docker run -d --rm -p 127.0.0.1:29092:29092 redpandadata/redpanda:v26.2.6 redpanda start --mode dev-container --smp 1 --kafka-addr 0.0.0.0:29092 --advertise-kafka-addr 127.0.0.1:29092)
+    export KAFKA_BROKERS=127.0.0.1:29092
+    for i in $(seq 50); do docker exec "$rp" rpk topic create --if-not-exists -X brokers=$KAFKA_BROKERS {{topics}} >/dev/null 2>&1 && break; if [ "$i" = 50 ]; then echo "Redpanda did not start." >&2; exit 1; fi; sleep 0.2; done
     ./bin/instance-server migrate
     INSTANCE_ID=instance-0 PORT=8081 ./bin/instance-server & pids+=($!)
     INSTANCE_ID=instance-1 PORT=8082 ./bin/instance-server & pids+=($!)
@@ -142,6 +149,8 @@ net-test: build
     {{godot}} --headless --path client/godot --script res://tests/net_test.gd
     {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd
     {{godot}} --headless --path client/godot --script res://tests/world_test.gd -- --server=ws://127.0.0.1:8090/ws
+    # Every test above walks from the town into a cave.
+    for topic in player.session instance.join; do n=$(docker exec "$rp" rpk topic describe -p "$topic" -X brokers=$KAFKA_BROKERS | awk 'NR>1 {s+=$NF} END {print s+0}'); if [ "$n" = 0 ]; then echo "No $topic events." >&2; exit 1; fi; done
 
 proto:
     buf lint

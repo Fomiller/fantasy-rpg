@@ -61,6 +61,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       key: JOIN_TOKEN_KEY
 {{- end -}}
 
+{{- define "chart.eventsEnv" -}}
+- name: KAFKA_BROKERS
+  value: {{ .Values.events.brokers | quote }}
+{{- end -}}
+
 {{- define "chart.dbName" -}}
 {{- printf "%s-db" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

@@ -16,6 +16,7 @@ import (
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
+	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
@@ -65,6 +66,11 @@ type Lobby struct {
 	Instances Pool
 	// JoinKey signs the tokens instance servers check.
 	JoinKey []byte
+	// Events gets player.session from the world and instance.join from an
+	// instance. Set it before serving.
+	Events events.Producer
+	// WorldID names this world server in player.session.
+	WorldID string
 
 	// released runs on the loop once a player's last write lands.
 	released func(*client)
@@ -132,6 +138,7 @@ func newShared(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 		inbox:          make(chan func(), 1024),
 		done:           make(chan struct{}),
 		conns:          map[string]*client{},
+		Events:         events.Nop{},
 
 		PendingSaves: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "store_pending_saves",

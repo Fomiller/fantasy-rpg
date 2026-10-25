@@ -31,13 +31,13 @@ Godot is not in the dev shell. Install Godot 4 yourself. Docker must be running.
 
 There are three ways to run the stack, from fastest to most realistic.
 
-**1. Local process.** Postgres and NATS run in Compose. Each server runs as a normal Go process, so a restart is a few seconds.
+**1. Local process.** Postgres and Redpanda run in Compose. Each server runs as a normal Go process, so a restart is a few seconds.
 
 ```sh
 just dev                     # migrate, then run world-server on :8080
 just instance instance-0 8081 # an instance-server, in a second terminal
 just instance instance-1 8082 # another, in a third
-just deps                    # only postgres + nats
+just deps                    # only postgres + redpanda, with the topics
 just migrate                 # apply database migrations to the Compose postgres
 ```
 
@@ -46,7 +46,7 @@ The client connects to the world server on :8080 by default. The player walks ar
 **2. Full Compose.** Every server runs as a container.
 
 ```sh
-just up      # world-server :8080, instance-0 :8081, instance-1 :8082, postgres :5432, nats :4222
+just up      # world-server :8080, instance-0 :8081, instance-1 :8082, postgres :5432, redpanda :19092
 just down
 ```
 

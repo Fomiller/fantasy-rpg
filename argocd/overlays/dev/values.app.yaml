@@ -18,3 +18,7 @@ ingressRoute:
 # Secret CNPG makes, so nothing else here changes.
 postgres:
   enabled: true
+
+# The in-cluster Redpanda from argocd/redpanda. No TLS or SASL.
+events:
+  brokers: redpanda.fantasy-rpg.svc:9093

@@ -288,10 +288,12 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, errDraining) {
+		s.joinEvent(c, err.Error())
 		conn.Close(websocket.StatusTryAgainLater, err.Error())
 		return
 	}
 	if err != nil {
+		s.joinEvent(c, err.Error())
 		conn.Close(websocket.StatusPolicyViolation, err.Error())
 		return
 	}
@@ -353,18 +355,22 @@ func (s *Server) startRun(c *client) {
 		c.entering = false
 		switch {
 		case errors.Is(err, inventory.ErrInRun):
+			s.joinEvent(c, reasonInRun)
 			c.close(websocket.StatusPolicyViolation, reasonInRun)
 			return
 		case errors.Is(err, inventory.ErrRunUsed):
+			s.joinEvent(c, jointoken.ErrUsed.Error())
 			c.close(websocket.StatusPolicyViolation, jointoken.ErrUsed.Error())
 			return
 		case err != nil:
-			c.close(websocket.StatusTryAgainLater, "characters unavailable")
+			s.joinEvent(c, reasonUnavailable)
+			c.close(websocket.StatusTryAgainLater, reasonUnavailable)
 			return
 		}
 		if c.gone {
 			// The player left while the lease was taken. Give it back with what
 			// they took in.
+			s.joinEvent(c, reasonLeft)
 			s.saveRun(c, ch)
 			return
 		}
@@ -388,6 +394,7 @@ func (s *Server) spawn(c *client, ch inventory.Character) {
 	s.used = true
 	c.id, c.stash = id, ch.Stash
 	s.clients[id] = c
+	s.joinEvent(c, "")
 	p, _ := s.world.Player(id)
 	class := protocol.ClassInfo(s.world.Classes(), p.Class)
 	character := protocol.Character(s.world.Classes().Progression, c.name, p.Class, p.Level, p.XP, p.RunXP)
