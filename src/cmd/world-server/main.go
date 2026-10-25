@@ -18,8 +18,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
-	"github.com/Fomiller/fantasy-rpg/src/internal/db"
 	"github.com/Fomiller/fantasy-rpg/src/internal/events"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
@@ -62,7 +62,7 @@ func run() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	store, storeName, closeStore, err := db.OpenStore(ctx, os.Getenv("DATABASE_URL"), reg)
+	store, storeName, closeStore, err := httpstore.Open(ctx, os.Getenv("INVENTORY_URL"), os.Getenv("DATABASE_URL"), reg)
 	if err != nil {
 		return err
 	}

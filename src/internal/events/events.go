@@ -4,7 +4,9 @@
 package events
 
 import (
+	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 
@@ -26,9 +28,16 @@ const Version = 1
 // Producer sends msg on topic under key. Produce never blocks on the broker.
 // A failure is logged and counted, not returned.
 type Producer interface {
+	Sender
 	Produce(topic, key string, msg proto.Message)
 	// Close waits a short time for queued records, then stops.
 	Close()
+}
+
+// Sender produces an encoded payload and waits for the ack, for a caller
+// that must not lose it, like the outbox relay.
+type Sender interface {
+	Send(ctx context.Context, topic, key string, payload []byte) error
 }
 
 // Open picks the producer for brokers, a comma-separated list. Empty means
@@ -47,13 +56,16 @@ func Open(brokers string, reg prometheus.Registerer, log *slog.Logger) (Producer
 // Nop drops every event.
 type Nop struct{}
 
-func (Nop) Produce(string, string, proto.Message) {}
-func (Nop) Close()                                {}
+func (Nop) Produce(string, string, proto.Message)              {}
+func (Nop) Send(context.Context, string, string, []byte) error { return nil }
+func (Nop) Close()                                             {}
 
 // Record is one event a Memory producer kept.
 type Record struct {
 	Topic, Key string
 	Msg        proto.Message
+	// Payload is set instead of Msg for a record from Send.
+	Payload []byte
 }
 
 // Memory keeps every event, for tests.
@@ -68,6 +80,13 @@ func (m *Memory) Produce(topic, key string, msg proto.Message) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.records = append(m.records, Record{Topic: topic, Key: key, Msg: proto.Clone(msg)})
+}
+
+func (m *Memory) Send(_ context.Context, topic, key string, payload []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.records = append(m.records, Record{Topic: topic, Key: key, Payload: slices.Clone(payload)})
+	return nil
 }
 
 func (m *Memory) Close() {}

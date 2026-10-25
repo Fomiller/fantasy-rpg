@@ -10,7 +10,7 @@ after changing `repo.nix`.
 | Path | What lives there |
 | --- | --- |
 | `client/godot/` | The 2D Godot client, in GDScript. |
-| `src/cmd/<binary>/` | One Go main package per server: `world-server`, `instance-server` and `instance-manager`. |
+| `src/cmd/<binary>/` | One Go main package per server: `world-server`, `instance-server`, `instance-manager` and `inventory`. |
 | `src/internal/` | Shared Go game code: world, combat, AI, inventory, loot. |
 | `proto/game/v1/` | Protobuf messages shared by the client and the servers. |
 | `deploy/` | Docker Compose for local runs, Kubernetes manifests for the homelab. |
@@ -39,9 +39,10 @@ just instance instance-0 8081 # an instance-server, in a second terminal
 just instance instance-1 8082 # another, in a third
 just deps                    # only postgres + redpanda, with the topics
 just migrate                 # apply database migrations to the Compose postgres
+just inventory               # the inventory service on :8070
 ```
 
-The client connects to the world server on :8080 by default. The player walks around the hub town there, uses the stash chest, and walks into the cave entrance to get a ticket. The client then moves to that instance server for the run. When the run ends the client goes back to the town. All three processes share the Compose database and the dev join key.
+The client connects to the world server on :8080 by default. The player walks around the hub town there, uses the stash chest, and walks into the cave entrance to get a ticket. The client then moves to that instance server for the run. When the run ends the client goes back to the town. All three processes share the Compose database and the dev join key. To go through the inventory service as the cluster does, run `just inventory` and start the others with `INVENTORY_URL=http://localhost:8070`.
 
 **2. Full Compose.** Every server runs as a container.
 
@@ -116,6 +117,7 @@ The game runs in the homelab cluster. The world server is public at `wss://fanta
 - `argocd/agones` installs Agones into `agones-system`. `argocd/overlays/dev` includes it, so it syncs with the same Application.
 - `argocd/redpanda` runs a one-broker Redpanda, its topics and the Console in `fantasy-rpg`. homelab's operator reconciles them. The Console is at redpanda-frpg-dev.fomiller.com, behind Cloudflare Access.
 - The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server. instance-manager makes a Service and an IngressRoute for each `/instances/<gameserver>/` prefix. Both are owned by the GameServer and go away with it.
+- `inventory` owns characters, stashes and the run lease. It is the only workload with `DATABASE_URL`. The world and instance servers call it over HTTP at `INVENTORY_URL`. It produces `inventory.applied` from an outbox table.
 - The world and instance servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 
 - A buffer FleetAutoscaler keeps one Ready GameServer warm, from 1 to 8 in all. It owns the Fleet's replicas, so the chart never sets them.

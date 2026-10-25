@@ -1,14 +1,13 @@
-package db
+package items
 
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
 
-// item is the saved shape of an items.Instance. It is kept apart so that
-// renaming a Go field never changes data already saved.
+// item is the saved shape of an Instance, in Postgres and on the inventory
+// service's API. It is kept apart so that renaming a Go field never changes
+// data already saved.
 type item struct {
 	ID      string         `json:"id"`
 	Def     string         `json:"def"`
@@ -31,7 +30,8 @@ type affix struct {
 	Value int    `json:"value"`
 }
 
-func encodeItems(insts []items.Instance) ([]byte, error) {
+// EncodeJSON writes insts in the saved shape. nil is an empty array.
+func EncodeJSON(insts []Instance) ([]byte, error) {
 	out := make([]item, 0, len(insts))
 	for _, inst := range insts {
 		it := item{
@@ -52,26 +52,26 @@ func encodeItems(insts []items.Instance) ([]byte, error) {
 	return json.Marshal(out)
 }
 
-func decodeItems(b []byte) ([]items.Instance, error) {
+func DecodeJSON(b []byte) ([]Instance, error) {
 	var saved []item
 	if err := json.Unmarshal(b, &saved); err != nil {
 		return nil, err
 	}
-	var out []items.Instance
+	var out []Instance
 	for _, it := range saved {
-		rarity, err := items.ParseRarity(it.Rarity)
+		rarity, err := ParseRarity(it.Rarity)
 		if err != nil {
 			return nil, fmt.Errorf("item %s: %w", it.ID, err)
 		}
-		inst := items.Instance{
-			ID: it.ID, DefID: it.Def, Name: it.Name, Slot: items.Slot(it.Slot), WeaponType: items.WeaponType(it.Weapon),
-			Rarity: rarity, Level: it.Level, Base: map[items.Stat]int{}, Quantity: it.Qty, Stack: it.Stack,
+		inst := Instance{
+			ID: it.ID, DefID: it.Def, Name: it.Name, Slot: Slot(it.Slot), WeaponType: WeaponType(it.Weapon),
+			Rarity: rarity, Level: it.Level, Base: map[Stat]int{}, Quantity: it.Qty, Stack: it.Stack,
 		}
 		for stat, v := range it.Base {
-			inst.Base[items.Stat(stat)] = v
+			inst.Base[Stat(stat)] = v
 		}
 		for _, a := range it.Affixes {
-			inst.Affixes = append(inst.Affixes, items.Affix{ID: a.ID, Name: a.Name, Stat: items.Stat(a.Stat), Tier: a.Tier, Value: a.Value})
+			inst.Affixes = append(inst.Affixes, Affix{ID: a.ID, Name: a.Name, Stat: Stat(a.Stat), Tier: a.Tier, Value: a.Value})
 		}
 		out = append(out, inst)
 	}

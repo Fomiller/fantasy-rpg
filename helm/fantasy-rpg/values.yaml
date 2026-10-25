@@ -30,9 +30,10 @@ instances:
     minReplicas: 1
     maxReplicas: 8
 
-# The world server and instance-manager, from the same image with their own
-# commands. The world has /ws and asks the manager for an instance. Off by
-# default because the default image above is http-echo, which has neither.
+# The world server, instance-manager and inventory, from the same image with
+# their own commands. The world has /ws and asks the manager for an instance.
+# inventory is the only one with the database. Off by default because the
+# default image above is http-echo, which has none of them.
 world:
   enabled: false
   # Extra container env, in the same shape as env above.

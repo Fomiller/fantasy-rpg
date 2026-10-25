@@ -84,8 +84,10 @@ spec:
                 {{- if .Values.joinKey.secretName }}
                 {{- include "chart.joinKeyEnv" . | nindent 16 }}
                 {{- end }}
-                {{- if .Values.postgres.enabled }}
-                {{- include "chart.databaseEnv" . | nindent 16 }}
+                {{- /* inventory is deployed with the world server. Without it
+                       each instance keeps a memory store. */}}
+                {{- if .Values.world.enabled }}
+                {{- include "chart.inventoryEnv" . | nindent 16 }}
                 {{- end }}
               readinessProbe:
                 httpGet:

@@ -66,6 +66,10 @@ func (k *Kafka) Produce(topic, key string, msg proto.Message) {
 	})
 }
 
+func (k *Kafka) Send(ctx context.Context, topic, key string, payload []byte) error {
+	return k.client.ProduceSync(ctx, &kgo.Record{Topic: topic, Key: []byte(key), Value: payload}).FirstErr()
+}
+
 func (k *Kafka) failed(topic, key string, err error) {
 	k.Errors.WithLabelValues(topic).Inc()
 	k.log.Warn("produce event", "topic", topic, "key", key, "err", err)

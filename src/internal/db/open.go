@@ -10,7 +10,8 @@ import (
 )
 
 // OpenStore is the Postgres store when url is set and the memory store when
-// it is not, metered on reg. Both servers pick their store this way.
+// it is not, metered on reg. inventory uses it, and so do world and
+// instance servers when INVENTORY_URL is empty.
 func OpenStore(ctx context.Context, url string, reg prometheus.Registerer) (store inventory.Store, name string, closeFn func(), err error) {
 	if url == "" {
 		return inventory.Metered(inventory.NewMemory(), reg), "memory", func() {}, nil

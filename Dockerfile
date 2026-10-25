@@ -3,15 +3,16 @@
 # promotion moves them all and their migrations always match.
 #
 # The entrypoint is the instance server, which the migrate Job also runs.
-# The world server and instance manager pick their binary with `command`.
+# The world server, instance manager and inventory pick their binary with
+# `command`.
 FROM golang:1.27 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/ ./src/cmd/instance-server ./src/cmd/world-server ./src/cmd/instance-manager
+RUN CGO_ENABLED=0 go build -o /out/ ./src/cmd/instance-server ./src/cmd/world-server ./src/cmd/instance-manager ./src/cmd/inventory
 
 FROM gcr.io/distroless/static-debian12
-COPY --from=build /out/instance-server /out/world-server /out/instance-manager /
+COPY --from=build /out/instance-server /out/world-server /out/instance-manager /out/inventory /
 EXPOSE 8080
 ENTRYPOINT ["/instance-server"]

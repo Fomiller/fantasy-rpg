@@ -111,3 +111,23 @@ func TestKafkaCountsFailures(t *testing.T) {
 		t.Fatalf("errors = %v, want 1", n)
 	}
 }
+
+func TestKafkaSendWaitsForTheAck(t *testing.T) {
+	cluster, err := kfake.NewCluster(kfake.SeedTopics(1, TopicInventoryApplied))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cluster.Close)
+
+	k, err := NewKafka(cluster.ListenAddrs(), prometheus.NewRegistry(), quiet(), kgo.RecordDeliveryTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Close()
+	if err := k.Send(t.Context(), TopicInventoryApplied, "ann", []byte("x")); err != nil {
+		t.Fatalf("send = %v", err)
+	}
+	if err := k.Send(t.Context(), "no.such.topic", "ann", []byte("x")); err == nil {
+		t.Fatal("send to a missing topic did not fail")
+	}
+}

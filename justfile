@@ -51,6 +51,9 @@ dev: migrate
 instance id port:
     JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
 
+inventory: migrate
+    DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' PORT=8070 go run ./src/cmd/inventory
+
 migrate: deps
     DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate
 
@@ -64,6 +67,7 @@ images:
     docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .
     docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev .
     docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-manager -t fantasy-rpg/instance-manager:dev .
+    docker build -f deploy/docker/Dockerfile --build-arg BINARY=inventory -t fantasy-rpg/inventory:dev .
 
 k8s-up:
     k3d cluster list fantasy-rpg >/dev/null 2>&1 || k3d cluster create fantasy-rpg --wait --kubeconfig-switch-context=false
@@ -112,7 +116,7 @@ client-test:
 net-test: build
     #!/usr/bin/env bash
     set -euo pipefail
-    ports="8081 8082 8083 8080 8090"
+    ports="8070 8081 8082 8083 8080 8090"
     for port in $ports; do if curl -sf localhost:$port/healthz >/dev/null; then echo "port $port is in use. Stop the other server first." >&2; exit 1; fi; done
     {{godot}} --headless --path client/godot --import
     # Picked here, not by the server, so a failure can say how to replay it.
@@ -127,6 +131,10 @@ net-test: build
     export KAFKA_BROKERS=127.0.0.1:29092
     for i in $(seq 50); do docker exec "$rp" rpk topic create --if-not-exists -X brokers=$KAFKA_BROKERS {{topics}} >/dev/null 2>&1 && break; if [ "$i" = 50 ]; then echo "Redpanda did not start." >&2; exit 1; fi; sleep 0.2; done
     ./bin/instance-server migrate
+    PORT=8070 ./bin/inventory & pids+=($!)
+    for i in $(seq 50); do curl -sf localhost:8070/healthz >/dev/null && break; sleep 0.1; done
+    # Only inventory opens the database, as in the cluster.
+    export INVENTORY_URL=http://localhost:8070
     INSTANCE_ID=instance-0 PORT=8081 ./bin/instance-server & pids+=($!)
     INSTANCE_ID=instance-1 PORT=8082 ./bin/instance-server & pids+=($!)
     INSTANCE_ID=instance-2 PORT=8083 CAVE=yard ./bin/instance-server & pids+=($!)
@@ -139,8 +147,8 @@ net-test: build
     {{godot}} --headless --path client/godot --script res://tests/net_test.gd
     {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd
     {{godot}} --headless --path client/godot --script res://tests/world_test.gd -- --server=ws://127.0.0.1:8090/ws
-    # Every test above walks from the town into a cave.
-    for topic in player.session instance.join; do n=$(docker exec "$rp" rpk topic describe -p "$topic" -X brokers=$KAFKA_BROKERS | awk 'NR>1 {s+=$NF} END {print s+0}'); if [ "$n" = 0 ]; then echo "No $topic events." >&2; exit 1; fi; done
+    # Every test above walks from the town into a cave, and world_test ends a run.
+    for topic in player.session instance.join inventory.applied; do n=$(docker exec "$rp" rpk topic describe -p "$topic" -X brokers=$KAFKA_BROKERS | awk 'NR>1 {s+=$NF} END {print s+0}'); if [ "$n" = 0 ]; then echo "No $topic events." >&2; exit 1; fi; done
 
 proto:
     buf lint
