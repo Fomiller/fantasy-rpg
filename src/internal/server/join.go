@@ -26,11 +26,15 @@ const (
 	joinTimeout = 5 * time.Second
 	// leaseRetry is how often a lobby held by a run checks if the run ended.
 	leaseRetry = 2 * time.Second
+	// closeGrace is how long a server waits for the client to close after a
+	// ticket or a run's end before closing itself. Closing at once can drop
+	// that last message: Godot empties its read buffer when the close lands.
+	closeGrace = 2 * time.Second
 )
 
-// Lobby is the lobby half of a game server: join, character load and
-// create, the lobby, stash moves, and each player's store writes. The world
-// server is a Lobby on its own. An instance server's Server adds a run.
+// Lobby is the world server: join, character load and create, the lobby,
+// stash moves, and handing players to an instance. Its connection and store
+// write handling is shared with the instance server's Server.
 type Lobby struct {
 	// Store keeps characters and stashes by player name. Set it before
 	// serving. Only connection and writer goroutines call it.
@@ -44,24 +48,17 @@ type Lobby struct {
 	stop  sync.Once
 	// conns has every connected player by name, until their last write lands.
 	conns map[string]*client
-	// run is nil on the world server, which has no way into a run yet.
-	run run
+	// Instances is where Enter Cave sends players. With none, every instance
+	// is full.
+	Instances *Directory
+	// JoinKey signs the tokens instance servers check.
+	JoinKey []byte
 
 	// PendingSaves counts run ends that are past their patience and still
 	// retrying. Register it to export it.
 	PendingSaves prometheus.Gauge
 	// Tests shorten these.
-	endRunPatience, pendingRetry, leaseRetry time.Duration
-}
-
-// run is what an instance server adds to the lobby. Every call is on the
-// goroutine that owns the lobby.
-type run interface {
-	enter(c *client)
-	command(c *client, msg *gamev1.ClientMessage)
-	leave(c *client)
-	// staleLease reports a lease this server knows is dead.
-	staleLease(l inventory.Lease) bool
+	endRunPatience, pendingRetry, leaseRetry, closeGrace time.Duration
 }
 
 type client struct {
@@ -71,16 +68,20 @@ type client struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	writes *writer
+	// kick closes the connection once the outbox is written.
+	kick chan closeMsg
 	// gone is set once the connection has closed.
 	gone bool
 	// id is the player's entity in the cave. In the lobby it is 0 and lobby is set.
 	id    sim.EntityID
 	lobby *lobby
-	// entering is set while the run lease is being taken.
+	// entering is set while the player is on their way into a run: behind
+	// their lobby saves on the world server, taking the lease on an instance.
 	entering bool
 	// inRun is set while a run elsewhere holds the account.
 	inRun bool
-	// runID and stash are set from cave entry, so the run end needs no read.
+	// runID and stash are set from the join token and the lease, so the run
+	// end needs no read.
 	runID string
 	stash []items.Instance
 	// pending is the run end not in the store yet.
@@ -91,7 +92,7 @@ type client struct {
 	lobbySeq, savedSeq int
 }
 
-// NewLobby makes a lobby with no run, as the world server runs it.
+// NewLobby makes a world server with no instances to send anyone to.
 func NewLobby(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 	return &Lobby{
 		Store: inventory.NewMemory(),
@@ -109,6 +110,7 @@ func NewLobby(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 		endRunPatience: endRunPatience,
 		pendingRetry:   pendingRetry,
 		leaseRetry:     leaseRetry,
+		closeGrace:     closeGrace,
 	}
 }
 
@@ -157,6 +159,23 @@ func (s *Lobby) sendToClient(c *client, msg *gamev1.ServerMessage) {
 	}
 }
 
+type closeMsg struct {
+	code   websocket.StatusCode
+	reason string
+}
+
+func newClient(name, class string, ctx context.Context, cancel context.CancelFunc) *client {
+	return &client{name: name, class: class, out: make(chan []byte, outboxSize), kick: make(chan closeMsg, 1), ctx: ctx, cancel: cancel, writes: newWriter()}
+}
+
+// close sends what is queued, then closes with reason. Only the first call counts.
+func (c *client) close(code websocket.StatusCode, reason string) {
+	select {
+	case c.kick <- closeMsg{code, reason}:
+	default:
+	}
+}
+
 // send never blocks the loop. A client too slow to drain its outbox is
 // dropped rather than holding up everyone else.
 func (c *client) send(b []byte) {
@@ -202,23 +221,13 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if class == "" {
 		class = classes.Starter
 	}
-	c := &client{name: name, class: class, out: make(chan []byte, outboxSize), ctx: ctx, cancel: cancel, writes: newWriter()}
+	c := newClient(name, class, ctx, cancel)
 	claimed := make(chan error, 1)
-	// resume is set when the join takes over a run end that is still saving.
-	var resume *inventory.Character
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
 		// save the same items.
-		if old, ok := s.conns[name]; ok {
-			if old.pending == nil || old.class != class || !old.writes.reopen() {
-				claimed <- errors.New("name already playing")
-				return
-			}
-			c.writes, c.pending = old.writes, old.pending
-			s.conns[name] = c
-			ch := cloneCharacter(*c.pending)
-			resume = &ch
-			claimed <- nil
+		if _, ok := s.conns[name]; ok {
+			claimed <- errors.New("name already playing")
 			return
 		}
 		if _, ok := s.rules.Classes().Classes[class]; !ok {
@@ -243,28 +252,20 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log := s.log.With("name", name)
-	if resume == nil {
-		go s.saveLoop(name, c.writes)
-	}
+	go s.saveLoop(name, c.writes)
 	defer func() {
 		s.enqueue(func() { s.leave(c) })
 		log.Info("player left")
 	}()
 
-	// A pending save is newer than the store, so it is what the lobby opens from.
-	var ch inventory.Character
-	if resume != nil {
-		ch = *resume
-	} else {
-		ch, err = s.loadCharacter(ctx, name, class)
-	}
+	ch, err := s.loadCharacter(ctx, name, class)
 	if err != nil {
 		log.Error("load character", "err", err)
 		// Never fall back to a starter kit, which would later save over real gear.
 		conn.Close(websocket.StatusTryAgainLater, "characters unavailable")
 		return
 	}
-	if ch.Run.Held() && s.run != nil && s.run.staleLease(ch.Run) {
+	if s.Instances.DeadLease(ch.Run, time.Now()) {
 		log.Warn("clearing a dead run lease", "run", ch.Run.RunID, "instance", ch.Run.Instance)
 		s.clearRun(c, ch.Run.RunID)
 		ch.Run = inventory.Lease{}
@@ -276,7 +277,11 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	log.Info("player joined")
 
 	go s.writeLoop(ctx, conn, c, cancel)
+	s.readLoop(ctx, conn, log, func(msg *gamev1.ClientMessage) { s.handle(c, msg) })
+}
 
+// readLoop hands each message to handle on the loop until the connection ends.
+func (s *Lobby) readLoop(ctx context.Context, conn *websocket.Conn, log *slog.Logger, handle func(*gamev1.ClientMessage)) {
 	for {
 		_, b, err := conn.Read(ctx)
 		if err != nil {
@@ -290,7 +295,7 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 			conn.Close(websocket.StatusPolicyViolation, err.Error())
 			return
 		}
-		if !s.enqueue(func() { s.handle(c, msg) }) {
+		if !s.enqueue(func() { handle(msg) }) {
 			return
 		}
 	}
@@ -299,21 +304,17 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 // leave runs on the loop once the connection is gone.
 func (s *Lobby) leave(c *client) {
 	c.gone = true
-	if s.run != nil {
-		s.run.leave(c)
-	}
 	c.writes.close()
 }
 
-// handle runs on the loop, which is the only place c.id and c.lobby change.
+// handle runs on the loop, which is the only place c.lobby changes. Run
+// commands mean nothing here.
 func (s *Lobby) handle(c *client, msg *gamev1.ClientMessage) {
 	switch {
 	case msg.GetEnterInstance() != nil:
 		s.enterInstance(c)
 	case msg.GetStashMove() != nil:
 		s.moveItem(c, msg.GetStashMove())
-	case s.run != nil:
-		s.run.command(c, msg)
 	}
 }
 
@@ -327,7 +328,7 @@ func (s *Lobby) setInRun(c *client, held bool) {
 }
 
 // waitRun reloads the character once the lease is gone, so the lobby opens
-// on what the run banked.
+// on what the run banked. A lease whose run is dead is cleared here too.
 func (s *Lobby) waitRun(c *client) {
 	tick := time.NewTicker(s.leaseRetry)
 	defer tick.Stop()
@@ -340,7 +341,15 @@ func (s *Lobby) waitRun(c *client) {
 		ctx, cancel := context.WithTimeout(c.ctx, storeTimeout)
 		ch, ok, err := s.Store.Load(ctx, c.name, c.class)
 		cancel()
-		if err != nil || !ok || ch.Run.Held() {
+		if err != nil || !ok {
+			continue
+		}
+		if s.Instances.DeadLease(ch.Run, time.Now()) {
+			s.log.Warn("clearing a dead run lease", "name", c.name, "run", ch.Run.RunID, "instance", ch.Run.Instance)
+			s.clearRun(c, ch.Run.RunID)
+			continue
+		}
+		if ch.Run.Held() {
 			continue
 		}
 		s.enqueue(func() {
@@ -362,6 +371,16 @@ func (s *Lobby) writeLoop(ctx context.Context, conn *websocket.Conn, c *client, 
 			if err := conn.Write(ctx, websocket.MessageBinary, b); err != nil {
 				return
 			}
+		case k := <-c.kick:
+			// Everything sent before the close is already in the outbox, and
+			// this is its only reader.
+			for len(c.out) > 0 {
+				if err := conn.Write(ctx, websocket.MessageBinary, <-c.out); err != nil {
+					return
+				}
+			}
+			conn.Close(k.code, k.reason)
+			return
 		}
 	}
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
+	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
@@ -32,6 +33,18 @@ func main() {
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	key, err := jointoken.Key(os.Getenv("JOIN_TOKEN_KEY"))
+	if err != nil {
+		return err
+	}
+	list, err := server.ParseInstances(os.Getenv("INSTANCES"))
+	if err != nil {
+		return err
+	}
+	if len(list) == 0 {
+		slog.Warn("INSTANCES is empty, so every Enter Cave is full")
+	}
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -48,6 +61,8 @@ func run() error {
 	rules := sim.NewWorld(sim.DefaultConfig(), nil)
 	lobby := server.NewLobby(rules, items.NewRoller(items.Default(), rand.Uint64()), slog.Default())
 	lobby.Store = store
+	lobby.JoinKey = key
+	lobby.Instances = server.NewDirectory(list)
 	reg.MustRegister(lobby.PendingSaves)
 	defer lobby.Close()
 
@@ -72,7 +87,8 @@ func run() error {
 		}
 	}()
 	go lobby.Run(ctx)
-	slog.Info("world-server listening", "addr", srv.Addr)
+	go lobby.Instances.Run(ctx, pollEvery)
+	slog.Info("world-server listening", "addr", srv.Addr, "instances", len(list))
 
 	select {
 	case <-ctx.Done():
@@ -85,8 +101,9 @@ func run() error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-// port is 8080 in a pod. Locally the world server runs beside an instance
-// server, which has 8080.
+// pollEvery is how often each instance's /status is read.
+const pollEvery = 2 * time.Second
+
 func port() string {
 	if p := os.Getenv("PORT"); p != "" {
 		return p

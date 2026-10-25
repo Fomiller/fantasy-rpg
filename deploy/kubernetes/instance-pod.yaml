@@ -12,6 +12,11 @@ spec:
   containers:
     - name: instance-server
       image: fantasy-rpg/instance-server:dev
+      env:
+        - name: INSTANCE_ID
+          value: "instance-INSTANCE_ID"
+        - name: JOIN_TOKEN_KEY
+          value: dev-only
       ports:
         - containerPort: 8080
       readinessProbe:

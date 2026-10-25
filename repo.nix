@@ -10,16 +10,22 @@
     publishChart = true;
   };
 
-  # The instance-server is the image's entrypoint, since players connect to it
-  # until FOM-228. The image holds world-server too.
+  # The instance-server is the image's entrypoint, which the migrate Job runs.
+  # The image holds world-server too, and its Deployment picks it with command.
   service = {
     binary = "instance-server";
     port = 8080;
   };
 
   # golden-service builds one binary per image, and the image holds both
-  # servers, so the Dockerfile is written by hand.
-  unmanaged = [ "Dockerfile" ];
+  # servers, so the Dockerfile is written by hand. The pack's Deployment and
+  # Service are listed so generate does not bring them back: instance servers
+  # are a StatefulSet with a Service per pod.
+  unmanaged = [
+    "Dockerfile"
+    "helm/fantasy-rpg/templates/deployment.yaml"
+    "helm/fantasy-rpg/templates/service.yaml"
+  ];
 
   infra = {
     dopplerProject = "fantasy-rpg";
@@ -57,11 +63,11 @@
     "apply-all:\n    doppler run --name-transformer tf-var -- \\\n    terragrunt --non-interactive stack run --tf-path terraform --working-dir {{infraDir}} apply"
     "fmt:\n    gofmt -w src"
     "deps:\n    {{compose}} up -d --wait postgres nats"
-    # The world server on its own port, beside `just instance-db` on 8080 and the same database.
-    "dev: migrate\n    PORT=8090 DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/world-server"
-    "instance:\n    go run ./src/cmd/instance-server"
+    # The world server on 8080, where the client connects. Run `just instance instance-0 8081`
+    # and `just instance instance-1 8082` in two more terminals. All three share the Compose database.
+    "dev: migrate\n    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server"
+    "instance id port:\n    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server"
     "migrate: deps\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate"
-    "instance-db: migrate\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server"
     "up:\n    {{compose}} --profile full up -d --build --wait"
     "down:\n    {{compose}} --profile full down"
     "images:\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev ."
@@ -75,11 +81,10 @@
     # Import first. A fresh checkout has no .godot/ class cache, and without it
     # every class_name in the scripts fails to resolve.
     "client-run:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --path client/godot"
-    "client-world:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --path client/godot -- --server=ws://127.0.0.1:8090/ws"
     "client-online:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws"
     "client-check:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --quit-after 5"
     "client-test:\n    {{godot}} --headless --path client/godot --import\n    {{godot}} --headless --path client/godot --script res://tests/player_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/proto_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/movement_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/enemy_view_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/sprites_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/abilities_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/facing_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/windows_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/loot_window_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/window_attack_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/character_screen_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/debug_overlay_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/progression_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/lobby_test.gd"
-    "net-test: build\n    #!/usr/bin/env bash\n    set -euo pipefail\n    for port in 8080 8090; do if curl -sf localhost:$port/healthz >/dev/null; then echo \"port $port is in use. Stop the other server first.\" >&2; exit 1; fi; done\n    {{godot}} --headless --path client/godot --import\n    # Picked here, not by the server, so a failure can say how to replay it.\n    export LOOT_SEED=\"\${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}\"\n    ./bin/instance-server & pid=$!\n    PORT=8090 ./bin/world-server & world=$!\n    trap 'status=$?; kill $pid $world 2>/dev/null || true; if [ $status -ne 0 ]; then echo \"net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test\" >&2; fi' EXIT\n    for port in 8080 8090; do for i in $(seq 50); do curl -sf localhost:$port/healthz >/dev/null && break; sleep 0.1; done; done\n    {{godot}} --headless --path client/godot --script res://tests/net_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/world_test.gd -- --server=ws://127.0.0.1:8090/ws"
+    "net-test: build\n    #!/usr/bin/env bash\n    set -euo pipefail\n    ports=\"8081 8082 8083 8080 8090\"\n    for port in $ports; do if curl -sf localhost:$port/healthz >/dev/null; then echo \"port $port is in use. Stop the other server first.\" >&2; exit 1; fi; done\n    {{godot}} --headless --path client/godot --import\n    # Picked here, not by the server, so a failure can say how to replay it.\n    export LOOT_SEED=\"\${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}\"\n    # A throwaway Postgres, so the servers share a store and nothing from an earlier run or `just dev` leaks in.\n    pg=$(docker run -d --rm -e POSTGRES_USER=fantasy -e POSTGRES_PASSWORD=fantasy -e POSTGRES_DB=fantasy -p 127.0.0.1::5432 postgres:18)\n    pids=()\n    trap 'status=$?; kill \"\${pids[@]}\" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f \"$pg\" >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo \"net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test\" >&2; fi' EXIT\n    export DATABASE_URL=\"postgres://fantasy:fantasy@127.0.0.1:$(docker port \"$pg\" 5432/tcp | head -1 | cut -d: -f2)/fantasy?sslmode=disable\" JOIN_TOKEN_KEY=net-test\n    ./bin/instance-server migrate\n    INSTANCE_ID=instance-0 PORT=8081 ./bin/instance-server & pids+=($!)\n    INSTANCE_ID=instance-1 PORT=8082 ./bin/instance-server & pids+=($!)\n    INSTANCE_ID=instance-2 PORT=8083 CAVE=yard ./bin/instance-server & pids+=($!)\n    # Instances first, so each world's first poll finds them up.\n    for port in 8081 8082 8083; do for i in $(seq 50); do curl -sf localhost:$port/healthz >/dev/null && break; sleep 0.1; done; done\n    INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' ./bin/world-server & pids+=($!)\n    # A second world whose one instance is the yard, so world_test can loot and extract without a fight.\n    PORT=8090 INSTANCES='instance-2=http://localhost:8083=ws://127.0.0.1:8083/instances/instance-2/ws' ./bin/world-server & pids+=($!)\n    for port in 8080 8090; do for i in $(seq 50); do curl -sf localhost:$port/healthz >/dev/null && break; sleep 0.1; done; done\n    {{godot}} --headless --path client/godot --script res://tests/net_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd\n    {{godot}} --headless --path client/godot --script res://tests/world_test.gd -- --server=ws://127.0.0.1:8090/ws"
     "proto:\n    buf lint\n    buf generate\n    {{godot}} --headless --path client/godot -s res://addons/godobuf/godobuf_cmdln.gd --input={{justfile_directory()}}/proto/game/v1/game.proto --output={{justfile_directory()}}/client/godot/gen/game_v1.gd --class_name=GameV1"
     "proto-fixtures:\n    go test ./src/internal/protocol -run TestServerSnapshotFixture -update\n    go test ./src/internal/sim -run TestMovementFixture -update\n    UPDATE=1 {{godot}} --headless --path client/godot --script res://tests/proto_test.gd"
   ];

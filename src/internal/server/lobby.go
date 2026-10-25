@@ -1,11 +1,16 @@
 package server
 
 import (
+	"context"
 	"slices"
+	"time"
+
+	"github.com/coder/websocket"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
+	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 )
 
@@ -20,7 +25,7 @@ const (
 	MoveSaving = "saving"
 	// MoveInRun is a run holding the account somewhere else.
 	MoveInRun = "in_run"
-	// EnterFull is a world server with no instance to send the player to.
+	// EnterFull is no instance with room for the player.
 	EnterFull = "full"
 )
 
@@ -189,25 +194,77 @@ func (s *Lobby) moveItem(c *client, req *gamev1.StashMoveRequest) {
 	s.sendLobbyItems(c)
 }
 
-// enterInstance checks the lobby can be left, then hands the player to the run.
+// enterInstance checks the lobby can be left. The check waits behind the
+// player's queued lobby saves, so the instance loads the lobby they see,
+// and reads the lease, so a run that started elsewhere since the join is
+// caught here and not on the instance.
 func (s *Lobby) enterInstance(c *client) {
-	reason := ""
-	switch {
-	case c.lobby == nil || c.entering:
+	if c.lobby == nil || c.entering {
 		return
-	case c.pending != nil:
-		reason = MoveSaving
-	case c.inRun:
-		reason = MoveInRun
-	case s.run == nil:
-		// FOM-228 sends the player to an instance server from here.
-		reason = EnterFull
 	}
-	if reason != "" {
+	if reason := s.enterBlocked(c); reason != "" {
 		s.sendToClient(c, protocol.EnterInstanceRejected(reason))
 		return
 	}
-	s.run.enter(c)
+	c.entering = true
+	name, class := c.name, c.class
+	var lease inventory.Lease
+	c.writes.push(storeWrite{op: "enter instance", call: func(ctx context.Context) error {
+		ch, _, err := s.Store.Load(ctx, name, class)
+		lease = ch.Run
+		return err
+	}, done: func(owner *client, err error) {
+		c.entering = false
+		if owner != c || c.gone || c.lobby == nil {
+			return
+		}
+		if err != nil {
+			s.sendToClient(c, protocol.EnterInstanceRejected(MoveSaving))
+			return
+		}
+		if lease.Held() {
+			s.setInRun(c, true)
+			s.sendLobby(c)
+		}
+		if reason := s.enterBlocked(c); reason != "" {
+			s.sendToClient(c, protocol.EnterInstanceRejected(reason))
+			return
+		}
+		s.sendTicket(c)
+	}})
+}
+
+func (s *Lobby) enterBlocked(c *client) string {
+	switch {
+	case c.pending != nil:
+		return MoveSaving
+	case c.inRun:
+		return MoveInRun
+	}
+	return ""
+}
+
+// sendTicket picks an instance, sends the player there and closes. The
+// instance server takes the lease, so a ticket never used leaves nothing
+// behind.
+func (s *Lobby) sendTicket(c *client) {
+	now := time.Now()
+	runID := items.NewID()
+	inst, st, ok := s.Instances.Reserve([]string{runID}, now)
+	if !ok {
+		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))
+		return
+	}
+	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: st.ID + "@" + st.Boot, Run: runID}, now)
+	if err != nil {
+		s.log.Error("sign join token", "name", c.name, "err", err)
+		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))
+		return
+	}
+	c.lobby = nil
+	s.sendToClient(c, protocol.Ticket(inst.Public, token, inst.ID, jointoken.Lifetime))
+	time.AfterFunc(s.closeGrace, func() { c.close(websocket.StatusNormalClosure, "entering instance") })
+	s.log.Info("sent to instance", "name", c.name, "instance", inst.ID, "run", runID)
 }
 
 // stashKept adds an extracted bag to a copy of the stash. What does not fit

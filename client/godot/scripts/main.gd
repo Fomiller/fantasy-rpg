@@ -226,6 +226,9 @@ func _on_lobby() -> void:
 	if _connection.character:
 		_xp_bar.show_character(_connection.character)
 	_lobby.show_lobby(_connection.character, _connection.class_info, _connection.saving)
+	if _connection.notice != "":
+		_lobby.show_notice(_connection.notice)
+		_connection.notice = ""
 	_status.text = "lobby"
 
 

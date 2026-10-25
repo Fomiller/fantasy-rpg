@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,15 +30,18 @@ type worldHarness struct {
 	store *spyStore
 }
 
-// serveWorld runs a lobby alone, as world-server does, with lease checks
+// serveWorld runs a world server with no instances, with lease checks
 // every 20 ms instead of 2 s.
-func serveWorld(t *testing.T) worldHarness {
+func serveWorld(t *testing.T, configure ...func(*Lobby)) worldHarness {
 	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
 	l := NewLobby(sim.NewWorld(sim.DefaultConfig(), nil), loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	spy := newSpy()
 	l.Store = spy
 	l.leaseRetry = 20 * time.Millisecond
+	for _, f := range configure {
+		f(l)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go l.Run(ctx)
@@ -105,8 +110,8 @@ func TestWorldStashMoveIsSaved(t *testing.T) {
 	})
 }
 
-// The world server has no instances until FOM-228, so Enter Cave is full
-// and no lease is ever taken.
+// With no instance to send anyone to, Enter Cave is full and no lease is
+// ever taken.
 func TestWorldEnterIsFull(t *testing.T) {
 	h := serveWorld(t)
 	conn := dial(t, h.url)
@@ -120,7 +125,8 @@ func TestWorldEnterIsFull(t *testing.T) {
 }
 
 // A join while a run holds the account shows the lobby saving and turns
-// moves away. Once the run end lands the lobby opens on what it banked.
+// moves away. Once the run end lands the lobby opens on what it banked. A
+// world server that knows nothing about the lease's instance never clears it.
 func TestWorldWaitsForTheRun(t *testing.T) {
 	h := serveWorld(t)
 	ctx := context.Background()
@@ -158,7 +164,7 @@ func TestWorldWaitsForTheRun(t *testing.T) {
 	moveTo(t, conn, eq.GetItems()[0].GetId(), toStash)
 	h.saved(t, "ann", func(c inventory.Character) bool { return len(c.Stash) == 1 })
 	if slices.Contains(h.store.calls(), "clear run") {
-		t.Fatalf("store calls = %v, the world server must not clear a lease yet", h.store.calls())
+		t.Fatalf("store calls = %v, want the lease left alone", h.store.calls())
 	}
 }
 
@@ -228,5 +234,47 @@ func TestWorldIgnoresRunCommands(t *testing.T) {
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Move{Move: &gamev1.MoveInput{Seq: 1, Direction: &gamev1.Vec2{X: 1}}}})
 	if r := enterRejected(t, conn); r != EnterFull {
 		t.Fatalf("enter rejected = %q, want full", r)
+	}
+}
+
+// A lease on an instance that does not answer is waited on, never cleared.
+// Once the instance answers with a new boot id, that run is gone and the
+// lease is cleared.
+func TestWorldClearsALeaseOnlyOnProof(t *testing.T) {
+	var boot atomic.Value
+	status := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := boot.Load().(string)
+		if b == "" {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		json.NewEncoder(w).Encode(InstanceStatus{ID: "instance-0", Boot: b, Capacity: 8, Runs: []string{}})
+	}))
+	t.Cleanup(status.Close)
+	dir := NewDirectory([]Instance{{ID: "instance-0", Internal: status.URL, Public: "ws://unused"}})
+	h := serveWorld(t, func(l *Lobby) { l.Instances = dir })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go dir.Run(ctx, 10*time.Millisecond)
+
+	if err := h.store.Create(ctx, inventory.Character{Name: "ann", Class: classes.Starter, Loadout: h.lobby.starterKit()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.Memory.StartRun(ctx, "ann", classes.Starter, items.NewID(), "instance-0@3f9a1c"); err != nil {
+		t.Fatal(err)
+	}
+	conn := dial(t, h.url)
+	if lobby := lobbyAs(t, conn, "ann"); !lobby.GetSaving() {
+		t.Fatalf("lobby = %v, want saving", lobby)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if slices.Contains(h.store.calls(), "clear run") {
+		t.Fatalf("store calls = %v, want no clear while the instance is down", h.store.calls())
+	}
+
+	boot.Store("000000")
+	waitFor(t, conn, saving(false))
+	if !slices.Contains(h.store.calls(), "clear run") {
+		t.Fatalf("store calls = %v, want the dead lease cleared", h.store.calls())
 	}
 }

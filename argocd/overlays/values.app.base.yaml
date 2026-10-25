@@ -6,17 +6,29 @@
 
 fullnameOverride: fantasy-rpg
 
-replicas: 1
-
 # The instance-server image. The tag lives in the environment's values.app.yaml,
 # where Kargo writes it.
 image:
   repository: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
 
-# The image holds both servers. The world server runs beside the instance
-# server, which keeps /ws until FOM-228.
+# The image holds both servers. The world server has /ws and sends players
+# to the instance servers' StatefulSet.
 world:
   enabled: true
+
+instances:
+  replicas: 2
+
+# Both servers sign and check join tokens with this key. The AWS secret holds
+# one JSON key, JOIN_TOKEN_KEY, with at least 32 random bytes.
+joinKey:
+  secretName: fantasy-rpg-join-key
+
+externalSecrets:
+  fantasy-rpg-join-key:
+    secretStore:
+      name: aws-clustersecretstore
+    remoteKey: dev/fomiller/fantasy-rpg-join-key
 
 # http-echo takes its port and text as args. The instance-server does not.
 args: []

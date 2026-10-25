@@ -1,8 +1,10 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"net"
@@ -20,6 +22,7 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
+	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
@@ -40,9 +43,21 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	rate, err := tickRate()
+	rate, err := positive("TICK_RATE", 20)
 	if err != nil {
 		return err
+	}
+	key, err := jointoken.Key(os.Getenv("JOIN_TOKEN_KEY"))
+	if err != nil {
+		return err
+	}
+	maxPlayers, err := positive("MAX_PLAYERS", 8)
+	if err != nil {
+		return err
+	}
+	cave, ok := caves.ByName(cmp.Or(os.Getenv("CAVE"), "loop"))
+	if !ok {
+		return fmt.Errorf("CAVE %q is not a cave", os.Getenv("CAVE"))
 	}
 
 	reg := prometheus.NewRegistry()
@@ -59,15 +74,20 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	cave := caves.Loop()
-	loot := items.NewRoller(items.Default(), seed)
-	world := cave.NewWorld(sim.DefaultConfig(), loot)
-	world.SeedAI(seed)
+	world, loot := newWorld(cave, seed)
 	game := server.New(world, cave, loot, slog.Default())
 	game.TickRate = rate
 	game.Store = store
+	game.MaxPlayers = maxPlayers
+	game.Tokens = jointoken.NewVerifier(key)
 	if id := os.Getenv("INSTANCE_ID"); id != "" {
 		game.ID = id
+	}
+	next := seed
+	game.Reset = func() (*sim.World, *items.Roller) {
+		next = nextSeed(next)
+		slog.Info("new world", "loot_seed", next)
+		return newWorld(cave, next)
 	}
 	reg.MustRegister(game.PendingSaves)
 	defer game.Close()
@@ -83,9 +103,12 @@ func run() error {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	mux.HandleFunc("GET /ws", game.HandleWS)
+	mux.HandleFunc("GET /status", game.HandleStatus)
+	// The public route is a path prefix per instance, so the socket lives
+	// under it and Traefik needs no rewrite.
+	mux.HandleFunc("GET /instances/"+game.ID+"/ws", game.HandleWS)
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + cmp.Or(os.Getenv("PORT"), "8080"),
 		Handler: mux,
 		// Shutdown does not reach hijacked WebSocket connections. Tying request
 		// contexts to the signal closes them when the server stops.
@@ -121,16 +144,29 @@ func runMigrate() error {
 	return migrate(ctx)
 }
 
-func tickRate() (int, error) {
-	v := os.Getenv("TICK_RATE")
+func positive(name string, fallback int) (int, error) {
+	v := os.Getenv(name)
 	if v == "" {
-		return 20, nil
+		return fallback, nil
 	}
-	rate, err := strconv.Atoi(v)
-	if err != nil || rate <= 0 {
-		return 0, errors.New("TICK_RATE must be a positive integer")
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 0, errors.New(name + " must be a positive integer")
 	}
-	return rate, nil
+	return n, nil
+}
+
+func newWorld(cave caves.Cave, seed uint64) (*sim.World, *items.Roller) {
+	loot := items.NewRoller(items.Default(), seed)
+	world := cave.NewWorld(sim.DefaultConfig(), loot)
+	world.SeedAI(seed)
+	return world, loot
+}
+
+// nextSeed steps a seed for the next world, so a replay with LOOT_SEED gets
+// the same worlds in order.
+func nextSeed(seed uint64) uint64 {
+	return seed*6364136223846793005 + 1442695040888963407
 }
 
 // lootSeed comes from LOOT_SEED to replay a run, or is random. It seeds both

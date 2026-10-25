@@ -75,6 +75,11 @@ func _run() -> void:
 	_button(lobby, "", "Enter cave").pressed.emit()
 	_check(_sent == ["enter"], "enter cave asks the server")
 
+	var world_url := connection._url
+	connection._handle(_ticket("ws://127.0.0.1:8081/instances/instance-0/ws", "tok"))
+	connection._closed(1000, "entering instance")
+	_check(connection._url == "ws://127.0.0.1:8081/instances/instance-0/ws" and connection._token == "tok", "the world's close sends the client to the ticket's instance")
+	_check(lobby.visible and not _has_text(lobby, "offline"), "the lobby stays up on the way in")
 	connection._handle(_joined())
 	await _frames(1)
 	_check(connection.is_joined() and not connection.in_lobby and not lobby.visible, "entering the cave hides the lobby")
@@ -83,6 +88,8 @@ func _run() -> void:
 
 	# Extraction: the summary comes first and stays on top of the lobby.
 	connection._handle(_extracted())
+	connection._closed(1000, "run over")
+	_check(connection._url == world_url and connection._token == "", "the run's close sends the client back to the world")
 	connection._handle(_lobby())
 	await _frames(1)
 	_check(lobby.visible and summary.visible, "after a run the lobby is back under the summary")
@@ -91,6 +98,15 @@ func _run() -> void:
 	await _key(KEY_ESCAPE)
 	await _frames(2)
 	_check(not summary.visible and lobby.visible, "escape closes the summary and leaves the lobby")
+
+	# An instance that turns the token away sends the player back with why.
+	connection._handle(_ticket("ws://127.0.0.1:8081/instances/instance-0/ws", "old"))
+	connection._closed(1000, "entering instance")
+	connection._closed(1008, "token expired")
+	_check(connection._url == world_url, "a rejected token goes back to the world")
+	connection._handle(_lobby())
+	await _frames(1)
+	_check(_has_text(lobby, "Took too long to join. Try again."), "the lobby says the token expired")
 
 	var status: Label = main.get_node("HUD/Status")
 	connection._closed(1013, "characters unavailable")
@@ -120,6 +136,14 @@ func _lobby(saving := false) -> PackedByteArray:
 	var character := lobby.new_character()
 	character.set_name("ann")
 	character.set_level(2)
+	return msg.to_bytes()
+
+
+func _ticket(url: String, token: String) -> PackedByteArray:
+	var msg := _message()
+	var ticket := msg.new_ticket()
+	ticket.set_url(url)
+	ticket.set_token(token)
 	return msg.to_bytes()
 
 

@@ -20,6 +20,7 @@ message ClientMessage {
     LootCloseRequest loot_close = 19;
     EnterInstanceRequest enter_instance = 20;
     StashMoveRequest stash_move = 21;
+    InstanceJoinRequest instance_join = 22;
   }
 }
 
@@ -43,6 +44,7 @@ message ServerMessage {
     StashContents stash = 24;
     StashMoveRejected stash_move_rejected = 25;
     EnterInstanceRejected enter_instance_rejected = 26;
+    InstanceTicket ticket = 27;
   }
 }
 
@@ -58,15 +60,15 @@ message Rect {
 
 // Player
 
-// JoinRequest puts the player in the lobby. EnterInstanceRequest then puts
-// them in the instance.
+// JoinRequest puts the player in the world server's lobby. It is the first
+// message on the world server. An instance server closes on it.
 message JoinRequest {
   string name = 1;
   // Empty means warrior. An unknown class closes the connection.
   string class_id = 2;
 }
 
-// JoinAccepted is sent when the player enters the instance.
+// JoinAccepted is sent when the instance server lets the player in.
 message JoinAccepted {
   uint64 player_id = 1;
   InstanceLayout layout = 2;
@@ -120,15 +122,16 @@ message AbilityInfo {
   uint32 unlock_level = 7;
 }
 
-// Extracted is sent to everyone in the cave. The extracting player goes back
-// to the lobby right after.
+// Extracted is sent to everyone in the cave. The instance server closes the
+// extracting player's socket right after, with reason "run over".
 message Extracted {
   uint64 player_id = 1;
   // Only in the copy sent to the player who extracted.
   RunSummary summary = 2;
 }
 
-// RunEnded is sent to a player who died. They go back to the lobby right after.
+// RunEnded is sent to a player who died. The instance server closes their
+// socket right after, with reason "run over".
 message RunEnded {
   RunSummary summary = 1;
 }
@@ -400,8 +403,8 @@ message UseRequest {
 
 // Lobby
 
-// Lobby is sent on join and after every run. The player is out of the cave
-// until they send EnterInstanceRequest. EquipmentUpdated, InventoryUpdated and
+// Lobby is sent on a world server join, and again when the last run lands.
+// The player is out of the cave until they send EnterInstanceRequest. EquipmentUpdated, InventoryUpdated and
 // StashContents follow it.
 message Lobby {
   CharacterInfo character = 1;
@@ -436,15 +439,38 @@ message StashMoveRequest {
 // StashMoveRejected is sent to the player whose move did nothing.
 message StashMoveRejected {
   string item_id = 1;
-  // One of not_in_lobby, unknown_item, full, cannot_equip, saving.
+  // One of not_in_lobby, unknown_item, full, cannot_equip, saving, in_run.
   string reason = 2;
 }
 
-// EnterInstanceRequest leaves the lobby. The server answers with JoinAccepted.
+// EnterInstanceRequest leaves the lobby. The world server answers with
+// InstanceTicket.
 message EnterInstanceRequest {}
 
 // EnterInstanceRejected is sent when the player stays in the lobby.
 message EnterInstanceRejected {
-  // saving: the last run is still being saved.
+  // saving: the last run is still being saved. in_run: a run elsewhere holds
+  // the account. full: no instance has room.
   string reason = 1;
+}
+
+// InstanceTicket is the world server's answer to EnterInstanceRequest. The
+// world server closes the socket right after it, with reason
+// "entering instance".
+message InstanceTicket {
+  // The instance server's WebSocket URL, like
+  // wss://fantasy-rpg.fomiller.com/instances/fantasy-rpg-instance-0/ws.
+  string url = 1;
+  string token = 2;
+  // Not instance_id, since Godobuf would make get_instance_id(), which Godot
+  // already has on every Object.
+  string instance = 3;
+  // How long the token is good for, from when it was sent.
+  uint32 expires_in_ms = 4;
+}
+
+// InstanceJoinRequest is the first message on an instance server. It is the
+// only one an instance server takes before JoinAccepted.
+message InstanceJoinRequest {
+  string token = 1;
 }

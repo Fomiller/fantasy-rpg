@@ -4,6 +4,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"time"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
@@ -286,6 +287,10 @@ func StashMoveRejected(item, reason string) *gamev1.ServerMessage {
 
 func EnterInstanceRejected(reason string) *gamev1.ServerMessage {
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_EnterInstanceRejected{EnterInstanceRejected: &gamev1.EnterInstanceRejected{Reason: reason}}}
+}
+
+func Ticket(url, token, instance string, life time.Duration) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Ticket{Ticket: &gamev1.InstanceTicket{Url: url, Token: token, Instance: instance, ExpiresInMs: uint32(life.Milliseconds())}}}
 }
 
 func Items(insts []items.Instance) []*gamev1.Item {

@@ -33,6 +33,22 @@ func TestLoopParses(t *testing.T) {
 	}
 }
 
+// The yard's chest and exit lie straight right of the spawn, so a walk
+// along that row loots the chest and extracts.
+func TestYardIsOneStraightWalk(t *testing.T) {
+	c, ok := ByName("yard")
+	if !ok || len(c.Enemies) != 0 || len(c.PlayerSpawns) != 1 || len(c.Chests) != 1 {
+		t.Fatalf("yard = %+v", c)
+	}
+	spawn, chest := c.PlayerSpawns[0], c.Chests[0]
+	if chest.Y != spawn.Y || chest.X <= spawn.X || !c.Extraction.Contains(sim.Vec2{X: c.Extraction.Min.X + 1, Y: spawn.Y}) || c.Extraction.Min.X <= chest.X {
+		t.Fatalf("spawn %v, chest %v, exit %v", spawn, chest, c.Extraction)
+	}
+	if _, ok := ByName("nope"); ok {
+		t.Fatal("unknown cave found")
+	}
+}
+
 func TestWallsCoverEveryWallTileOnce(t *testing.T) {
 	c := Loop()
 	rows := splitArt(loopArt)

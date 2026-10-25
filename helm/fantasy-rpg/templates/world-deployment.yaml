@@ -1,6 +1,6 @@
-{{- /* The world server: join, the lobby and the stash. It runs from the same
-       image as the instance server. The IngressRoute does not send it /ws
-       until FOM-228, so for now it is reached only inside the cluster. */ -}}
+{{- /* The world server: join, the lobby, the stash, and tickets into an
+       instance. It runs from the same image as the instance servers and has
+       the public /ws. */ -}}
 {{- if .Values.world.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -35,15 +35,17 @@ spec:
           command: [/world-server]
           ports:
             - containerPort: 8080
-          {{- if or .Values.world.env .Values.postgres.enabled }}
           env:
             {{- with .Values.world.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+            {{- include "chart.instancesEnv" . | nindent 12 }}
+            {{- if .Values.joinKey.secretName }}
+            {{- include "chart.joinKeyEnv" . | nindent 12 }}
+            {{- end }}
             {{- if .Values.postgres.enabled }}
             {{- include "chart.databaseEnv" . | nindent 12 }}
             {{- end }}
-          {{- end }}
           readinessProbe:
             httpGet:
               path: /healthz

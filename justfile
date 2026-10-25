@@ -43,16 +43,13 @@ deps:
     {{compose}} up -d --wait postgres nats
 
 dev: migrate
-    PORT=8090 DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/world-server
+    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
 
-instance:
-    go run ./src/cmd/instance-server
+instance id port:
+    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
 
 migrate: deps
     DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate
-
-instance-db: migrate
-    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server
 
 up:
     {{compose}} --profile full up -d --build --wait
@@ -93,10 +90,6 @@ client-run:
     {{godot}} --headless --path client/godot --import
     {{godot}} --path client/godot
 
-client-world:
-    {{godot}} --headless --path client/godot --import
-    {{godot}} --path client/godot -- --server=ws://127.0.0.1:8090/ws
-
 client-online:
     {{godot}} --headless --path client/godot --import
     {{godot}} --path client/godot -- --server=wss://fantasy-rpg.fomiller.com/ws
@@ -125,13 +118,25 @@ client-test:
 net-test: build
     #!/usr/bin/env bash
     set -euo pipefail
-    for port in 8080 8090; do if curl -sf localhost:$port/healthz >/dev/null; then echo "port $port is in use. Stop the other server first." >&2; exit 1; fi; done
+    ports="8081 8082 8083 8080 8090"
+    for port in $ports; do if curl -sf localhost:$port/healthz >/dev/null; then echo "port $port is in use. Stop the other server first." >&2; exit 1; fi; done
     {{godot}} --headless --path client/godot --import
     # Picked here, not by the server, so a failure can say how to replay it.
     export LOOT_SEED="${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}"
-    ./bin/instance-server & pid=$!
-    PORT=8090 ./bin/world-server & world=$!
-    trap 'status=$?; kill $pid $world 2>/dev/null || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
+    # A throwaway Postgres, so the servers share a store and nothing from an earlier run or `just dev` leaks in.
+    pg=$(docker run -d --rm -e POSTGRES_USER=fantasy -e POSTGRES_PASSWORD=fantasy -e POSTGRES_DB=fantasy -p 127.0.0.1::5432 postgres:18)
+    pids=()
+    trap 'status=$?; kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f "$pg" >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
+    export DATABASE_URL="postgres://fantasy:fantasy@127.0.0.1:$(docker port "$pg" 5432/tcp | head -1 | cut -d: -f2)/fantasy?sslmode=disable" JOIN_TOKEN_KEY=net-test
+    ./bin/instance-server migrate
+    INSTANCE_ID=instance-0 PORT=8081 ./bin/instance-server & pids+=($!)
+    INSTANCE_ID=instance-1 PORT=8082 ./bin/instance-server & pids+=($!)
+    INSTANCE_ID=instance-2 PORT=8083 CAVE=yard ./bin/instance-server & pids+=($!)
+    # Instances first, so each world's first poll finds them up.
+    for port in 8081 8082 8083; do for i in $(seq 50); do curl -sf localhost:$port/healthz >/dev/null && break; sleep 0.1; done; done
+    INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' ./bin/world-server & pids+=($!)
+    # A second world whose one instance is the yard, so world_test can loot and extract without a fight.
+    PORT=8090 INSTANCES='instance-2=http://localhost:8083=ws://127.0.0.1:8083/instances/instance-2/ws' ./bin/world-server & pids+=($!)
     for port in 8080 8090; do for i in $(seq 50); do curl -sf localhost:$port/healthz >/dev/null && break; sleep 0.1; done; done
     {{godot}} --headless --path client/godot --script res://tests/net_test.gd
     {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd

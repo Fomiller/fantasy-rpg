@@ -190,7 +190,7 @@ is compact JSON with fixed tags, made and checked by a small Go package,
 - The check is a hash and a compare. No database call, no call to the
   world server. A flood of bad tokens never reaches Postgres.
 - The key is a Secret, `fantasy-rpg-join-key`, from AWS Secrets Manager at
-  `dev/fomiller/homelab/fantasy-rpg-join-key` through the chart's
+  `dev/fomiller/fantasy-rpg-join-key` through the chart's
   `externalSecrets` map, like the backup key. Both Deployments read it as
   `JOIN_TOKEN_KEY`. At least 32 random bytes.
 - Without `JOIN_TOKEN_KEY` both servers refuse to start. The local recipes
@@ -509,7 +509,7 @@ Where it differs from the plan above:
 - **The instance server clears dead leases on join.** Until FOM-228 there is
   one instance server, so a lease from another process or boot is from one
   that died. Without this, a pod restart mid-run would lock the player out.
-  It goes away with the instance server's lobby.
+  FOM-228 removed it.
 - **A lobby held by a lease waits for it.** The world server shows `saving`,
   turns moves and Enter Cave away with `in_run`, and checks every 2 s.
 - **Enter Cave on the world server is rejected with `full`**, since it has no
@@ -519,6 +519,45 @@ Where it differs from the plan above:
   `EndRun` that gives the lease back.
 - **The Dockerfile is unmanaged in `repo.nix`.** golden-service writes one
   binary per image.
+
+### What FOM-228 built
+
+Where it differs from the plan above:
+
+- **The client closes first.** The world server sends `InstanceTicket` and
+  the client closes the socket itself, then dials the ticket's URL. The
+  world server only closes, with `entering instance`, if the client has not
+  after 2 s. The instance server does the same after `Extracted` or
+  `RunEnded`: the client closes, and `run over` follows after 2 s. Godot
+  drops whatever it has not read when a close frame lands, so a server that
+  closes right after its last message can lose it.
+- **`InstanceTicket.instance`, not `instance_id`.** Godobuf would make
+  `get_instance_id()`, which every Godot `Object` already has. Field number 3
+  is the same.
+- **Enter Cave reads the lease.** The ticket waits behind the player's
+  queued lobby saves, then loads the character once. A run that took the
+  lease since the join is turned away with `in_run` on the world server,
+  not on the instance.
+- **A rejoin on the world never takes over a pending save.** The world
+  server has no run ends, so a returning player sees `saving` until the
+  instance's `EndRun` lands, then the banked character.
+- **The world clears dead leases** on join and while a lobby waits on a
+  lease, using the rules in Dead leases. The instance server's stopgap is
+  gone.
+- **`CAVE` picks the instance's cave.** `loop` is the default. `yard` is a
+  small room with a chest and the exit and no enemies. `net-test` runs a
+  second world server with one `yard` instance, so `world_test.gd` can loot,
+  extract and come back without a fight. `net_test.gd` and
+  `two_clients_test.gd` run on the first world and two `loop` instances.
+- **`net-test` runs on a throwaway Postgres container**, since the servers
+  only share state through the database. `just dev` keeps the Compose one.
+- **Each new world takes the next seed** from the last, so `LOOT_SEED`
+  still replays every world an instance builds.
+- **World on :8080 locally.** `just dev` runs the world server on the
+  client's default port, and `just instance <id> <port>` runs each instance.
+  `just client-world` is gone, since `just client-run` now joins the world.
+- **Parties** have no world feature yet. `Directory.Reserve` takes one run
+  id per member and picks one instance with room for all of them.
 
 ## Later
 

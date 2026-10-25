@@ -83,18 +83,6 @@ func (w *writer) close() {
 	w.signal()
 }
 
-// reopen hands a closed writer to a new connection. It fails once the loop
-// has stopped, since nothing would run the new connection's writes.
-func (w *writer) reopen() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if !w.closed || w.exited {
-		return false
-	}
-	w.closed = false
-	return true
-}
-
 func (w *writer) signal() {
 	select {
 	case w.wake <- struct{}{}:

@@ -35,6 +35,11 @@ services:
         BINARY: world-server
     environment:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+      JOIN_TOKEN_KEY: dev-only
+      # Polled inside the network, handed to the client as localhost.
+      INSTANCES: >-
+        instance-0=http://instance-0:8080=ws://localhost:8081/instances/instance-0/ws
+        instance-1=http://instance-1:8080=ws://localhost:8082/instances/instance-1/ws
     ports:
       - "8080:8080"
     depends_on:
@@ -58,7 +63,7 @@ services:
       postgres:
         condition: service_healthy
 
-  instance-server:
+  instance-0: &instance
     profiles: [full]
     image: fantasy-rpg/instance-server:dev
     build:
@@ -66,15 +71,23 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BINARY: instance-server
-    environment:
+    environment: &instance-env
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+      JOIN_TOKEN_KEY: dev-only
+      INSTANCE_ID: instance-0
     ports:
       - "8081:8080"
     depends_on:
-      world-server:
-        condition: service_started
       migrate:
         condition: service_completed_successfully
+
+  instance-1:
+    <<: *instance
+    environment:
+      <<: *instance-env
+      INSTANCE_ID: instance-1
+    ports:
+      - "8082:8080"
 
 volumes:
   postgres-data:
