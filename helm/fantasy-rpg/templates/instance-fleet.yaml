@@ -64,7 +64,8 @@ spec:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
               ports:
-                - containerPort: 7654
+                - name: http
+                  containerPort: 7654
               env:
                 {{- with .Values.env }}
                 {{- toYaml . | nindent 16 }}

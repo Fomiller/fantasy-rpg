@@ -34,7 +34,8 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           command: [/world-server]
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
           env:
             {{- with .Values.world.env }}
             {{- toYaml . | nindent 12 }}

@@ -79,7 +79,8 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           command: [/instance-manager]
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
           env:
             - name: NAMESPACE
               valueFrom:

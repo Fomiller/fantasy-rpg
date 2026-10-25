@@ -50,6 +50,13 @@ joinKey:
 events:
   brokers: ""
 
+# PodMonitors for every server's /metrics. Needs the Prometheus operator's
+# CRDs. labels go on each PodMonitor, for a Prometheus that selects by label.
+metrics:
+  podMonitors: false
+  interval: 15s
+  labels: {}
+
 # No host means no IngressRoute. The overlay that owns the hostname sets it.
 ingressRoute:
   host: ""

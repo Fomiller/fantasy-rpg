@@ -22,3 +22,9 @@ postgres:
 # The in-cluster Redpanda from argocd/redpanda. No TLS or SASL.
 events:
   brokers: redpanda.fantasy-rpg.svc:9093
+
+# kube-prometheus-stack only picks up monitors labelled with its release.
+metrics:
+  podMonitors: true
+  labels:
+    release: prometheus
