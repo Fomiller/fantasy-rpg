@@ -7,7 +7,7 @@ image:
   tag: "1.0"
 
 args:
-  - -listen=:8080
+  - -listen=:7654
   - -text=hello from fantasy-rpg
 
 # Empty here on purpose. The default image is public and needs no credential.

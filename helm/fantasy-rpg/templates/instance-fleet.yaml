@@ -24,10 +24,10 @@ spec:
     spec:
       ports:
         {{- /* Players reach the server through Cloudflare and Traefik, never
-               a node port. */}}
+               a node port. Not 8080: the Agones SDK sidecar binds that. */}}
         - name: ws
           portPolicy: None
-          containerPort: 8080
+          containerPort: 7654
           protocol: TCP
       {{- /* The server pings every 2 s from its tick loop, so this fails a
              stuck tick after about 15 s. */}}
@@ -64,11 +64,13 @@ spec:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
               ports:
-                - containerPort: 8080
+                - containerPort: 7654
               env:
                 {{- with .Values.env }}
                 {{- toYaml . | nindent 16 }}
                 {{- end }}
+                - name: PORT
+                  value: "7654"
                 {{- /* The pod's name is its GameServer's name. */}}
                 - name: INSTANCE_ID
                   valueFrom:
@@ -88,7 +90,7 @@ spec:
               readinessProbe:
                 httpGet:
                   path: /healthz
-                  port: 8080
+                  port: 7654
                 periodSeconds: 5
 ---
 apiVersion: autoscaling.agones.dev/v1
