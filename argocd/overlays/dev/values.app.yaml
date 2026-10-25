@@ -6,7 +6,7 @@
 # Kargo rewrites image.tag on every promotion. It only replaces the key, so
 # the key has to exist. 0.1.0 is the first published image.
 image:
-  tag: 0.16.0@sha256:9a5f14775f3dbbba891fb5c5bf923d70eb23eaa3532f7b300a6993957ca0b4d4
+  tag: 0.17.0@sha256:f64ead90177f3cd363ef87eded2ce5a001d19a41b9dcabb4611fae8a3364a1cb
 
 # The Cloudflare tunnel forwards this hostname to Traefik because homelab lists
 # it in public_hostnames. Clients connect to wss://fantasy-rpg.fomiller.com/ws,
