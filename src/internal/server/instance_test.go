@@ -137,7 +137,7 @@ func TestFullInstance(t *testing.T) {
 
 func instanceStatus(t *testing.T, h harness) InstanceStatus {
 	t.Helper()
-	resp, err := http.Get(h.world.Instances.list[0].Internal + "/status")
+	resp, err := http.Get(h.world.Instances.(*Directory).list[0].Internal + "/status")
 	if err != nil {
 		t.Fatal(err)
 	}

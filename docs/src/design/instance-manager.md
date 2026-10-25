@@ -192,8 +192,9 @@ order:
    Join a cave that is already running and has room for the whole party.
 2. `gameServerState: Ready`. Take a warm one.
 
-- `priorities` on the `runs` list, descending, so the fullest Allocated
-  server wins. One cave fills before the next, as now.
+- `priorities` on the `runs` list, `Ascending`. Agones sorts by available
+  capacity, so the fullest Allocated server wins. One cave fills before the
+  next, as now.
 - No match is `full`. With the buffer, that only happens at `maxReplicas`.
 - The answer's GameServer name is the instance id. The boot id comes from
   the `agones.dev/sdk-boot` annotation in the allocation status. The token's `inst` keeps its

@@ -60,6 +60,7 @@ down:
 images:
     docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .
     docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev .
+    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-manager -t fantasy-rpg/instance-manager:dev .
 
 k8s-up:
     k3d cluster list fantasy-rpg >/dev/null 2>&1 || k3d cluster create fantasy-rpg --wait --kubeconfig-switch-context=false
