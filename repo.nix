@@ -20,7 +20,7 @@
   # golden-service builds one binary per image, and the image holds every
   # service, so the Dockerfile is written by hand. The pack's Deployment and
   # Service are listed so generate does not bring them back: instance servers
-  # are a StatefulSet with a Service per pod.
+  # are an Agones Fleet, and instance-manager routes each GameServer.
   unmanaged = [
     "Dockerfile"
     "helm/fantasy-rpg/templates/deployment.yaml"
@@ -77,10 +77,8 @@
     "images:\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-manager -t fantasy-rpg/instance-manager:dev ."
     "k8s-up:\n    k3d cluster list fantasy-rpg >/dev/null 2>&1 || k3d cluster create fantasy-rpg --wait --kubeconfig-switch-context=false"
     "k8s-down:\n    k3d cluster delete fantasy-rpg"
-    "deploy-local: k8s-up images\n    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev fantasy-rpg/instance-server:dev\n    {{kube}} apply -f deploy/kubernetes/world-server.yaml\n    {{kube}} -n fantasy-rpg rollout restart deployment/world-server\n    {{kube}} -n fantasy-rpg rollout status deployment/world-server"
-    "instance-start id:\n    sed 's/INSTANCE_ID/{{id}}/g' deploy/kubernetes/instance-pod.yaml | {{kube}} apply -f -\n    {{kube}} -n fantasy-rpg wait --for=condition=Ready pod/instance-{{id}} --timeout=60s"
-    "instance-stop id:\n    {{kube}} -n fantasy-rpg delete pod instance-{{id}}"
-    "instances:\n    {{kube}} -n fantasy-rpg get pods -l app=instance-server"
+    # Only the world server. Instances need Agones, which the local cluster does not run.
+    "deploy-local: k8s-up images\n    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev\n    {{kube}} apply -f deploy/kubernetes/world-server.yaml\n    {{kube}} -n fantasy-rpg rollout restart deployment/world-server\n    {{kube}} -n fantasy-rpg rollout status deployment/world-server"
     "client:\n    {{godot}} --path client/godot --editor"
     # Import first. A fresh checkout has no .godot/ class cache, and without it
     # every class_name in the scripts fails to resolve.

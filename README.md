@@ -10,14 +10,14 @@ after changing `repo.nix`.
 | Path | What lives there |
 | --- | --- |
 | `client/godot/` | The 2D Godot client, in GDScript. |
-| `src/cmd/<binary>/` | One Go main package per server: `world-server` and `instance-server` now, `instance-manager` later. |
+| `src/cmd/<binary>/` | One Go main package per server: `world-server`, `instance-server` and `instance-manager`. |
 | `src/internal/` | Shared Go game code: world, combat, AI, inventory, loot. |
 | `proto/game/v1/` | Protobuf messages shared by the client and the servers. |
 | `deploy/` | Docker Compose for local runs, Kubernetes manifests for the homelab. |
 | `tests/load/` | Headless bot clients and load test scenarios. |
 | `docs/` | The mdbook: game design, architecture, decisions. |
 
-`src/cmd/world-server` and `src/cmd/instance-server` exist so far. The other paths get created by the ticket that needs them.
+The other paths get created by the ticket that needs them.
 
 ## Development
 
@@ -50,14 +50,10 @@ just up      # world-server :8080, instance-0 :8081, instance-1 :8082, postgres 
 just down
 ```
 
-**3. Local Kubernetes.** A k3d cluster called `fantasy-rpg`. Recipes always use the `k3d-fantasy-rpg` context, and creating the cluster does not change your current kubectl context.
+**3. Local Kubernetes.** A k3d cluster called `fantasy-rpg`. Recipes always use the `k3d-fantasy-rpg` context, and creating the cluster does not change your current kubectl context. It runs the world server only. Instances need Agones, which this cluster does not install, so use the local process or Compose to play.
 
 ```sh
 just deploy-local     # create the cluster, build and load images, deploy world-server
-# These have no database or INSTANCES yet, so the world cannot send anyone to them.
-just instance-start 1 # start an instance pod called instance-1
-just instances        # list instance pods
-just instance-stop 1
 just k8s-down         # delete the cluster
 ```
 
@@ -110,19 +106,23 @@ Use Neovim for code. Use the Godot editor for scenes, nodes and the debugger.
 
 ## Hosting
 
-The game runs in the homelab cluster. The world server is public at `wss://fantasy-rpg.fomiller.com/ws`. Instance servers are a StatefulSet, `fantasy-rpg-instance`, each public at `/instances/<pod>/ws`.
+The game runs in the homelab cluster. The world server is public at `wss://fantasy-rpg.fomiller.com/ws`. Instance servers are Agones GameServers in the `fantasy-rpg-instance` Fleet, each public at `/instances/<gameserver>/ws`. The world server asks `instance-manager` for one when a party walks into the cave.
 
-- `Dockerfile` builds one image with both servers. `publish-image.yml` pushes it to ECR on every merge to main.
+- `Dockerfile` builds one image with every server. `publish-image.yml` pushes it to ECR on every merge to main.
 - `helm/fantasy-rpg` is the chart. `publish-chart.yml` pushes it to ECR the same way.
 - `infra/` creates both ECR repositories. `deploy-infra.yml` applies it.
 - homelab's services ApplicationSet reads `argocd.yaml` and deploys `argocd/overlays/dev`.
 - Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
 - `argocd/agones` installs Agones into `agones-system`. `argocd/overlays/dev` includes it, so it syncs with the same Application.
 - `argocd/redpanda` runs a one-broker Redpanda, its topics and the Console in `fantasy-rpg`. homelab's operator reconciles them. The Console is at redpanda-frpg-dev.fomiller.com, behind Cloudflare Access.
-- The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server and each `/instances/<pod>/` prefix to that pod's Service.
-- Both servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
+- The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server. instance-manager makes a Service and an IngressRoute for each `/instances/<gameserver>/` prefix. Both are owned by the GameServer and go away with it.
+- The world and instance servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 
-A cave lives in its pod's memory, so restarting an instance pod ends its runs. Players keep the gear they took in.
+- A buffer FleetAutoscaler keeps one Ready GameServer warm, from 1 to 8 in all. It owns the Fleet's replicas, so the chart never sets them.
+- An instance ends itself once it is empty, and Agones replaces it. A deploy or scale-down only removes Ready GameServers. Allocated ones run until their runs end.
+- On a node drain an instance gets SIGTERM and lets its runs play on for up to 600 s.
+
+A cave lives in its pod's memory, so a crashed instance ends its runs. Players keep the gear they took in.
 
 ## Protocol
 

@@ -1,0 +1,111 @@
+{{- /* The instance servers, one Agones GameServer each. The GameServer name is
+       the instance id, its route and the run lease's owner. instance-manager
+       allocates them and gives each one a Service and an IngressRoute. */ -}}
+{{- $name := include "chart.instanceName" . -}}
+apiVersion: agones.dev/v1
+kind: Fleet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.instanceSelectorLabels" . | nindent 4 }}
+  annotations:
+    {{- /* After the Cluster (-1) and the migrate Job (0), so a server never
+           starts on a schema older than its own. The Agones CRDs sync in the
+           same Application, so the first dry run cannot find the kind. */}}
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  {{- /* No replicas. The FleetAutoscaler owns them, and a field the chart
+         never sets is one Argo CD never diffs or resets. */}}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.instanceSelectorLabels" . | nindent 8 }}
+    spec:
+      ports:
+        {{- /* Players reach the server through Cloudflare and Traefik, never
+               a node port. */}}
+        - name: ws
+          portPolicy: None
+          containerPort: 8080
+          protocol: TCP
+      {{- /* The server pings every 2 s from its tick loop, so this fails a
+             stuck tick after about 15 s. */}}
+      health:
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        failureThreshold: 3
+      lists:
+        runs:
+          capacity: {{ .Values.instances.maxPlayers }}
+      {{- /* Never would make Agones add a PDB that blocks every node drain.
+             The server drains its own runs on SIGTERM. */}}
+      eviction:
+        safe: Always
+      template:
+        metadata:
+          labels:
+            {{- include "chart.instanceSelectorLabels" . | nindent 12 }}
+            {{- /* A GameServer has an owner, so the descheduler would evict it. */}}
+            descheduler.fomiller.dev/evict: "false"
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /* DRAIN_TIMEOUT's 600 s for runs to finish, then time for the
+                 last run ends to land. */}}
+          terminationGracePeriodSeconds: 630
+          containers:
+            - name: instance
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              {{- with .Values.args }}
+              args:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              ports:
+                - containerPort: 8080
+              env:
+                {{- with .Values.env }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+                {{- /* The pod's name is its GameServer's name. */}}
+                - name: INSTANCE_ID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: MAX_PLAYERS
+                  value: {{ .Values.instances.maxPlayers | quote }}
+                {{- if .Values.events.brokers }}
+                {{- include "chart.eventsEnv" . | nindent 16 }}
+                {{- end }}
+                {{- if .Values.joinKey.secretName }}
+                {{- include "chart.joinKeyEnv" . | nindent 16 }}
+                {{- end }}
+                {{- if .Values.postgres.enabled }}
+                {{- include "chart.databaseEnv" . | nindent 16 }}
+                {{- end }}
+              readinessProbe:
+                httpGet:
+                  path: /healthz
+                  port: 8080
+                periodSeconds: 5
+---
+apiVersion: autoscaling.agones.dev/v1
+kind: FleetAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.instanceSelectorLabels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  fleetName: {{ $name }}
+  {{- /* A warm Ready server, so a walk-in does not wait on a pod. */}}
+  policy:
+    type: Buffer
+    buffer:
+      bufferSize: {{ .Values.instances.autoscaler.bufferSize }}
+      minReplicas: {{ .Values.instances.autoscaler.minReplicas }}
+      maxReplicas: {{ .Values.instances.autoscaler.maxReplicas }}
