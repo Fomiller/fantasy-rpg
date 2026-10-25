@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -116,6 +117,17 @@ func run() error {
 		}
 	}()
 	go func() { errc <- loop.Run(ctx) }()
+	if busName == "kafka" {
+		applied, err := events.NewConsumer(events.ConsumerConfig{
+			Brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
+			Topics:  []string{events.TopicInventoryApplied},
+		}, slog.Default())
+		if err != nil {
+			return err
+		}
+		defer applied.Close()
+		go applied.Run(ctx, lobby.HandleApplied)
+	}
 	if dir, ok := lobby.Instances.(*server.Directory); ok {
 		go dir.Run(ctx, pollEvery)
 	}

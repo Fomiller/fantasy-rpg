@@ -148,7 +148,9 @@ net-test: build
     {{godot}} --headless --path client/godot --script res://tests/two_clients_test.gd
     {{godot}} --headless --path client/godot --script res://tests/world_test.gd -- --server=ws://127.0.0.1:8090/ws
     # Every test above walks from the town into a cave, and world_test ends a run.
-    for topic in player.session instance.join inventory.applied; do n=$(docker exec "$rp" rpk topic describe -p "$topic" -X brokers=$KAFKA_BROKERS | awk 'NR>1 {s+=$NF} END {print s+0}'); if [ "$n" = 0 ]; then echo "No $topic events." >&2; exit 1; fi; done
+    for topic in player.session instance.join run.ended inventory.applied; do n=$(docker exec "$rp" rpk topic describe -p "$topic" -X brokers=$KAFKA_BROKERS | awk 'NR>1 {s+=$NF} END {print s+0}'); if [ "$n" = 0 ]; then echo "No $topic events." >&2; exit 1; fi; done
+    # The run's loot reached the stash through the inventory consumer, not a direct write.
+    curl -sf localhost:8070/metrics | grep -q '^inventory_consumer_lag{partition="0",topic="run.ended"} 0$' || { echo "inventory never consumed run.ended." >&2; exit 1; }
 
 proto:
     buf lint

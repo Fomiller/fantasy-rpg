@@ -106,6 +106,8 @@ type client struct {
 	entering bool
 	// inRun is set while a run elsewhere holds the account.
 	inRun bool
+	// applied wakes waitRun when inventory has applied a run for the account.
+	applied chan struct{}
 	// runID and stash are set from the join token and the lease, so the run
 	// end needs no read.
 	runID string
@@ -208,7 +210,7 @@ type closeMsg struct {
 }
 
 func newClient(name, class string, ctx context.Context, cancel context.CancelFunc) *client {
-	return &client{name: name, class: class, out: make(chan []byte, outboxSize), kick: make(chan closeMsg, 1), ctx: ctx, cancel: cancel, writes: newWriter()}
+	return &client{name: name, class: class, out: make(chan []byte, outboxSize), kick: make(chan closeMsg, 1), applied: make(chan struct{}, 1), ctx: ctx, cancel: cancel, writes: newWriter()}
 }
 
 // close sends what is queued, then closes with reason. Only the first call counts.
@@ -384,6 +386,20 @@ func (s *Lobby) setInRun(c *client, held bool) {
 	c.inRun = held
 }
 
+// runApplied is inventory.applied for account. A lobby waiting on a run
+// checks the store at once instead of on its next poll, which stays as the
+// fallback for when Redpanda is down.
+func (s *Lobby) runApplied(account string) {
+	s.enqueue(func() {
+		if c, ok := s.conns[account]; ok {
+			select {
+			case c.applied <- struct{}{}:
+			default:
+			}
+		}
+	})
+}
+
 // waitRun reloads the character once the lease is gone, so the lobby opens
 // on what the run banked. A lease whose run is dead is cleared here too.
 func (s *Lobby) waitRun(c *client) {
@@ -394,6 +410,7 @@ func (s *Lobby) waitRun(c *client) {
 		case <-c.ctx.Done():
 			return
 		case <-tick.C:
+		case <-c.applied:
 		}
 		ctx, cancel := context.WithTimeout(c.ctx, storeTimeout)
 		ch, ok, err := s.Store.Load(ctx, c.name, c.class)

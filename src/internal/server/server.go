@@ -66,11 +66,13 @@ type Server struct {
 	// GameServer is Agones or the local stand in New sets, whose Shutdown
 	// resets the world. Set it before serving.
 	GameServer gameserver.GameServer
-	boot       string
-	world      *sim.World
-	cave       caves.Cave
-	spawns     int
-	clients    map[sim.EntityID]*client
+	// Results takes each run's result. Nil writes it to Store.
+	Results RunResults
+	boot    string
+	world   *sim.World
+	cave    caves.Cave
+	spawns  int
+	clients map[sim.EntityID]*client
 	// used is set once anyone has played in this world.
 	used bool
 	// draining is set from SIGTERM on. No one new joins.
@@ -198,14 +200,14 @@ func (s *Server) endRun(end sim.RunEnd) *gamev1.RunSummary {
 		ch.Stash, overflow = stashKept(c.stash, end.Kept)
 		ch.Loadout = inventory.Loadout{Equipment: end.Gear, Items: overflow}
 		summary.Overflow = protocol.Items(overflow)
-		s.saveRun(c, ch)
+		s.saveRun(c, ch, inventory.Extracted)
 		return summary
 	}
 	s.sendTo(end.Player, protocol.RunEnded(summary))
 	// The gear and bag already lie on the ground, so the next lobby starts
 	// from the starter kit. The stash is untouched.
 	ch.Loadout, ch.Stash = s.starterKit(), c.stash
-	s.saveRun(c, ch)
+	s.saveRun(c, ch, inventory.Died)
 	s.world.RemovePlayer(end.Player)
 	s.finish(end.Player)
 	return summary
@@ -371,7 +373,7 @@ func (s *Server) startRun(c *client) {
 			// The player left while the lease was taken. Give it back with what
 			// they took in.
 			s.joinEvent(c, reasonLeft)
-			s.saveRun(c, ch)
+			s.saveRun(c, ch, inventory.Disconnect)
 			return
 		}
 		s.spawn(c, ch)
@@ -384,7 +386,7 @@ func (s *Server) spawn(c *client, ch inventory.Character) {
 	id, err := s.world.AddPlayerAs(spawn, c.class, ch.XP)
 	if err != nil {
 		s.log.Error("enter instance", "name", c.name, "err", err)
-		s.saveRun(c, ch)
+		s.saveRun(c, ch, inventory.Disconnect)
 		return
 	}
 	if err := s.world.Restore(id, ch.Loadout); err != nil {
@@ -425,7 +427,7 @@ func (s *Server) leave(c *client) {
 	if c.id != 0 {
 		p, _ := s.world.Player(c.id)
 		if end, ok := s.world.RemovePlayer(c.id); ok {
-			s.saveRun(c, inventory.Character{Name: c.name, Class: c.class, XP: end.XP, Loadout: p.Loadout(), Stash: c.stash})
+			s.saveRun(c, inventory.Character{Name: c.name, Class: c.class, XP: end.XP, Loadout: p.Loadout(), Stash: c.stash}, inventory.Disconnect)
 		}
 		delete(s.clients, c.id)
 		c.id = 0

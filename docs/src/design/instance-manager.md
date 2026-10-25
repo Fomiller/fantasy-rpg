@@ -331,6 +331,8 @@ CREATE TABLE outbox (
   applies the result, so the world shows "Saving..." until it clears.
 - The world server learns it from `inventory.applied`, not the 2 s poll.
   It keeps the poll as a fallback when Redpanda is down.
+- Each world reads `inventory.applied` from the end with no consumer
+  group. Every pod sees every record and leaves no group behind.
 - If inventory is down, runs still end. Results wait in the topic. Players
   see "Saving..." until it is back.
 
@@ -356,7 +358,10 @@ WebSocket through Cloudflare, `cloudflared` and Traefik. No change now.
 - `just instance <id> <port>` runs as now. The local SDK resets the world
   on `Shutdown()`.
 - `net-test` adds a throwaway Redpanda container next to its throwaway
-  Postgres, and starts inventory.
+  Postgres, and starts inventory. Run results go through `run.ended`.
+- With `KAFKA_BROKERS` or `INVENTORY_URL` empty, the instance calls
+  `EndRun` on its store. Nothing would consume `run.ended`, so `just dev`
+  and `just instance` keep working without the inventory service.
 - Why Redpanda in Compose and not a no-op bus: `run.ended` is how a run's
   loot reaches the stash. A no-op bus would need a second code path for
   the one write that matters most.

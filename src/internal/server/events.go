@@ -1,6 +1,9 @@
 package server
 
 import (
+	"context"
+
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "github.com/Fomiller/fantasy-rpg/gen/go/events/v1"
@@ -38,4 +41,15 @@ func (s *Server) joinEvent(c *client, reason string) {
 		Instance: s.Instance(),
 		Time:     timestamppb.Now(),
 	})
+}
+
+// HandleApplied takes inventory.applied, so a lobby saving a run opens as
+// soon as inventory has written it.
+func (s *Lobby) HandleApplied(_ context.Context, _ string, value []byte) error {
+	var msg eventsv1.InventoryApplied
+	if err := proto.Unmarshal(value, &msg); err != nil {
+		return events.Drop(err)
+	}
+	s.runApplied(msg.GetAccount())
+	return nil
 }

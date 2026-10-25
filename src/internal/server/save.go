@@ -279,13 +279,17 @@ func (s *Lobby) saveLobby(c *client, itemID string) {
 
 // saveRun queues the one write a run end makes. Until it lands the lobby
 // shows saving and nothing else can change the character.
-func (s *Lobby) saveRun(c *client, ch inventory.Character) {
-	runID := c.runID
+func (s *Server) saveRun(c *client, ch inventory.Character, outcome inventory.Outcome) {
 	ch = cloneCharacter(ch)
 	pending := &ch
 	c.pending = pending
+	end := inventory.RunEnd{RunID: c.runID, Instance: s.Instance(), Outcome: outcome, Character: ch, Time: time.Now()}
+	results := s.Results
+	if results == nil {
+		results = StoreResults{Store: s.Store}
+	}
 	c.writes.push(storeWrite{op: "end run", patience: s.endRunPatience, keep: true, call: func(ctx context.Context) error {
-		return s.Store.EndRun(ctx, runID, *pending)
+		return results.EndRun(ctx, end)
 	}, done: func(owner *client, err error) {
 		if owner == nil || owner.pending != pending {
 			return
