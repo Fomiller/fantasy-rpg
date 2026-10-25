@@ -56,18 +56,47 @@ enum InstanceState {
   INSTANCE_STATE_GONE = 4;
 }
 
-// run.ended, keyed by run id. The carried loadout and loot come with the
-// ticket that produces it.
+// run.ended, keyed by run id. It carries everything inventory writes for
+// the run. The lease keeps every other write off the account until it lands,
+// so the stash here replaces the saved one.
 message RunEnded {
   uint32 version = 1;
   string run_id = 2;
   string account = 3;
   string class = 4;
   RunOutcome outcome = 5;
+  // The character's XP after the run, not what the run gained.
   int64 xp = 6;
   uint32 deaths = 7;
+  // The id and boot id that held the lease, like instance-0@3f9a1c.
   string instance = 8;
   google.protobuf.Timestamp time = 9;
+  repeated Item equipment = 10;
+  repeated Item bag = 11;
+  repeated Item stash = 12;
+}
+
+// Item is items.Instance, in the same shape as items.EncodeJSON.
+message Item {
+  string id = 1;
+  string def = 2;
+  string name = 3;
+  string slot = 4;
+  string weapon = 5;
+  string rarity = 6;
+  int32 level = 7;
+  map<string, int32> base = 8;
+  repeated Affix affixes = 9;
+  int32 quantity = 10;
+  int32 stack = 11;
+}
+
+message Affix {
+  string id = 1;
+  string name = 2;
+  string stat = 3;
+  int32 tier = 4;
+  int32 value = 5;
 }
 
 enum RunOutcome {
@@ -77,7 +106,8 @@ enum RunOutcome {
   RUN_OUTCOME_DISCONNECT = 3;
 }
 
-// inventory.applied, keyed by account.
+// inventory.applied, keyed by account. It follows a run.ended once inventory
+// has written it and cleared the lease.
 message InventoryApplied {
   uint32 version = 1;
   string account = 2;

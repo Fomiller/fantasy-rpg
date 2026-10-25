@@ -471,19 +471,25 @@ func (x *InstanceLifecycle) GetTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// run.ended, keyed by run id. The carried loadout and loot come with the
-// ticket that produces it.
+// run.ended, keyed by run id. It carries everything inventory writes for
+// the run. The lease keeps every other write off the account until it lands,
+// so the stash here replaces the saved one.
 type RunEnded struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Account       string                 `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
-	Class         string                 `protobuf:"bytes,4,opt,name=class,proto3" json:"class,omitempty"`
-	Outcome       RunOutcome             `protobuf:"varint,5,opt,name=outcome,proto3,enum=events.v1.RunOutcome" json:"outcome,omitempty"`
-	Xp            int64                  `protobuf:"varint,6,opt,name=xp,proto3" json:"xp,omitempty"`
-	Deaths        uint32                 `protobuf:"varint,7,opt,name=deaths,proto3" json:"deaths,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Version uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	RunId   string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Account string                 `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
+	Class   string                 `protobuf:"bytes,4,opt,name=class,proto3" json:"class,omitempty"`
+	Outcome RunOutcome             `protobuf:"varint,5,opt,name=outcome,proto3,enum=events.v1.RunOutcome" json:"outcome,omitempty"`
+	// The character's XP after the run, not what the run gained.
+	Xp     int64  `protobuf:"varint,6,opt,name=xp,proto3" json:"xp,omitempty"`
+	Deaths uint32 `protobuf:"varint,7,opt,name=deaths,proto3" json:"deaths,omitempty"`
+	// The id and boot id that held the lease, like instance-0@3f9a1c.
 	Instance      string                 `protobuf:"bytes,8,opt,name=instance,proto3" json:"instance,omitempty"`
 	Time          *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=time,proto3" json:"time,omitempty"`
+	Equipment     []*Item                `protobuf:"bytes,10,rep,name=equipment,proto3" json:"equipment,omitempty"`
+	Bag           []*Item                `protobuf:"bytes,11,rep,name=bag,proto3" json:"bag,omitempty"`
+	Stash         []*Item                `protobuf:"bytes,12,rep,name=stash,proto3" json:"stash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -581,7 +587,230 @@ func (x *RunEnded) GetTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// inventory.applied, keyed by account.
+func (x *RunEnded) GetEquipment() []*Item {
+	if x != nil {
+		return x.Equipment
+	}
+	return nil
+}
+
+func (x *RunEnded) GetBag() []*Item {
+	if x != nil {
+		return x.Bag
+	}
+	return nil
+}
+
+func (x *RunEnded) GetStash() []*Item {
+	if x != nil {
+		return x.Stash
+	}
+	return nil
+}
+
+// Item is items.Instance, in the same shape as items.EncodeJSON.
+type Item struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Def           string                 `protobuf:"bytes,2,opt,name=def,proto3" json:"def,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Slot          string                 `protobuf:"bytes,4,opt,name=slot,proto3" json:"slot,omitempty"`
+	Weapon        string                 `protobuf:"bytes,5,opt,name=weapon,proto3" json:"weapon,omitempty"`
+	Rarity        string                 `protobuf:"bytes,6,opt,name=rarity,proto3" json:"rarity,omitempty"`
+	Level         int32                  `protobuf:"varint,7,opt,name=level,proto3" json:"level,omitempty"`
+	Base          map[string]int32       `protobuf:"bytes,8,rep,name=base,proto3" json:"base,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Affixes       []*Affix               `protobuf:"bytes,9,rep,name=affixes,proto3" json:"affixes,omitempty"`
+	Quantity      int32                  `protobuf:"varint,10,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Stack         int32                  `protobuf:"varint,11,opt,name=stack,proto3" json:"stack,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Item) Reset() {
+	*x = Item{}
+	mi := &file_events_v1_events_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Item) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Item) ProtoMessage() {}
+
+func (x *Item) ProtoReflect() protoreflect.Message {
+	mi := &file_events_v1_events_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Item.ProtoReflect.Descriptor instead.
+func (*Item) Descriptor() ([]byte, []int) {
+	return file_events_v1_events_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Item) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Item) GetDef() string {
+	if x != nil {
+		return x.Def
+	}
+	return ""
+}
+
+func (x *Item) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Item) GetSlot() string {
+	if x != nil {
+		return x.Slot
+	}
+	return ""
+}
+
+func (x *Item) GetWeapon() string {
+	if x != nil {
+		return x.Weapon
+	}
+	return ""
+}
+
+func (x *Item) GetRarity() string {
+	if x != nil {
+		return x.Rarity
+	}
+	return ""
+}
+
+func (x *Item) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *Item) GetBase() map[string]int32 {
+	if x != nil {
+		return x.Base
+	}
+	return nil
+}
+
+func (x *Item) GetAffixes() []*Affix {
+	if x != nil {
+		return x.Affixes
+	}
+	return nil
+}
+
+func (x *Item) GetQuantity() int32 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+func (x *Item) GetStack() int32 {
+	if x != nil {
+		return x.Stack
+	}
+	return 0
+}
+
+type Affix struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Stat          string                 `protobuf:"bytes,3,opt,name=stat,proto3" json:"stat,omitempty"`
+	Tier          int32                  `protobuf:"varint,4,opt,name=tier,proto3" json:"tier,omitempty"`
+	Value         int32                  `protobuf:"varint,5,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Affix) Reset() {
+	*x = Affix{}
+	mi := &file_events_v1_events_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Affix) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Affix) ProtoMessage() {}
+
+func (x *Affix) ProtoReflect() protoreflect.Message {
+	mi := &file_events_v1_events_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Affix.ProtoReflect.Descriptor instead.
+func (*Affix) Descriptor() ([]byte, []int) {
+	return file_events_v1_events_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Affix) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Affix) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Affix) GetStat() string {
+	if x != nil {
+		return x.Stat
+	}
+	return ""
+}
+
+func (x *Affix) GetTier() int32 {
+	if x != nil {
+		return x.Tier
+	}
+	return 0
+}
+
+func (x *Affix) GetValue() int32 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+// inventory.applied, keyed by account. It follows a run.ended once inventory
+// has written it and cleared the lease.
 type InventoryApplied struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -595,7 +824,7 @@ type InventoryApplied struct {
 
 func (x *InventoryApplied) Reset() {
 	*x = InventoryApplied{}
-	mi := &file_events_v1_events_proto_msgTypes[4]
+	mi := &file_events_v1_events_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -607,7 +836,7 @@ func (x *InventoryApplied) String() string {
 func (*InventoryApplied) ProtoMessage() {}
 
 func (x *InventoryApplied) ProtoReflect() protoreflect.Message {
-	mi := &file_events_v1_events_proto_msgTypes[4]
+	mi := &file_events_v1_events_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -620,7 +849,7 @@ func (x *InventoryApplied) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InventoryApplied.ProtoReflect.Descriptor instead.
 func (*InventoryApplied) Descriptor() ([]byte, []int) {
-	return file_events_v1_events_proto_rawDescGZIP(), []int{4}
+	return file_events_v1_events_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *InventoryApplied) GetVersion() uint32 {
@@ -682,7 +911,7 @@ const file_events_v1_events_proto_rawDesc = "" +
 	"\vgame_server\x18\x02 \x01(\tR\n" +
 	"gameServer\x12.\n" +
 	"\x05state\x18\x03 \x01(\x0e2\x18.events.v1.InstanceStateR\x05state\x12.\n" +
-	"\x04time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\x90\x02\n" +
+	"\x04time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\x89\x03\n" +
 	"\bRunEnded\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x18\n" +
@@ -692,7 +921,33 @@ const file_events_v1_events_proto_rawDesc = "" +
 	"\x02xp\x18\x06 \x01(\x03R\x02xp\x12\x16\n" +
 	"\x06deaths\x18\a \x01(\rR\x06deaths\x12\x1a\n" +
 	"\binstance\x18\b \x01(\tR\binstance\x12.\n" +
-	"\x04time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xb2\x01\n" +
+	"\x04time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12-\n" +
+	"\tequipment\x18\n" +
+	" \x03(\v2\x0f.events.v1.ItemR\tequipment\x12!\n" +
+	"\x03bag\x18\v \x03(\v2\x0f.events.v1.ItemR\x03bag\x12%\n" +
+	"\x05stash\x18\f \x03(\v2\x0f.events.v1.ItemR\x05stash\"\xdc\x02\n" +
+	"\x04Item\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
+	"\x03def\x18\x02 \x01(\tR\x03def\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slot\x18\x04 \x01(\tR\x04slot\x12\x16\n" +
+	"\x06weapon\x18\x05 \x01(\tR\x06weapon\x12\x16\n" +
+	"\x06rarity\x18\x06 \x01(\tR\x06rarity\x12\x14\n" +
+	"\x05level\x18\a \x01(\x05R\x05level\x12-\n" +
+	"\x04base\x18\b \x03(\v2\x19.events.v1.Item.BaseEntryR\x04base\x12*\n" +
+	"\aaffixes\x18\t \x03(\v2\x10.events.v1.AffixR\aaffixes\x12\x1a\n" +
+	"\bquantity\x18\n" +
+	" \x01(\x05R\bquantity\x12\x14\n" +
+	"\x05stack\x18\v \x01(\x05R\x05stack\x1a7\n" +
+	"\tBaseEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"i\n" +
+	"\x05Affix\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04stat\x18\x03 \x01(\tR\x04stat\x12\x12\n" +
+	"\x04tier\x18\x04 \x01(\x05R\x04tier\x12\x14\n" +
+	"\x05value\x18\x05 \x01(\x05R\x05value\"\xb2\x01\n" +
 	"\x10InventoryApplied\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x18\n" +
 	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x15\n" +
@@ -735,7 +990,7 @@ func file_events_v1_events_proto_rawDescGZIP() []byte {
 }
 
 var file_events_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_events_v1_events_proto_goTypes = []any{
 	(PlayerSessionKind)(0),        // 0: events.v1.PlayerSessionKind
 	(InstanceJoinResult)(0),       // 1: events.v1.InstanceJoinResult
@@ -745,24 +1000,32 @@ var file_events_v1_events_proto_goTypes = []any{
 	(*InstanceJoin)(nil),          // 5: events.v1.InstanceJoin
 	(*InstanceLifecycle)(nil),     // 6: events.v1.InstanceLifecycle
 	(*RunEnded)(nil),              // 7: events.v1.RunEnded
-	(*InventoryApplied)(nil),      // 8: events.v1.InventoryApplied
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*Item)(nil),                  // 8: events.v1.Item
+	(*Affix)(nil),                 // 9: events.v1.Affix
+	(*InventoryApplied)(nil),      // 10: events.v1.InventoryApplied
+	nil,                           // 11: events.v1.Item.BaseEntry
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
 }
 var file_events_v1_events_proto_depIdxs = []int32{
-	0, // 0: events.v1.PlayerSession.kind:type_name -> events.v1.PlayerSessionKind
-	9, // 1: events.v1.PlayerSession.time:type_name -> google.protobuf.Timestamp
-	1, // 2: events.v1.InstanceJoin.result:type_name -> events.v1.InstanceJoinResult
-	9, // 3: events.v1.InstanceJoin.time:type_name -> google.protobuf.Timestamp
-	2, // 4: events.v1.InstanceLifecycle.state:type_name -> events.v1.InstanceState
-	9, // 5: events.v1.InstanceLifecycle.time:type_name -> google.protobuf.Timestamp
-	3, // 6: events.v1.RunEnded.outcome:type_name -> events.v1.RunOutcome
-	9, // 7: events.v1.RunEnded.time:type_name -> google.protobuf.Timestamp
-	9, // 8: events.v1.InventoryApplied.time:type_name -> google.protobuf.Timestamp
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	0,  // 0: events.v1.PlayerSession.kind:type_name -> events.v1.PlayerSessionKind
+	12, // 1: events.v1.PlayerSession.time:type_name -> google.protobuf.Timestamp
+	1,  // 2: events.v1.InstanceJoin.result:type_name -> events.v1.InstanceJoinResult
+	12, // 3: events.v1.InstanceJoin.time:type_name -> google.protobuf.Timestamp
+	2,  // 4: events.v1.InstanceLifecycle.state:type_name -> events.v1.InstanceState
+	12, // 5: events.v1.InstanceLifecycle.time:type_name -> google.protobuf.Timestamp
+	3,  // 6: events.v1.RunEnded.outcome:type_name -> events.v1.RunOutcome
+	12, // 7: events.v1.RunEnded.time:type_name -> google.protobuf.Timestamp
+	8,  // 8: events.v1.RunEnded.equipment:type_name -> events.v1.Item
+	8,  // 9: events.v1.RunEnded.bag:type_name -> events.v1.Item
+	8,  // 10: events.v1.RunEnded.stash:type_name -> events.v1.Item
+	11, // 11: events.v1.Item.base:type_name -> events.v1.Item.BaseEntry
+	9,  // 12: events.v1.Item.affixes:type_name -> events.v1.Affix
+	12, // 13: events.v1.InventoryApplied.time:type_name -> google.protobuf.Timestamp
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_events_v1_events_proto_init() }
@@ -776,7 +1039,7 @@ func file_events_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_events_v1_events_proto_rawDesc), len(file_events_v1_events_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

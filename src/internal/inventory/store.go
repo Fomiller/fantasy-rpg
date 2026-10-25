@@ -20,6 +20,7 @@ var (
 	ErrInRun       = errors.New("account is in a run")
 	ErrRunUsed     = errors.New("run id already ended")
 	ErrLeaseLost   = errors.New("run does not hold the lease")
+	ErrStashFull   = errors.New("stash is over its limit")
 )
 
 // Character is what the store keeps for one class of one account. Level is
@@ -194,7 +195,7 @@ func (m *Memory) ClearRun(_ context.Context, name, runID string) error {
 
 func checkStash(stash []items.Instance) error {
 	if len(stash) > StashSize {
-		return fmt.Errorf("stash has %d entries, the limit is %d", len(stash), StashSize)
+		return fmt.Errorf("%w: %d entries, the limit is %d", ErrStashFull, len(stash), StashSize)
 	}
 	return nil
 }

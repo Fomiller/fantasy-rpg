@@ -286,7 +286,7 @@ func decodeLoadout(c *inventory.Character, equipment, bag []byte) error {
 // stash_size constraint.
 func checkStash(stash []items.Instance) error {
 	if len(stash) > inventory.StashSize {
-		return fmt.Errorf("stash has %d entries, the limit is %d", len(stash), inventory.StashSize)
+		return fmt.Errorf("%w: %d entries, the limit is %d", inventory.ErrStashFull, len(stash), inventory.StashSize)
 	}
 	return nil
 }

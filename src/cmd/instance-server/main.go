@@ -72,7 +72,8 @@ func run() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	store, storeName, closeStore, err := httpstore.Open(ctx, os.Getenv("INVENTORY_URL"), os.Getenv("DATABASE_URL"), reg)
+	inventoryURL := os.Getenv("INVENTORY_URL")
+	store, storeName, closeStore, err := httpstore.Open(ctx, inventoryURL, os.Getenv("DATABASE_URL"), reg)
 	if err != nil {
 		return err
 	}
@@ -97,6 +98,13 @@ func run() error {
 	game.MaxPlayers = maxPlayers
 	game.Tokens = jointoken.NewVerifier(key)
 	game.Events = bus
+	// run.ended is consumed by the inventory service. Without it, or without
+	// Redpanda, the result goes straight to the store as in local dev.
+	results := "store"
+	if busName == "kafka" && inventoryURL != "" {
+		game.Results, results = server.EventResults{Sender: bus}, events.TopicRunEnded
+	}
+	slog.Info("run results", "to", results)
 	if id := os.Getenv("INSTANCE_ID"); id != "" {
 		game.ID = id
 	}

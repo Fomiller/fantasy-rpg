@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
 	"github.com/Fomiller/fantasy-rpg/src/internal/events"
+	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 )
 
@@ -60,6 +62,28 @@ func run() error {
 		relayDone := make(chan struct{})
 		go func() { relay.Run(relayCtx); close(relayDone) }()
 		defer func() { stopRelay(); <-relayDone }()
+	}
+
+	if busName == "kafka" {
+		lag := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "inventory_consumer_lag",
+			Help: "Records behind the high watermark, by topic and partition.",
+		}, []string{"topic", "partition"})
+		reg.MustRegister(lag)
+		runs, err := events.NewConsumer(events.ConsumerConfig{
+			Brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
+			Topics:  []string{events.TopicRunEnded},
+			Group:   "inventory",
+			Lag:     lag,
+		}, slog.Default())
+		if err != nil {
+			return err
+		}
+		defer runs.Close()
+		consumeCtx, stopConsume := context.WithCancel(ctx)
+		consumeDone := make(chan struct{})
+		go func() { runs.Run(consumeCtx, inventory.RunEndedHandler(store, slog.Default())); close(consumeDone) }()
+		defer func() { stopConsume(); <-consumeDone }()
 	}
 
 	mux := http.NewServeMux()

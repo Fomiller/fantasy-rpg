@@ -274,15 +274,15 @@ func TestNameAlreadyPlaying(t *testing.T) {
 
 // extractAtSpawn starts a server where every run extracts at once, and run
 // ends go pending after 50 ms instead of 10 s.
-func extractAtSpawn(t *testing.T, spy *spyStore) (harness, sim.Config) {
+func extractAtSpawn(t *testing.T, spy *spyStore, configure ...func(*Server)) (harness, sim.Config) {
 	t.Helper()
 	cave := testCave()
 	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
 	cfg := sim.DefaultConfig()
 	cfg.ExtractTime = 100 * time.Millisecond
-	h := serveWith(t, cave, calm(cfg), spy, func(s *Server) {
+	h := serveWith(t, cave, calm(cfg), spy, append([]func(*Server){func(s *Server) {
 		s.endRunPatience, s.pendingRetry = 50*time.Millisecond, 10*time.Millisecond
-	})
+	}}, configure...)...)
 	return h, cfg
 }
 
