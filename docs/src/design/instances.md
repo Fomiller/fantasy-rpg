@@ -398,6 +398,12 @@ to start). One instance per pod.
 - `podManagementPolicy: Parallel`. The pods do not depend on each other,
   so one stuck pod should not hold up the others.
 - No volumes. A StatefulSet is here for the names, not for storage.
+- A PodDisruptionBudget with `maxUnavailable: 0`. An eviction kills every
+  run in the pod, so the descheduler cannot evict one. A node drain now
+  waits on the instance pods until someone deletes them. FOM-112 owns a
+  graceful drain.
+- Soft pod anti-affinity on the node hostname, so the pods spread when
+  there is more than one node. A one-node cluster still runs them all.
 
 Why not the others:
 
