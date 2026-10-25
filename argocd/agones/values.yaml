@@ -1,0 +1,83 @@
+agones:
+  crds:
+    # The cleanup is a Helm pre-delete hook that deletes every GameServer and
+    # its pod. Deleting the Argo CD Application should not take running
+    # instances down with it.
+    cleanupOnDelete: false
+
+  controller:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+    disableSecret: true
+    customCertSecretPath:
+      - key: ca.crt
+        path: ca.crt
+      - key: tls.crt
+        path: server.crt
+      - key: tls.key
+        path: server.key
+    allocationApiService:
+      annotations:
+        cert-manager.io/inject-ca-from: agones-system/agones-cert
+      disableCaBundle: true
+    validatingWebhook:
+      annotations:
+        cert-manager.io/inject-ca-from: agones-system/agones-cert
+      disableCaBundle: true
+    mutatingWebhook:
+      annotations:
+        cert-manager.io/inject-ca-from: agones-system/agones-cert
+      disableCaBundle: true
+
+  extensions:
+    replicas: 1
+    # The chart always makes this PDB. minAvailable 1 on one replica would
+    # block every node drain.
+    pdb:
+      minAvailable: null
+      maxUnavailable: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+    disableSecret: true
+    customCertSecretPath:
+      - key: ca.crt
+        path: ca.crt
+      - key: tls.crt
+        path: server.crt
+      - key: tls.key
+        path: server.key
+    allocationApiService:
+      annotations:
+        cert-manager.io/inject-ca-from: agones-system/agones-cert
+      disableCaBundle: true
+    validatingWebhook:
+      annotations:
+        cert-manager.io/inject-ca-from: agones-system/agones-cert
+      disableCaBundle: true
+    mutatingWebhook:
+      annotations:
+        cert-manager.io/inject-ca-from: agones-system/agones-cert
+      disableCaBundle: true
+
+  # Ping is for clients measuring latency to a region. There is one region,
+  # and both of its Services default to LoadBalancer.
+  ping:
+    install: false
+
+  # instance-manager allocates through the Kubernetes API with a
+  # GameServerAllocation, which the extensions pod serves. The allocator is a
+  # separate gRPC/REST front door behind a LoadBalancer, and nothing uses it.
+  allocator:
+    install: false
+    # Its TLS Secrets render even with install off, from a fresh genCA each
+    # time.
+    disableSecretCreation: true
+
+gameservers:
+  namespaces:
+    - fantasy-rpg

@@ -1,0 +1,26 @@
+# The chart's default is to mint the webhook CA with genCA on every render.
+# Argo CD re-renders on every commit to main, so that would rotate the CA each
+# time. cert-manager owns the cert instead, and cainjector fills in caBundle.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: agones-selfsigned
+  namespace: agones-system
+spec:
+  selfSigned: {}
+---
+# The chart mounts the Secret named <release>-cert into the controller and
+# extensions pods, so secretName has to stay agones-cert.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: agones-cert
+  namespace: agones-system
+spec:
+  secretName: agones-cert
+  dnsNames:
+    - agones-controller-service.agones-system
+    - agones-controller-service.agones-system.svc
+  issuerRef:
+    name: agones-selfsigned
+    kind: Issuer
