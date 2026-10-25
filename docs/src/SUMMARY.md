@@ -10,3 +10,4 @@
 - [Progression](design/progression.md)
 - [Persistence](design/persistence.md)
 - [Instances](design/instances.md)
+- [Hub town](design/hub-town.md)
