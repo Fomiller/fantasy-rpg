@@ -751,12 +751,6 @@ class ClientMessage:
 		service.func_ref = Callable(self, "new_loot_close")
 		data[__loot_close.tag] = service
 		
-		__enter_instance = PBField.new("enter_instance", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 20, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
-		service = PBServiceField.new()
-		service.field = __enter_instance
-		service.func_ref = Callable(self, "new_enter_instance")
-		data[__enter_instance.tag] = service
-		
 		__stash_move = PBField.new("stash_move", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 21, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
 		service = PBServiceField.new()
 		service.field = __stash_move
@@ -783,7 +777,6 @@ class ClientMessage:
 		USE = 17,
 		LOOT_OPEN = 18,
 		LOOT_CLOSE = 19,
-		ENTER_INSTANCE = 20,
 		STASH_MOVE = 21,
 		INSTANCE_JOIN = 22,
 	}
@@ -831,8 +824,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -869,8 +860,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -907,8 +896,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -945,8 +932,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -983,8 +968,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1021,8 +1004,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1059,8 +1040,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1097,8 +1076,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1135,8 +1112,6 @@ class ClientMessage:
 		_payload_case = 18
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1173,52 +1148,12 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		data[19].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 19
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = LootCloseRequest.new()
 		return __loot_close.value
-	
-	var __enter_instance: PBField
-	func has_enter_instance() -> bool:
-		return data[20].state == PB_SERVICE_STATE.FILLED
-	func get_enter_instance() -> EnterInstanceRequest:
-		return __enter_instance.value
-	func clear_enter_instance() -> void:
-		data[20].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-	func new_enter_instance() -> EnterInstanceRequest:
-		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[10].state = PB_SERVICE_STATE.UNFILLED
-		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[11].state = PB_SERVICE_STATE.UNFILLED
-		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[12].state = PB_SERVICE_STATE.UNFILLED
-		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[13].state = PB_SERVICE_STATE.UNFILLED
-		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[14].state = PB_SERVICE_STATE.UNFILLED
-		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[15].state = PB_SERVICE_STATE.UNFILLED
-		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[16].state = PB_SERVICE_STATE.UNFILLED
-		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[17].state = PB_SERVICE_STATE.UNFILLED
-		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[18].state = PB_SERVICE_STATE.UNFILLED
-		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[19].state = PB_SERVICE_STATE.UNFILLED
-		data[20].state = PB_SERVICE_STATE.FILLED
-		_payload_case = 20
-		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[21].state = PB_SERVICE_STATE.UNFILLED
-		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[22].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = EnterInstanceRequest.new()
-		return __enter_instance.value
 	
 	var __stash_move: PBField
 	func has_stash_move() -> bool:
@@ -1249,8 +1184,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		data[21].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 21
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
@@ -1287,8 +1220,6 @@ class ClientMessage:
 		data[18].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[19].state = PB_SERVICE_STATE.UNFILLED
-		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
-		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		data[22].state = PB_SERVICE_STATE.FILLED
@@ -2505,6 +2436,11 @@ class JoinRequest:
 		service.field = __class_id
 		data[__class_id.tag] = service
 		
+		__returning = PBField.new("returning", PB_DATA_TYPE.BOOL, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL])
+		service = PBServiceField.new()
+		service.field = __returning
+		data[__returning.tag] = service
+		
 	var data = {}
 	
 	var __name: PBField
@@ -2532,6 +2468,19 @@ class JoinRequest:
 		__class_id.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
 	func set_class_id(value : String) -> void:
 		__class_id.value = value
+	
+	var __returning: PBField
+	func has_returning() -> bool:
+		if __returning.value != null:
+			return true
+		return false
+	func get_returning() -> bool:
+		return __returning.value
+	func clear_returning() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__returning.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
+	func set_returning(value : bool) -> void:
+		__returning.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -2591,6 +2540,11 @@ class JoinAccepted:
 		service.field = __character
 		service.func_ref = Callable(self, "new_character")
 		data[__character.tag] = service
+		
+		__town = PBField.new("town", PB_DATA_TYPE.BOOL, PB_RULE.OPTIONAL, 7, true, DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL])
+		service = PBServiceField.new()
+		service.field = __town
+		data[__town.tag] = service
 		
 	var data = {}
 	
@@ -2675,6 +2629,19 @@ class JoinAccepted:
 	func new_character() -> CharacterInfo:
 		__character.value = CharacterInfo.new()
 		return __character.value
+	
+	var __town: PBField
+	func has_town() -> bool:
+		if __town.value != null:
+			return true
+		return false
+	func get_town() -> bool:
+		return __town.value
+	func clear_town() -> void:
+		data[7].state = PB_SERVICE_STATE.UNFILLED
+		__town.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
+	func set_town(value : bool) -> void:
+		__town.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -4487,6 +4454,18 @@ class InstanceLayout:
 		service.func_ref = Callable(self, "new_extraction")
 		data[__extraction.tag] = service
 		
+		__entrance = PBField.new("entrance", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 5, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __entrance
+		service.func_ref = Callable(self, "new_entrance")
+		data[__entrance.tag] = service
+		
+		__stash = PBField.new("stash", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 6, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __stash
+		service.func_ref = Callable(self, "new_stash")
+		data[__stash.tag] = service
+		
 	var data = {}
 	
 	var __name: PBField
@@ -4540,6 +4519,34 @@ class InstanceLayout:
 	func new_extraction() -> Rect:
 		__extraction.value = Rect.new()
 		return __extraction.value
+	
+	var __entrance: PBField
+	func has_entrance() -> bool:
+		if __entrance.value != null:
+			return true
+		return false
+	func get_entrance() -> Rect:
+		return __entrance.value
+	func clear_entrance() -> void:
+		data[5].state = PB_SERVICE_STATE.UNFILLED
+		__entrance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_entrance() -> Rect:
+		__entrance.value = Rect.new()
+		return __entrance.value
+	
+	var __stash: PBField
+	func has_stash() -> bool:
+		if __stash.value != null:
+			return true
+		return false
+	func get_stash() -> Vec2:
+		return __stash.value
+	func clear_stash() -> void:
+		data[6].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_stash() -> Vec2:
+		__stash.value = Vec2.new()
+		return __stash.value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -5802,33 +5809,6 @@ class StashMoveRejected:
 		__reason.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
 	func set_reason(value : String) -> void:
 		__reason.value = value
-	
-	func _to_string() -> String:
-		return PBPacker.message_to_string(data)
-		
-	func to_bytes() -> PackedByteArray:
-		return PBPacker.pack_message(data)
-		
-	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
-		var cur_limit = bytes.size()
-		if limit != -1:
-			cur_limit = limit
-		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
-		if result == cur_limit:
-			if PBPacker.check_required(data):
-				if limit == -1:
-					return PB_ERR.NO_ERRORS
-			else:
-				return PB_ERR.REQUIRED_FIELDS
-		elif limit == -1 && result > 0:
-			return PB_ERR.PARSE_INCOMPLETE
-		return result
-	
-class EnterInstanceRequest:
-	func _init():
-		var service
-		
-	var data = {}
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

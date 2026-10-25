@@ -412,3 +412,31 @@ In order, each step building and passing tests:
 If it has to split, the cut is after step 4: the server half behind a
 client that still sends `EnterInstanceRequest`. That needs field 20 kept
 for one more ticket, so splitting only pays if the client work slips.
+
+## What FOM-230 built
+
+The plan above, with the recommended choices: walking into `D` starts the
+run at once, `EnterInstanceRequest` is gone, and `TOWN_MAX_PLAYERS` is 32.
+Where it differs:
+
+- **Field 20 is not marked `reserved`.** Godobuf cannot parse `reserved`,
+  so `just proto` fails on it. A comment in `ClientMessage` says 20 was
+  `EnterInstanceRequest` and must not be reused.
+- **A held lease rejects with `in_run`, not `saving`.** This is how FOM-228
+  already worked. `saving` is a run end this server has not seen land.
+  `Lobby.saving` is true for both, so the stash window shows "Saving..."
+  either way.
+- **The town cap is checked when the body is placed,** after the character
+  loads. A join past the cap still loads the character, and creates it on
+  a first join, before it closes with `town full`.
+- **An unequip of an empty slot** is rejected with `unknown_item`.
+- **`NewLobby` takes the town and a `sim.Config`.** The instance server
+  builds the shared part with no town. `TickRate` moved from `Server` to
+  `Lobby`, so both servers have it.
+- **Client:** `lobby_entered` is now `town_state_changed`. A new `left`
+  signal clears the town or cave whenever a socket closes. Entrance
+  rejections and the instance notice show in a new `HUD/Toast` label. The
+  status line reads "town" in the town. `lobby_test.gd` is now
+  `town_test.gd`.
+- **Server tests use a small test town,** with the entrance a step above
+  the spawn and the chest a step below. net-test walks the real town.

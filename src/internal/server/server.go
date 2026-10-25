@@ -1,5 +1,5 @@
 // Package server connects WebSocket clients to the game. Lobby is the world
-// server: join, characters, the lobby, the stash, and tickets into an
+// server: join, characters, the hub town, the stash, and tickets into an
 // instance. Server is an instance server: one sim.World and its tick loop,
 // which a player joins only with a ticket from the world server. They share
 // how connections and store writes are handled.
@@ -50,8 +50,6 @@ var (
 // goes back to the world server.
 type Server struct {
 	*Lobby
-	// TickRate is sent to clients on join. It must match the tick loop.
-	TickRate int
 	// ID names this instance in tokens and the run lease, with a boot id that
 	// is new on every start.
 	ID string
@@ -73,8 +71,7 @@ type Server struct {
 
 func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger) *Server {
 	return &Server{
-		Lobby:      NewLobby(world, loot, log),
-		TickRate:   20,
+		Lobby:      newShared(world, loot, log),
 		ID:         "instance-0",
 		MaxPlayers: 8,
 		boot:       bootID(),

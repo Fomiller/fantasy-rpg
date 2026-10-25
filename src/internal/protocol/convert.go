@@ -53,16 +53,17 @@ func Command(msg *gamev1.ClientMessage, player sim.EntityID) (any, bool) {
 }
 
 func Joined(player sim.EntityID, cave caves.Cave, spawn sim.Vec2, tickRate int, class *gamev1.ClassInfo, character *gamev1.CharacterInfo) *gamev1.ServerMessage {
-	layout := &gamev1.InstanceLayout{
-		Name:       cave.Name,
-		Bounds:     rect(cave.Bounds),
-		Extraction: rect(cave.Extraction),
+	layout := &gamev1.InstanceLayout{Name: cave.Name, Bounds: rect(cave.Bounds)}
+	if cave.Town {
+		layout.Entrance, layout.Stash = rect(cave.Entrance), vec(cave.Stash)
+	} else {
+		layout.Extraction = rect(cave.Extraction)
 	}
 	for _, w := range cave.Walls {
 		layout.Walls = append(layout.Walls, rect(w))
 	}
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Joined{
-		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Layout: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class, Character: character},
+		Joined: &gamev1.JoinAccepted{PlayerId: uint64(player), Layout: layout, Spawn: vec(spawn), TickRate: uint32(tickRate), ClassInfo: class, Character: character, Town: cave.Town},
 	}}
 }
 

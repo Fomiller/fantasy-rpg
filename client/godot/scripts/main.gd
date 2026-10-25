@@ -2,6 +2,8 @@ extends Node2D
 
 # Mirrors sim.DefaultConfig. It only picks a target; the server decides.
 const PICKUP_RANGE := 48.0
+# Mirrors server.StashRange, from the chest's center.
+const STASH_RANGE := 64.0
 
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
@@ -17,7 +19,14 @@ const WINDOWS_GROUP := "windows"
 # Close reasons the server sends, as the join screen says them.
 const CLOSE_TEXT := {
 	"characters unavailable": "Can't load your character. Try again in a minute.",
+	"town full": "The town is full. Trying again...",
 }
+const ENTER_REJECTED_TEXT := {
+	"saving": "Still saving your last run",
+	"in_run": "Your character is in a run",
+	"full": "All instances are full.",
+}
+const TOAST_SECONDS := 4.0
 
 @onready var _connection: ServerConnection = $ServerConnection
 @onready var _cave: Cave = $Cave
@@ -34,7 +43,8 @@ const CLOSE_TEXT := {
 @onready var _xp_bar: XpBar = $HUD/XpBar
 @onready var _level_up: LevelUpBanner = $HUD/LevelUp
 @onready var _summary: RunSummaryWindow = $HUD/RunSummary
-@onready var _lobby: LobbyWindow = $HUD/Lobby
+@onready var _stash: StashWindow = $HUD/Stash
+@onready var _toast: Label = $HUD/Toast
 
 # Set by main. Tests swap it for a fake.
 var send_attack: Callable
@@ -49,6 +59,11 @@ var _views: Dictionary[int, EntityView] = {}
 var _health := 0
 var _max_health := 0
 var _extract_progress := 0.0
+# Set from when the predicted player steps into the town's entrance until a
+# ticket, a rejection, or a step back out.
+var _entering := false
+var _in_entrance := false
+var _toast_left := 0.0
 
 
 func _ready() -> void:
@@ -75,23 +90,26 @@ func _ready() -> void:
 	_loot.send_open = _connection.send_loot_open
 	_loot.send_close = _connection.send_loot_close
 	_loot.send_pickup = _connection.send_pickup
-	_connection.lobby_entered.connect(_on_lobby)
-	_connection.equipment_received.connect(_lobby.show_equipment)
-	_connection.inventory_received.connect(_lobby.show_inventory)
-	_connection.stash_received.connect(_lobby.show_stash)
-	_connection.stash_move_rejected.connect(_lobby.show_rejected)
-	_connection.enter_instance_rejected.connect(_lobby.show_enter_rejected)
-	_lobby.send_move = _connection.send_stash_move
-	_lobby.send_enter = _connection.send_enter_instance
+	_connection.town_state_changed.connect(_on_town_state)
+	_connection.left.connect(_on_left)
+	_connection.equipment_received.connect(_stash.show_equipment)
+	_connection.inventory_received.connect(_stash.show_inventory)
+	_connection.stash_received.connect(_stash.show_stash)
+	_connection.stash_move_rejected.connect(_stash.show_rejected)
+	_connection.enter_instance_rejected.connect(_on_enter_rejected)
+	_stash.send_move = _connection.send_stash_move
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	send_attack = _connection.send_attack
 	_on_disconnected()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if debug:
 		_debug_overlay.text = debug_text()
+	if _toast_left > 0.0:
+		_toast_left -= delta
+		_toast.visible = _toast_left > 0.0
 
 
 func _physics_process(_delta: float) -> void:
@@ -99,21 +117,56 @@ func _physics_process(_delta: float) -> void:
 		set_debug(not debug)
 	if Input.is_action_just_pressed("close_window"):
 		close_top_window()
-	if _connection.in_lobby:
-		return
 	if Input.is_action_just_pressed("inventory"):
 		_inventory.visible = not _inventory.visible
 	if Input.is_action_just_pressed("character"):
 		_character.visible = not _character.visible
+	if _connection.in_town:
+		if Input.is_action_just_pressed("interact") and near_stash(_ghost.position):
+			_stash.open()
+		if _stash.visible and not near_stash(_ghost.position):
+			_stash.visible = false
+		_watch_entrance()
+		return
 	if Input.is_action_just_pressed("interact"):
 		_open_loot()
 	_close_loot_out_of_range()
 
 
+# Uses the server position, since that is where the server measures range from.
+func near_stash(from: Vector2) -> bool:
+	return _cave.has_stash and from.distance_to(_cave.stash) <= STASH_RANGE
+
+
+# The server sends the player on once its own position is in the entrance.
+# This only says so, from the predicted position, so the wait shows at once.
+func _watch_entrance() -> void:
+	var inside := _cave.entrance.has_point(_player.position)
+	if inside and not _in_entrance:
+		_entering = true
+		_status.text = "Entering the cave..."
+	elif not inside:
+		_entering = false
+	_in_entrance = inside
+
+
+func show_toast(text: String) -> void:
+	_toast.text = text
+	_toast.visible = true
+	_toast_left = TOAST_SECONDS
+
+
+# The player stays where they are and steps out and back in to try again.
+func _on_enter_rejected(event: GameV1.EnterInstanceRejected) -> void:
+	_entering = false
+	show_toast(ENTER_REJECTED_TEXT.get(event.get_reason(), event.get_reason()))
+
+
 # A click on a window is taken by its Controls and never gets here, so the
-# keys and clicks outside a window still attack.
+# keys and clicks outside a window still attack. The town has no abilities,
+# so a windup there would never be answered.
 func _unhandled_input(event: InputEvent) -> void:
-	if _connection.in_lobby:
+	if _connection.in_town:
 		return
 	for i in ABILITY_ACTIONS.size():
 		if event.is_action_pressed(ABILITY_ACTIONS[i]):
@@ -159,7 +212,7 @@ func _top_window() -> Control:
 # server already reported holds the key back.
 func use_ability(index: int) -> void:
 	var ability := _abilities.slot(index)
-	if ability == null or not _connection.is_joined() or _abilities.cooldown_left(ability.get_id()) > 0.0:
+	if ability == null or not _connection.is_joined() or _connection.in_town or _abilities.cooldown_left(ability.get_id()) > 0.0:
 		return
 	var aim := _player.facing
 	_player.cast(aim, ability.get_windup_ms() / 1000.0, ability.get_root())
@@ -199,7 +252,9 @@ func _nearest(from: Vector2, max_distance: float, wanted: Callable) -> EntityVie
 	return nearest
 
 
-func _on_joined(player_id: int) -> void:
+# The town and the cave both join here. A run summary stays open over the
+# town, and the next run closes it.
+func _on_joined(_player_id: int) -> void:
 	_cave.build(_connection.layout)
 	_player.tick_seconds = 1.0 / _connection.tick_rate
 	_player.place(_connection.spawn)
@@ -210,33 +265,41 @@ func _on_joined(player_id: int) -> void:
 	_character.setup(_connection.character, _connection.class_info)
 	if _connection.character:
 		_xp_bar.show_character(_connection.character)
-	_summary.visible = false
-	_lobby.visible = false
-	_status.text = "joined"
+	if not _connection.in_town:
+		_summary.visible = false
+	_stash.visible = false
+	_entering = false
+	_in_entrance = _cave.entrance.has_point(_connection.spawn)
+	_status.text = "town" if _connection.in_town else "joined"
 
 
-# A run summary stays open on top of the lobby until it is closed.
-func _on_lobby() -> void:
-	_clear_cave()
-	_player.visible = false
-	_player.alive = false
-	_inventory.visible = false
-	_character.visible = false
+# The character, the class or saving changed in the town. The player keeps
+# their body.
+func _on_town_state() -> void:
 	_character.setup(_connection.character, _connection.class_info)
 	if _connection.character:
 		_xp_bar.show_character(_connection.character)
-	_lobby.show_lobby(_connection.character, _connection.class_info, _connection.saving)
+	_stash.set_saving(_connection.saving)
 	if _connection.notice != "":
-		_lobby.show_notice(_connection.notice)
+		show_toast(_connection.notice)
 		_connection.notice = ""
-	_status.text = "lobby"
+
+
+# The town clears when its socket closes, and the cave draws on JoinAccepted.
+func _on_left() -> void:
+	_clear_cave()
+	_cave.clear()
+	_player.visible = false
+	_player.alive = false
+	_stash.visible = false
+	_entering = false
 
 
 func _on_disconnected() -> void:
 	_clear_cave()
 	_character.clear()
 	_xp_bar.clear()
-	_lobby.visible = false
+	_stash.visible = false
 	var reason := _connection.close_reason
 	_status.text = "offline" if reason == "" else "offline · %s" % CLOSE_TEXT.get(reason, reason)
 
@@ -289,6 +352,8 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_views.erase(id)
 	var hp := "%d/%d hp" % [_health, _max_health] if _health > 0 else "dead"
 	_status.text = hp
+	if _connection.in_town:
+		_status.text = "Entering the cave..." if _entering else "town"
 	if _extract_progress > 0.0:
 		_status.text += " · extracting %d%%" % int(_extract_progress * 100)
 
@@ -378,7 +443,7 @@ func _on_level_up(event: GameV1.LevelUp) -> void:
 	_xp_bar.flash()
 
 
-# Kept open over the lobby. Entering the cave again closes it.
+# Kept open over the town. Entering the cave again closes it.
 func _on_run_ended(summary: GameV1.RunSummary) -> void:
 	if summary.has_character():
 		_xp_bar.show_character(summary.get_character())
@@ -386,10 +451,7 @@ func _on_run_ended(summary: GameV1.RunSummary) -> void:
 	_summary.show_summary(summary)
 
 
-# The lobby window shows gear itself, so the HUD only shows it in the cave.
 func _on_equipment(items: Array[GameV1.Item]) -> void:
-	if _connection.in_lobby:
-		return
 	var lines: Array[String] = []
 	for item in items:
 		lines.append(ItemText.line(item))

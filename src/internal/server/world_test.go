@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -35,7 +36,7 @@ type worldHarness struct {
 func serveWorld(t *testing.T, configure ...func(*Lobby)) worldHarness {
 	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
-	l := NewLobby(sim.NewWorld(sim.DefaultConfig(), nil), loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	l := NewLobby(testTown(), sim.DefaultConfig(), loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	spy := newSpy()
 	l.Store = spy
 	l.leaseRetry = 20 * time.Millisecond
@@ -44,7 +45,7 @@ func serveWorld(t *testing.T, configure ...func(*Lobby)) worldHarness {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go l.Run(ctx)
+	runTown(ctx, l)
 	hs := httptest.NewServer(http.HandlerFunc(l.HandleWS))
 	t.Cleanup(func() {
 		hs.Close()
@@ -69,10 +70,18 @@ func (h worldHarness) saved(t *testing.T, name string, match func(inventory.Char
 	}
 }
 
+// enterRejected walks into the entrance, then back down to the stash chest
+// once turned away, ready for the next try.
 func enterRejected(t *testing.T, conn *websocket.Conn) string {
 	t.Helper()
-	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
-	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterInstanceRejected() != nil }).GetEnterInstanceRejected().GetReason()
+	walk(t, conn, 0, -1)
+	r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterInstanceRejected() != nil }).GetEnterInstanceRejected().GetReason()
+	walk(t, conn, 0, 1)
+	stash := testTown().Stash
+	townPos(t, conn, func(e *gamev1.EntityState) bool {
+		return e.GetVelocity().GetY() == 0 && math.Abs(float64(e.GetPosition().GetY())-stash.Y) < StashRange
+	})
+	return r
 }
 
 // A new name on the world server gets a starter kit, the lobby and the
@@ -110,7 +119,7 @@ func TestWorldStashMoveIsSaved(t *testing.T) {
 	})
 }
 
-// With no instance to send anyone to, Enter Cave is full and no lease is
+// With no instance to send anyone to, the entrance is full and no lease is
 // ever taken.
 func TestWorldEnterIsFull(t *testing.T) {
 	h := serveWorld(t)
@@ -222,18 +231,6 @@ func TestWorldJoinFailsWhenStoreIsDown(t *testing.T) {
 	var closed websocket.CloseError
 	if !errors.As(err, &closed) || closed.Code != websocket.StatusTryAgainLater || closed.Reason != "characters unavailable" {
 		t.Fatalf("got %v, want try again later", err)
-	}
-}
-
-// Run commands mean nothing on the world server and change nothing.
-func TestWorldIgnoresRunCommands(t *testing.T) {
-	h := serveWorld(t)
-	conn := dial(t, h.url)
-	lobbyAs(t, conn, "ann")
-	lobbyItems(t, conn)
-	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Move{Move: &gamev1.MoveInput{Seq: 1, Direction: &gamev1.Vec2{X: 1}}}})
-	if r := enterRejected(t, conn); r != EnterFull {
-		t.Fatalf("enter rejected = %q, want full", r)
 	}
 }
 

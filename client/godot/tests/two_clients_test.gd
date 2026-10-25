@@ -1,12 +1,17 @@
 extends SceneTree
 
 # Needs a world-server on 127.0.0.1:8080 with instance servers running the
-# loop cave. Both clients join the world and follow their tickets, and the
-# world puts them in the same instance. The enemy fights back, so the players
-# must win before they run out of health. `just net-test` starts them.
+# loop cave. Both clients join the town and see each other there. They walk
+# into the entrance and follow their tickets, and the world puts them in the
+# same instance. The enemy fights back, so the players must win before they
+# run out of health. `just net-test` starts them.
 const TIMEOUT_MSEC := 10000
 const ATTACK_EVERY_MSEC := 600
 const CORRIDOR_HALF_HEIGHT := 32.0
+# The town's row just below the entrance corridor, from the top of the map.
+const TOWN_OPEN_ROW_Y := 224.0
+# One move per server tick, so the queue on the server does not lag the walk.
+const MOVE_EVERY_MSEC := 50
 
 var _failures := 0
 
@@ -18,13 +23,28 @@ class Client:
 
 	func _init(tree: SceneTree, name: String) -> void:
 		connection.player_name = name
-		connection.lobby_entered.connect(connection.send_enter_instance)
+		connection.joined.connect(func(_id: int) -> void: snapshot = null)
 		connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: snapshot = s)
 		connection.damage_received.connect(func(d: GameV1.DamageEvent) -> void:
 			hits.append("%d->%d:%d%s" % [d.get_source_id(), d.get_target_id(), d.get_target_health(), " killed" if d.get_killed() else ""]))
 		tree.root.add_child(connection)
 
 	var enemy_id := 0
+	var _next_move := 0
+
+	# Up out of the spawn, across under the corridor, and up into the entrance.
+	func walk_to_entrance() -> void:
+		var me_now := me()
+		if me_now == null or Time.get_ticks_msec() < _next_move:
+			return
+		_next_move = Time.get_ticks_msec() + MOVE_EVERY_MSEC
+		var p := pos(me_now)
+		var door := connection.layout.get_entrance()
+		var door_x := (door.get_min().get_x() + door.get_max().get_x()) / 2.0
+		var dir := Vector2.UP
+		if p.y <= TOWN_OPEN_ROW_Y + 8.0 and absf(p.x - door_x) > 8.0:
+			dir = Vector2(signf(door_x - p.x), 0)
+		connection.send_move(dir)
 
 	func by_id(id: int) -> GameV1.EntityState:
 		if snapshot == null:
@@ -72,8 +92,25 @@ func _run() -> void:
 	var b := Client.new(self, "b")
 	var clients: Array[Client] = [a, b]
 
-	var joined := await _until(func() -> bool: return a.me() != null and b.me() != null)
-	_check(joined, "both clients joined and see themselves")
+	var in_town := await _until(func() -> bool: return a.connection.in_town and b.connection.in_town and a.me() != null and b.me() != null)
+	_check(in_town, "both clients joined the town")
+	if not in_town:
+		_finish()
+		return
+	_check(await _until(func() -> bool: return a.by_id(b.connection.player_id) != null and b.by_id(a.connection.player_id) != null), "each sees the other in the town")
+	var start_x := Client.pos(b.by_id(a.connection.player_id)).x
+	a.connection.send_move(Vector2.RIGHT)
+	_check(await _until(func() -> bool:
+		var other := b.by_id(a.connection.player_id)
+		return other != null and Client.pos(other).x > start_x + 20.0), "b sees a walk")
+	a.connection.send_move(Vector2.ZERO)
+
+	var joined := await _until(func() -> bool:
+		for c in clients:
+			if c.connection.in_town:
+				c.walk_to_entrance()
+		return not a.connection.in_town and not b.connection.in_town and a.me() != null and b.me() != null)
+	_check(joined, "both clients walked into the entrance and joined the cave")
 	if not joined:
 		_finish()
 		return

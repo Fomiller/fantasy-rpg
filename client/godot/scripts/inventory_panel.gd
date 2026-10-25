@@ -43,14 +43,18 @@ func _rebuild() -> void:
 	for item in _equipment:
 		_row(item, {"Unequip": connection.send_unequip.bind(item.get_slot())})
 
+	# A potion is for a run, and nothing can be dropped in the town.
+	var in_run := not connection.in_town
 	_heading("Bag %d/%d" % [_items.size(), _capacity])
 	for item in _items:
 		var actions := {}
 		if item.get_slot() == "consumable":
-			actions["Use"] = connection.send_use.bind(item.get_id())
+			if in_run:
+				actions["Use"] = connection.send_use.bind(item.get_id())
 		elif item.get_slot() != "material":
 			actions["Equip"] = connection.send_equip.bind(item.get_id())
-		actions["Drop"] = connection.send_drop.bind(item.get_id())
+		if in_run:
+			actions["Drop"] = connection.send_drop.bind(item.get_id())
 		_row(item, actions)
 
 

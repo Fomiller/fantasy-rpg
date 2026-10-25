@@ -94,6 +94,9 @@ func TestDamageAndJoined(t *testing.T) {
 	if j.GetSpawn().GetX() != float32(cave.PlayerSpawns[0].X) || j.GetLayout().GetExtraction().GetMax().GetX() != float32(cave.Extraction.Max.X) {
 		t.Fatalf("joined spawn or exit wrong: %v", j)
 	}
+	if j.GetTown() || j.GetLayout().GetEntrance() != nil {
+		t.Fatalf("a cave joined as the town: %v", j)
+	}
 	c := j.GetClassInfo()
 	if c.GetId() != "warrior" || c.GetResource() != "rage" || c.GetMaxResource() != 100 || c.GetBasic() != "slash" || len(c.GetAbilities()) != 3 {
 		t.Fatalf("class = %v", c)
@@ -103,6 +106,18 @@ func TestDamageAndJoined(t *testing.T) {
 	}
 	if e := Extracted(5, nil).GetExtracted(); e.GetPlayerId() != 5 || e.GetSummary() != nil {
 		t.Fatalf("extracted = %v, want player 5 with no summary", e)
+	}
+}
+
+func TestJoinedTown(t *testing.T) {
+	town := caves.Town()
+	j := Joined(1, town, town.ReturnSpawns[0], 20, nil, nil).GetJoined()
+	l := j.GetLayout()
+	if !j.GetTown() || l.GetName() != "town" || l.GetExtraction() != nil {
+		t.Fatalf("joined = %v", j)
+	}
+	if l.GetEntrance().GetMin().GetY() != float32(town.Entrance.Min.Y) || l.GetStash().GetX() != float32(town.Stash.X) {
+		t.Fatalf("entrance %v stash %v", l.GetEntrance(), l.GetStash())
 	}
 }
 

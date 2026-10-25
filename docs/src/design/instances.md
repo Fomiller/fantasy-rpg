@@ -74,6 +74,10 @@ The client closes the world connection before it opens the instance one.
 
 ### World to instance to world
 
+FOM-230 replaced the lobby menu with a walkable town. The player walks
+into the town's entrance instead of sending `EnterInstanceRequest`, which
+is gone. See [Hub town](hub-town.md). The rest of the handoff is as below.
+
 1. The client connects to the world server at `/ws` and sends
    `JoinRequest`, as now. The world server claims the name, runs `Load`
    (or `Create`), and sends `Lobby`, `EquipmentUpdated`,
@@ -448,8 +452,8 @@ With a fixed list:
 Party grouping is a world server feature that does not exist yet. When it
 does:
 
-- The leader sends `EnterInstanceRequest`. The world server picks one
-  instance with room for the whole party.
+- The leader walks into the town's entrance (see [Hub town](hub-town.md)).
+  The world server picks one instance with room for the whole party.
 - It makes one run id and one token per member, all for the same instance,
   and sends each member their own `InstanceTicket`.
 - A member whose join fails goes back to the lobby. The rest play on.

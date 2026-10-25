@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,6 +52,33 @@ func testCave() caves.Cave {
 		PlayerSpawns: []sim.Vec2{{}},
 		Extraction:   sim.Rect{Min: sim.Vec2{X: 500, Y: 200}, Max: sim.Vec2{X: 600, Y: 320}},
 	}
+}
+
+// testTown has the entrance a step above the spawn and the stash chest a
+// step below it, so tests reach either at once. The return spawn is out of
+// the chest's range.
+func testTown() caves.Cave {
+	c, err := caves.Parse("test town", `
+#######
+###D###
+#..S..#
+#R.T..#
+#######
+`)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// runTown steps the world server's town every 10 ms until ctx ends.
+func runTown(ctx context.Context, l *Lobby) {
+	loop := &tick.Loop{
+		Interval: 10 * time.Millisecond,
+		Metrics:  tick.NewMetrics(prometheus.NewRegistry(), "test"),
+		Step:     l.Step,
+	}
+	go loop.Run(ctx)
 }
 
 func start(t *testing.T) harness {
@@ -107,14 +135,14 @@ func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.St
 	mux.HandleFunc("GET /instances/"+srv.ID+"/ws", srv.HandleWS)
 	is := httptest.NewServer(mux)
 
-	lobby := NewLobby(sim.NewWorld(cfg, nil), items.NewRoller(items.Default(), 2), quiet())
+	lobby := NewLobby(testTown(), cfg, items.NewRoller(items.Default(), 2), quiet())
 	lobby.Store = store
 	lobby.JoinKey = testKey
 	lobby.leaseRetry = 20 * time.Millisecond
 	lobby.closeGrace = 10 * time.Millisecond
 	lobby.Instances = NewDirectory([]Instance{{ID: srv.ID, Internal: is.URL, Public: wsURL(is.URL) + "/instances/" + srv.ID + "/ws"}})
 	lobby.Instances.Poll(ctx)
-	go lobby.Run(ctx)
+	runTown(ctx, lobby)
 	go lobby.Instances.Run(ctx, 10*time.Millisecond)
 	ws := httptest.NewServer(http.HandlerFunc(lobby.HandleWS))
 
@@ -184,7 +212,7 @@ func joinAccepted(t *testing.T, h harness) (*websocket.Conn, *gamev1.JoinAccepte
 	return joinAs(t, h, fmt.Sprintf("tester%d", testers.Add(1)))
 }
 
-// joinAs joins the world and goes straight from its lobby into the cave.
+// joinAs joins the world and walks straight from the town into the cave.
 func joinAs(t *testing.T, h harness, name string) (*websocket.Conn, *gamev1.JoinAccepted) {
 	t.Helper()
 	world := dial(t, h.url)
@@ -197,11 +225,54 @@ func lobbyAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.Lobby {
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
 		Join: &gamev1.JoinRequest{Name: name},
 	}})
+	return townLobby(t, conn)
+}
+
+// townIDs has each world connection's player in the town, from JoinAccepted.
+var townIDs sync.Map
+
+// townLobby reads the join into the town up to its Lobby.
+func townLobby(t *testing.T, conn *websocket.Conn) *gamev1.Lobby {
+	t.Helper()
+	joined := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
+	if !joined.GetTown() {
+		t.Fatalf("joined = %v, want the town", joined)
+	}
+	townIDs.Store(conn, joined.GetPlayerId())
 	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil }).GetLobby()
 }
 
-// enterInstance sends Enter Cave on a world connection and follows the
-// ticket, as the client does.
+func townID(t *testing.T, conn *websocket.Conn) uint64 {
+	t.Helper()
+	id, ok := townIDs.Load(conn)
+	if !ok {
+		t.Fatal("not in the town")
+	}
+	return id.(uint64)
+}
+
+var moveSeq atomic.Uint32
+
+// walk sends one move. The server keeps going that way until the next one.
+func walk(t *testing.T, conn *websocket.Conn, x, y float32) {
+	t.Helper()
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Move{
+		Move: &gamev1.MoveInput{Seq: moveSeq.Add(1), Direction: &gamev1.Vec2{X: x, Y: y}},
+	}})
+}
+
+// townPos waits for a snapshot where the player in the town matches.
+func townPos(t *testing.T, conn *websocket.Conn, match func(*gamev1.EntityState) bool) *gamev1.EntityState {
+	t.Helper()
+	id := townID(t, conn)
+	return entity(waitFor(t, conn, func(m *gamev1.ServerMessage) bool {
+		e := entity(m.GetSnapshot(), id)
+		return e != nil && match(e)
+	}).GetSnapshot(), id)
+}
+
+// enterInstance walks into the town's entrance and follows the ticket, as
+// the client does.
 func enterInstance(t *testing.T, world *websocket.Conn) (*websocket.Conn, *gamev1.JoinAccepted) {
 	t.Helper()
 	ticket := enterTicket(t, world)
@@ -212,7 +283,7 @@ func enterInstance(t *testing.T, world *websocket.Conn) (*websocket.Conn, *gamev
 
 func enterTicket(t *testing.T, world *websocket.Conn) *gamev1.InstanceTicket {
 	t.Helper()
-	send(t, world, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
+	walk(t, world, 0, -1)
 	ticket := waitFor(t, world, func(m *gamev1.ServerMessage) bool { return m.GetTicket() != nil }).GetTicket()
 	wantClose(t, world, websocket.StatusNormalClosure, "entering instance")
 	return ticket
@@ -417,12 +488,13 @@ func TestJoinSendsInstanceLayout(t *testing.T) {
 }
 
 // An extraction ends the run: the instance closes, the world opens the lobby
-// on what the run banked, and the next Enter Cave is a new run.
+// on what the run banked, and the next walk into the entrance is a new run.
 func TestExtractionEndsTheRun(t *testing.T) {
 	cave := testCave()
 	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
 	cfg := sim.DefaultConfig()
-	cfg.ExtractTime = 100 * time.Millisecond
+	// Long enough for the other player to walk into the cave before ann leaves.
+	cfg.ExtractTime = 600 * time.Millisecond
 	h := startCave(t, cave, cfg)
 
 	leaver, joined := joinAs(t, h, "ann")
