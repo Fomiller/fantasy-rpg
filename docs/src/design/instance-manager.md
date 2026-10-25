@@ -1,369 +1,454 @@
 # Instance manager
 
-The instance manager makes an instance server pod when players need one,
-routes players to it, and deletes it when it empties. It replaces the fixed
-`fantasy-rpg-instance` StatefulSet. It builds on [Instances](instances.md)
-and the cave entrance in [Hub town](hub-town.md). FOM-112 builds it.
+Instance servers run as Agones GameServers. The game splits into four
+services. Events go through Redpanda. The join path stays one synchronous
+call. This replaces the fixed `fantasy-rpg-instance` StatefulSet. It builds
+on [Instances](instances.md) and the cave entrance in
+[Hub town](hub-town.md). FOM-112 builds it.
 
 ## Rules that do not bend
 
-- Everything in [Instances](instances.md) still holds. One socket at a
-  time, the join token, the run lease, the instance server writes run
-  results. The handoff and the proto do not change.
-- One instance per pod. One pod is one boot. A pod never comes back as a
-  new boot under the same name.
-- Postgres stays the only source of truth for player state. Kubernetes is
-  the only source of truth for which instances exist. The world server
-  keeps no list of its own on disk.
-- A pod with a live run is never deleted on purpose. Not by the manager,
-  not by a deploy.
-- No new system. No operator, no CRD of our own, no Agones.
+- The handoff in [Instances](instances.md) holds. One socket at a time,
+  the join token, the run lease. `InstanceTicket` and
+  `InstanceJoinRequest` do not change.
+- One instance per pod. A GameServer is one boot. A crash makes a new
+  GameServer with a new name. It never comes back under the old one.
+- Postgres stays the only source of truth for what a player owns. Redpanda
+  carries facts about what happened. It is never the place a player's gear
+  lives.
+- The join path is request and reply over HTTP. A player waiting on a
+  ticket never waits on a topic.
+- An Allocated GameServer is never deleted on purpose. Only its own
+  `Shutdown()` ends it.
+- `just dev` and `just instance` run with no Kubernetes.
 
 ## Today
 
-- The chart runs a StatefulSet with `instances.replicas` pods, 2 in dev.
-  The pod name is the instance id.
-- The chart makes one Service and one IngressRoute route per pod, at
-  `/instances/fantasy-rpg-instance-N/`.
-- The chart renders the world server's `INSTANCES` from the same count.
-  `Directory` polls each one's `/status` every 2 s and `Reserve` picks the
-  fullest instance with room.
-- An empty instance resets to a new world with a new seed. The pod lives
-  until a deploy.
-- A PDB with `maxUnavailable: 0` stops every eviction. `kubectl drain`
-  waits on the instance pods until someone deletes them by hand.
-- `just instance-start` and `deploy/kubernetes/instance-pod.yaml` make a
-  bare pod by hand in k3d.
+- The chart runs a StatefulSet with 2 pods. Each has a Service and a route
+  at `/instances/fantasy-rpg-instance-N/`.
+- `world-server` reads `INSTANCES`, polls each `/status` every 2 s, and
+  `Reserve` picks the fullest instance with room.
+- `instance-server` takes the run lease with `StartRun` and writes the
+  result with `EndRun`, both straight to Postgres.
+- An empty instance resets to a new world. The pod lives until a deploy.
+- A PDB with `maxUnavailable: 0` blocks every eviction. `kubectl drain`
+  waits forever.
+- Compose runs a NATS container that no code uses.
 
-## Where the manager lives
+## Services
 
-Inside the world server, as a backend behind `Directory`.
-
-- The world server already picks the instance, counts in-flight tickets,
-  mints the token and clears dead leases. All of that needs the same
-  instance list. A second service would have to agree with it on every
-  ticket.
-- The world server is one replica with `Recreate`. One process makes and
-  deletes pods, so no leader election and no lock.
-- The cost: the world server needs RBAC to make pods, and a world restart
-  stops new instances until it is back. Runs already in an instance go on.
-  Lobby players are dropped by the restart anyway.
-
-## How pods are made
-
-client-go against the Kubernetes API, with a narrow Role. Not Agones.
-
-- Agones is a controller, CRDs, a sidecar SDK and an allocator. Its model
-  is UDP on host ports. We use WebSocket through Traefik. It would be one
-  more operator to run and upgrade on Talos for a few hundred lines of Go.
-- client-go is already how anything in the cluster does this. The fake
-  clientset makes the manager testable without a cluster.
-
-### RBAC
-
-A ServiceAccount for the world Deployment, and a Role in the namespace:
-
-| Resource | Verbs |
-| -- | -- |
-| `pods` | get, list, watch, create, delete |
-| `services` | get, list, create, delete |
-| `ingressroutes.traefik.io` | get, list, create, delete |
-
-- Instance pods get no token: `automountServiceAccountToken: false`.
-- No ClusterRole. The manager only works in its own namespace.
-
-### The pod template
-
-- The chart renders the instance pod spec into a ConfigMap,
-  `fantasy-rpg-instance-template`, from the same values the StatefulSet
-  uses today: image, env, `MAX_PLAYERS`, the join key and database env,
-  probes and anti-affinity.
-- The world server mounts it and reads it at start. It hashes the spec and
-  puts the hash on each pod as a label.
-- The image tag is in both the template and the world Deployment, so a
-  Kargo promotion restarts the world server with the new template.
-- `INSTANCE_ID` still comes from `metadata.name` through the downward API.
-  The instance server does not change.
-
-### Names and labels
-
-- The pod name is `fantasy-rpg-instance-` plus 5 random characters, through
-  `generateName`. It is the instance id, as now.
-- Labels on every runtime object:
-  - `app.kubernetes.io/name: fantasy-rpg-instance`
-  - `app.kubernetes.io/managed-by: fantasy-rpg-world`
-  - `fantasy-rpg.fomiller.com/instance: <pod name>`
-  - `fantasy-rpg.fomiller.com/template: <hash>`
-- Not `app.kubernetes.io/instance`. Argo CD's legacy tracking reads that
-  label. A pod that carries it can be shown as out of sync and pruned.
-
-### Keeping Argo CD out of it
-
-- Argo CD only prunes what it tracks. Runtime objects carry no tracking
-  label or annotation, so Argo CD never sees them as its own.
-- The pod has no ownerReference. A world server restart or rollout must not
-  delete live runs through garbage collection. A pod with no controller is
-  also one the descheduler leaves alone by default.
-- The Service and the IngressRoute have an ownerReference to their pod.
-  When the pod goes, Kubernetes deletes both. The manager never cleans up
-  routes by itself.
-- Deleting the Argo CD Application leaves instance pods behind. They are
-  found by `app.kubernetes.io/managed-by=fantasy-rpg-world`. That is fine
-  for a homelab.
-
-## Routing
-
-A Service and an IngressRoute per pod, made at runtime. Same paths as now.
-
-- The pod serves its socket at `/instances/{id}/ws`, as now. The route is
-  `PathPrefix(/instances/{id}/)` to the pod's Service. No middleware.
-- The Service selects on `fantasy-rpg.fomiller.com/instance`.
-- The world server's internal URL is the pod IP, `http://{podIP}:8080`. It
-  does not need the Service for `/status`.
-- Traefik watches IngressRoutes and picks a new one up in about a second.
-  That is part of startup time.
-
-Why not the others:
-
-- **One route to a proxy in the world server.** Every run's traffic would
-  go through the world server. A world restart would drop every run.
-- **One route and a header or cookie.** The client does not send one, and
-  Traefik cannot pick a pod by path without a Service per pod anyway.
-
-## Lifecycle
-
-| State | Meaning | Picked? |
+| Service | Owns | Talks to |
 | -- | -- | -- |
-| `starting` | Created. Not yet ready, or its route does not answer yet | Only by a wait (see Reuse or create) |
-| `ready` | Pod ready, route answers, `/status` answers | Yes, if it has room |
-| `full` | Players plus in-flight tickets reach capacity | No |
-| `draining` | Being deleted, or old template, or reports `draining` | No |
-| `gone` | Pod deleted or failed | No. Dropped from the list |
+| `world-server` | Town sim, player sessions, join and character create, minting join tokens | instance-manager (HTTP), inventory (HTTP), Redpanda (produce) |
+| `instance-manager` | `GameServerAllocation` calls, reuse of Allocated servers, per-GameServer Service and IngressRoute, lease checks | Kubernetes API, Redpanda (produce) |
+| `inventory` | Characters, stash, the run lease, loot writes. The only service with the character tables | Postgres, Redpanda (consume and produce) |
+| `instance-server` | One sim and its tick loop. Emits run results as events | Agones SDK, inventory (HTTP), Redpanda (produce) |
 
-`full` is worked out on each pick. The others come from Kubernetes and
-`/status`.
+- All four are binaries in one image, picked by `command`, as world and
+  instance are today. One Kargo promotion moves all of them.
+- inventory is the only one with `DATABASE_URL`. The migrate Job runs from
+  its binary.
+- world, instance-manager and inventory are one replica each with
+  `Recreate`. Each one keeps state per process, like one connection per
+  name. Scaling them out is a later problem.
 
-### How the manager learns state
+### Why split inventory out
 
-- A pod informer on `app.kubernetes.io/managed-by=fantasy-rpg-world`. It
-  gives create, the `Ready` condition, phase, pod IP and
-  `deletionTimestamp`.
-- `Directory` keeps polling `/status` every 2 s, as now. Its list is
-  whatever pods the informer holds, not `INSTANCES`.
-- Ready means all three: the pod is `Ready`, `/status` answers with a boot
-  id, and a probe through Traefik answers.
-- The route probe is `GET /instances/{id}/healthz` on
-  `ROUTE_PROBE_URL`, Traefik's in-cluster Service, with the public `Host`
-  header. The instance server adds that handler. Empty `ROUTE_PROBE_URL`
-  skips the probe.
-- A pod that is not ready 60 s after create is deleted and counted as a
-  startup failure.
+- Run results come in as events. One consumer that owns the writes makes
+  idempotency one check in one place.
+- World and instance servers stop sharing write access to the same rows.
+  The lease rules in Instances get one enforcer.
+- The `Store` interface and its contract suite move behind inventory's
+  HTTP API as they are.
 
-### Idle, spare and cap
+## Join path
 
-| Env | Default | What |
-| -- | -- | -- |
-| `INSTANCE_MAX` | 8 | Pods at once, any state. At the cap, an entry with no room is `full` |
-| `INSTANCE_SPARE` | 1 | Empty `ready` instances to keep warm |
-| `INSTANCE_IDLE` | 60s | How long an extra empty instance lives |
+```text
+client walks in -> world -> POST instance-manager /v1/allocate
+                         <- {instance, boot, url}
+                 world mints token -> InstanceTicket -> client
+client dials url -> instance-server -> POST inventory /v1/runs/start
+```
 
-- Empty means no players, no in-flight tickets, and no runs in `/status`.
-  `/status` lists runs whose `EndRun` has not landed, so a pod waiting on a
-  database outage is never empty.
-- An instance already resets to a new world when it empties. So a spare
-  is a fresh cave. Reuse is safe.
-- An empty instance past `INSTANCE_IDLE`, with more than `INSTANCE_SPARE`
-  empty instances left, is deleted. The newest goes first, so older pods
-  fill.
+`/v1/allocate` takes the run ids for the party and returns the instance
+id, boot id and public URL. Errors: 409 `full`, 503 when the manager
+cannot reach the API server.
 
-### Crashes
+### HTTP, not gRPC
 
-- Instance pods run with `restartPolicy: Never`. A crash makes the pod
-  `Failed`. The manager deletes it. Its Service and route go with it.
-- The pod is then gone from the list. `DeadLease` already treats a lease
-  on an instance that is not in the list as dead. The player's next join
-  clears it, as now.
-- So a crash costs what it costs today: the run is lost, and the character
-  is as it was at `StartRun`.
-- A pod that crashes in `starting` counts as a startup failure. The
-  manager makes a new one on the next need, not in a loop.
+- One call per walk-in. The rate is low and the payload is three strings.
+- The servers already talk HTTP and JSON for `/status`. No new codegen in
+  the Go build. The repo's protobuf stays the client's wire format.
+- A 5 s client timeout and the request context give cancel for free.
 
-## Reuse or create
+### Why not request and reply over Redpanda
 
-On a walk-in, `Reserve` runs as now, over `ready` instances:
+- **The last slot.** Two walk-ins can race for one seat. A
+  `GameServerAllocation` is already atomic in Agones. Sending it through a
+  topic adds a hop and no atomicity. The manager would still serialize on
+  the API server.
+- **Correlation and timeouts.** The world server would need a reply topic,
+  correlation ids and a timer per request. A reply that lands after the
+  world gave up holds a seat that no ticket points at.
+- **Ordering hides failure.** A slow consumer turns a failed allocation
+  into a long wait on the entrance, not a clear `full`.
 
-1. Pick the `ready` instance with the most players that has room for the
-   whole party. One cave fills before the next.
-2. If none, and a `starting` instance will have room, wait for it.
-3. If none, and the cap allows, create one and wait for it.
-4. If the cap is reached, reject with `full`.
+## Agones
 
-- The wait is up to 20 s. The client shows "Entering the cave..." as now.
-  It runs off the tick, like the `Load` before it. Past 20 s, reject with
-  `full`.
-- A `starting` instance counts the runs waiting on it against its
-  capacity, so two walk-ins at once do not make two pods.
-- After every pick, if fewer than `INSTANCE_SPARE` empty instances are
-  left, create one in the background. With one spare, a walk-in almost
-  never waits on a pod.
-- No new proto. The ticket just arrives later.
+### Version and port policy
 
-## World server restart
+The public host is proxied by Cloudflare through `cloudflared` into
+Traefik. Only HTTP and WebSocket reach the cluster. Raw UDP to a node port
+does not. So GameServers must not use a `hostPort`.
 
-- The informer's first list is the state. Every pod with the label is
-  adopted, whatever made it.
-- The first `/status` poll fills players, runs and boot ids. Until a pod
-  answers, it is not picked, and its leases are not cleared. Same rule as
-  now.
-- In-flight tickets are in memory and lost. A pick right after a restart
-  can overfill by a few. The instance still closes extra joins with
-  `instance full`, so the player goes back to the town and tries again.
-- Idle timers restart from zero. An idle pod lives one `INSTANCE_IDLE`
-  longer. Nothing worse.
-- Pods with an old template hash are `draining` from the start.
+- `portPolicy: None` on the GameServer port. Agones then ignores
+  `hostPort` and uses `containerPort` as is.
+- `PortPolicyNone` is stable and on by default since Agones 1.60.0, per
+  the feature stages page. Install 1.60.0 or later. Older releases have it
+  behind a feature gate.
+- Counters and lists need `CountsAndLists`. It is beta and on by default
+  since 1.41.0.
 
-## Deploys
+### Fleet
 
-- A new template hash means every pod with the old hash is `draining`.
-  New walk-ins go to new pods. Old pods are deleted when empty, with no
-  idle wait.
-- So a deploy never kills a run. It does mean old and new instance
-  servers run side by side against one schema for as long as a run lasts.
-  Migrations must keep working for the version before. They already must,
-  since the migrate Job runs before the rollout.
+The chart makes one `Fleet`, `fantasy-rpg-instance`, and one
+`FleetAutoscaler` with a buffer policy.
 
-## Graceful drain
+```yaml
+spec:
+  template:
+    spec:
+      ports:
+        - name: ws
+          portPolicy: None
+          containerPort: 8080
+      lists:
+        runs:
+          capacity: 8   # MAX_PLAYERS
+      eviction:
+        safe: Always
+```
 
-Drop the PDB. Let a pod be deleted, and make the instance server finish its
-runs before it exits.
+- Buffer `bufferSize: 1`, `minReplicas: 1`, `maxReplicas: 8`. One warm
+  Ready server keeps a walk-in from waiting on a pod.
+- A Fleet scale-down only removes Ready servers. A Fleet rollout on a new
+  image does the same, and leaves Allocated servers until they shut down.
+  That is the drain on deploys.
+- Argo CD v3.5.6 tracks by annotation. It tracks the Fleet and the
+  FleetAutoscaler. Agones makes GameServerSets and GameServers with owner
+  references and no tracking annotation, so Argo CD never prunes them.
+- The FleetAutoscaler writes `spec.replicas`. The chart leaves `replicas`
+  off the Fleet. The Application ignores `/spec/replicas` on it, so Argo
+  CD does not fight the autoscaler.
 
-On SIGTERM the instance server:
+### The runs list
 
-1. Reports `draining: true` in `/status`. The manager stops picking it.
-   Readiness stays green, so Traefik keeps the route for players already
-   in.
-2. Closes new joins with 1013 `instance draining`. No lease is taken.
-3. Lets current runs play on until they end, up to `DRAIN_TIMEOUT`.
-4. At the deadline, ends each run as a disconnect does: `EndRun` with the
-   carried loadout, then close 1001 `instance draining`.
-5. Waits for the writer to land pending saves, then exits.
+A `runs` list on each GameServer is its seat count. One value per run id.
 
-- `terminationGracePeriodSeconds` is `DRAIN_TIMEOUT` plus 30 s for the
-  writes. Start at 600 s and 630 s.
-- Today the signal cancels the server context and closes every socket at
-  once. Draining changes that order. The tick loop must keep running until
-  step 5.
-- A pod killed past its grace period is a crash. Its leases clear as
-  above.
+- `/v1/allocate` adds the party's run ids with the allocation's
+  `lists.runs.addValues`. Seats are taken in the same atomic update that
+  allocates.
+- The instance server removes a run id when that run's result is acked by
+  Redpanda. It also removes one whose token expired with no join.
+- Capacity is `MAX_PLAYERS`. The list replaces `/status` players and runs.
+  The world server stops polling.
 
-Who sends SIGTERM:
+### Instance server and the SDK
 
-- The manager, when it deletes an empty or old pod. It only deletes empty
-  ones, so the drain is instant.
-- A node drain. Bare pods need `kubectl drain --force`. The force only
-  skips the "no controller" check. The pod still gets SIGTERM and its
-  grace period.
-- The descheduler skips pods with no controller by default, so it should
-  not evict them at all. If that changes, the drain covers it.
-
-## Local dev
-
-`Directory` takes a pool behind an interface:
+Behind a small interface, so local dev needs no sidecar:
 
 ```go
-// Pool says which instances exist and makes or drops them.
-type Pool interface {
-	// List is every instance that exists now, in any state.
-	List() []Instance
-	// Grow asks for one more instance. A static pool never grows.
-	Grow(ctx context.Context) error
-	// Drop deletes an empty instance. A static pool never drops.
-	Drop(ctx context.Context, id string) error
+type GameServer interface {
+	Ready() error
+	Health() error
+	// Shutdown ends this instance. On Agones the pod goes away. Locally it
+	// resets the world, as an empty instance does today.
+	Shutdown() error
+	SetAnnotation(key, value string) error
+	RemoveRun(runID string) error
+	SetRunCapacity(n int64) error
 }
 ```
 
-- `INSTANCE_POOL=static` is the default. It reads `INSTANCES`, as now.
-  `just dev`, `just instance <id> <port>` and `net-test` do not change.
-- `INSTANCE_POOL=kube` is the client-go pool. The chart sets it.
-- `Reserve` and `DeadLease` work the same on both. Only the list's source
-  differs.
-- `just deploy-local` in k3d can run the kube pool. Then
-  `instance-start`, `instance-stop` and `instance-pod.yaml` go away.
+- The Agones one is used when the sidecar's `AGONES_SDK_GRPC_PORT` is
+  set. Otherwise a local one.
+- On start: build the world, set the `fantasy-rpg.fomiller.com/boot`
+  annotation, call `Ready()`. `Health()` every 2 s from the tick loop, so a
+  stuck tick fails health.
+- On empty: set run capacity to 0, so no allocation can add a seat. Read
+  the list again. If a run id landed first, restore capacity and stay.
+  Otherwise `Shutdown()`. Agones deletes the pod, and the buffer makes a
+  fresh one.
+
+## Allocation and reuse
+
+`/v1/allocate` sends one `GameServerAllocation` with two selectors, in
+order:
+
+1. `gameServerState: Allocated`, `lists.runs.minAvailable: <party size>`.
+   Join a cave that is already running and has room for the whole party.
+2. `gameServerState: Ready`. Take a warm one.
+
+- `priorities` on the `runs` list, descending, so the fullest Allocated
+  server wins. One cave fills before the next, as now.
+- No match is `full`. With the buffer, that only happens at `maxReplicas`.
+- The answer's GameServer name is the instance id. The boot id comes from
+  the annotation in the allocation status. The token's `inst` keeps its
+  `id@boot` form.
+
+## Routing
+
+A Service and an IngressRoute per GameServer, made by instance-manager.
+
+- The manager watches GameServers. When one turns Ready, it makes a
+  Service on the `agones.dev/gameserver` pod label and an IngressRoute
+  with `PathPrefix(/instances/{name}/)`. A warm server is routed before
+  anyone needs it.
+- `/v1/allocate` checks both exist and makes any that are missing. That
+  covers a manager restart or a missed event.
+- Both have an owner reference to the GameServer. Kubernetes deletes them
+  when it goes. The manager never deletes a route itself.
+- Neither carries an Argo CD tracking annotation, so Argo CD never prunes
+  them.
+- The instance server keeps serving its socket at `/instances/{id}/ws`. No
+  middleware.
+
+### RBAC for instance-manager
+
+| Resource | Verbs |
+| -- | -- |
+| `gameserverallocations.allocation.agones.dev` | create |
+| `gameservers.agones.dev` | get, list, watch |
+| `services` | get, list, create |
+| `ingressroutes.traefik.io` | get, list, create |
+
+The manager creates allocations through the Kubernetes API. The Agones
+allocator service is for clients outside the cluster, so it is not needed.
+
+## Lifecycle
+
+| Agones state | Meaning | Picked by |
+| -- | -- | -- |
+| `Scheduled`, `RequestReady` | Pod starting | Nothing |
+| `Ready` | Warm, routed, no players | Selector 2 |
+| `Allocated` | Has runs | Selector 1, while `runs` has room |
+| `Shutdown` | Empty, going away | Nothing |
+| `Unhealthy` | Missed health or the container restarted | Nothing. Agones deletes it |
+
+### Leases when a server dies
+
+- inventory still holds the lease, with `id@boot`, as now.
+- The world server asks `GET instance-manager /v1/instances/{id}`. 404
+  means the GameServer is gone. The lease is dead and the world calls
+  inventory's `ClearRun`.
+- The run id missing from `runs`, with a lease older than 60 s, is dead
+  too. Same rule as Dead leases today.
+- If instance-manager does not answer, the lease waits. Never clear on a
+  timeout.
+
+### World or manager restart
+
+- world-server has no instance state anymore. A restart drops town players
+  as now. Runs go on.
+- instance-manager rebuilds from its GameServer informer. Agones holds
+  every count. In-flight allocations hold their seats in `runs`, so a
+  restart cannot overfill.
+
+## Graceful drain
+
+- Drop the PDB.
+- `eviction.safe: Always`. With `Never`, the default, Agones makes its
+  own PDB for the pod. A node drain then waits forever, as today. Unverified
+  against 1.60: check the PDB name on install.
+- On SIGTERM the instance server stops taking joins and lets runs play on
+  up to `DRAIN_TIMEOUT`, 600 s. Then it ends each run as a disconnect does
+  and produces `run.ended` for it.
+- `terminationGracePeriodSeconds: 630`, for the last produce.
+- The descheduler must skip GameServer pods. They have an owner, so it no
+  longer skips them by default. Exclude `agones.dev/role: gameserver` in
+  the homelab descheduler config.
+
+## Events
+
+Redpanda, one broker in the homelab. franz-go in Go.
+
+| Topic | Key | Producer | Payload |
+| -- | -- | -- | -- |
+| `player.session` | account | world | `enter` or `leave` town, time, world id |
+| `instance.join` | run id | instance | `accepted` or `rejected` with reason, instance, time |
+| `instance.lifecycle` | GameServer name | manager | `ready`, `allocated`, `shutdown`, `gone`, time |
+| `run.ended` | run id | instance | account, class, outcome (`extracted`, `died`, `disconnect`), XP, carried loadout, loot, deaths, instance |
+| `inventory.applied` | account | inventory | run id, new stash version |
+
+- Payloads are protobuf, from `proto/events.proto`, with a version field.
+- `run.ended` is the only topic that must not lose a message. It has
+  7 days of retention and `acks=all`. The others are best effort.
+
+### run.ended
+
+- The instance server produces it with an idempotent producer and
+  `acks=all`. It retries in memory until acked, as pending saves do now.
+  It does not call `Shutdown()` with an unacked result.
+- inventory consumes it in a consumer group. One transaction applies XP,
+  loadout and loot, clears the lease, sets `last_run_id`, and writes the
+  `inventory.applied` outbox row. Then it commits the offset.
+- A run id that equals `last_run_id` is the retry no-op, as `EndRun` is
+  today. Replay and redelivery are safe.
+- Partition by run id. One account has one live run, so no two results
+  for one account race.
+
+### Transactional outbox
+
+Any service that writes Postgres and emits an event uses an outbox. Today
+that is inventory only.
+
+```sql
+CREATE TABLE outbox (
+    id         bigserial PRIMARY KEY,
+    topic      text NOT NULL,
+    key        text NOT NULL,
+    payload    bytea NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+- The row goes in the same transaction as the write it describes.
+- A relay goroutine in inventory reads rows in `id` order, produces them,
+  and deletes them once acked. At least once. Consumers dedupe by key and
+  run id.
+- Services with no database write, like world and instance, produce
+  straight to Redpanda.
+
+### Eventual consistency
+
+- The stash updates a moment after the run ends. Usually well under a
+  second, longer if inventory is behind.
+- The client already handles this. The lease is held until inventory
+  applies the result, so the world shows "Saving..." until it clears.
+- The world server learns it from `inventory.applied`, not the 2 s poll.
+  It keeps the poll as a fallback when Redpanda is down.
+- If inventory is down, runs still end. Results wait in the topic. Players
+  see "Saving..." until it is back.
+
+## Transport
+
+WebSocket through Cloudflare, `cloudflared` and Traefik. No change now.
+
+- Keep the transport behind an interface on both ends: a listener that
+  yields connections, and a connection with send, receive and close with
+  a code and reason.
+- `InstanceTicket.url`'s scheme picks the transport. `wss://` today.
+- A later move to UDP or WebTransport then means a new implementation, a
+  new Agones port with a real port policy, and a path past Cloudflare.
+  Not a rewrite of the server.
+
+## Local dev
+
+- `just deps` starts Postgres and Redpanda in Compose. Redpanda replaces
+  the unused NATS container. `rpk` dev mode, one node, no auth.
+- `just dev` runs inventory and world. World uses a static pool from
+  `INSTANCES` when `INSTANCE_MANAGER_URL` is empty. That is today's
+  `Directory`, with polling.
+- `just instance <id> <port>` runs as now. The local SDK resets the world
+  on `Shutdown()`.
+- `net-test` adds a throwaway Redpanda container next to its throwaway
+  Postgres, and starts inventory.
+- Why Redpanda in Compose and not a no-op bus: `run.ended` is how a run's
+  loot reaches the stash. A no-op bus would need a second code path for
+  the one write that matters most.
 
 ## Metrics
 
-On the world server:
-
-| Metric | Type | Labels | What |
+| Metric | Where | Type | What |
 | -- | -- | -- | -- |
-| `instance_startup_seconds` | histogram | `result` (`ready`, `failed`) | From create to ready, including the route probe. Buckets 0.5 s to 60 s |
-| `instance_routing_errors_total` | counter | `reason` | See below |
-| `instances` | gauge | `state` | Pods per state |
-| `instance_reserve_wait_seconds` | histogram | | How long a walk-in waited for a pick |
+| `instance_startup_seconds` | manager | histogram | GameServer create to Ready |
+| `instance_allocation_seconds` | manager | histogram, `result` | `/v1/allocate` time, by `reused`, `ready`, `full`, `error` |
+| `instance_routing_errors_total` | manager, instance | counter, `reason` | See below |
+| `inventory_consumer_lag` | inventory | gauge, `topic`, `partition` | Records behind the high watermark |
+| `outbox_pending` | inventory | gauge | Rows not yet produced |
 
 `reason` values:
 
-- `ticket_unused`. A ticket's run never showed in that instance's
-  `/status` before the token expired. The client could not reach it, or
-  was turned away.
-- `route_probe`. The route probe failed for a pod that was otherwise
-  ready.
-- `full`. A walk-in was rejected because the cap was reached.
-- `create`. The API refused a pod, Service or IngressRoute.
-
-`ticket_unused` uses the in-flight list `Directory` already keeps. When an
-entry expires without its run in `/status`, it counts one.
+- `full`. No GameServer matched.
+- `allocate`. The API refused the allocation.
+- `route`. Making the Service or IngressRoute failed.
+- `ticket_unused`. The instance server dropped a run id whose token
+  expired with no join.
+- `draining`. A join landed on a server that was shutting down.
 
 ## Failure cases
 
 | When | What happens | What the player sees |
 | -- | -- | -- |
-| Pod is slow to start | The walk-in waits up to 20 s | "Entering the cave..." for longer. Then `full` if it never comes |
-| Pod never gets ready | Deleted at 60 s, counted as `failed` | `full` after 20 s. The next walk-in makes a new one |
-| Route not picked up yet | Not ready until the probe answers | A longer wait, not a failed join |
-| Cap reached | `full` | "All instances are full." |
-| API server down | No create, no delete. Existing pods keep working. The informer serves its cache | Walk-ins work while there is room, then `full` |
-| World server restarts | Adopts pods by label. Runs go on | Town players reconnect, as now |
-| Instance crashes | Pod `Failed`, deleted. Lease clears on the next join | As in Instances: back to the town with "Saving...", then the pre-run character |
-| Node drain | Pods drain, then go | Runs end at the latest at `DRAIN_TIMEOUT`, as a disconnect |
+| No warm server | Allocation fails with `full` until the buffer catches up | "All instances are full." Step out and back in |
+| Manager down | World gets 503, rejects with `full`. Leases wait | Same. Running caves are fine |
+| inventory down | Joins fail at `runs/start`. Results wait in the topic | "Characters unavailable", as a database outage today. Returning players see "Saving..." |
+| Redpanda down | Results retry in the instance server's memory. Shutdown waits | "Saving..." on return, longer |
+| Instance crashes | GameServer `Unhealthy`, deleted. Run lost. Lease cleared on 404 | Back to town, then the pre-run character |
+| Node drain | Runs end by `DRAIN_TIMEOUT`, as a disconnect | Run ends early with what they carry |
 
 ## Implementation plan
 
-In order. Each one merges on its own and leaves the game playable.
+In build order. Each one merges on its own and leaves the game playable.
 
-1. **Pool interface and routing metrics.**
-   - `Pool` with the static backend from `INSTANCES`. `Directory` reads its
-     list from the pool. No behavior change.
-   - `instance_routing_errors_total` with `ticket_unused`, and the
-     `instances` gauge.
-   - `just dev`, `just instance` and `net-test` still pass as they are.
-2. **Graceful drain on the instance server.**
-   - SIGTERM handling as above, `DRAIN_TIMEOUT`, `draining` in `/status`,
-     the world server never picks a draining instance.
-   - `terminationGracePeriodSeconds` on the StatefulSet. Drop the PDB.
-   - A Go test that a run started before SIGTERM still lands its
-     `EndRun`.
-3. **Kube pool.**
-   - client-go pool: create the pod, Service and IngressRoute with the
-     labels and ownerReferences above. Informer, states, the route probe,
-     `/instances/{id}/healthz`.
-   - Reuse or create, the wait, `INSTANCE_MAX`, `INSTANCE_SPARE`,
-     `INSTANCE_IDLE`, crash cleanup, rebuild on restart.
-   - `instance_startup_seconds` and `instance_reserve_wait_seconds`. Tests
-     against the fake clientset.
-4. **Chart switch.**
-   - The template ConfigMap, the ServiceAccount and Role,
-     `INSTANCE_POOL=kube` and `ROUTE_PROBE_URL` on the world server.
-   - Remove the StatefulSet, its Services, its routes and the `INSTANCES`
-     helper. Template hash labels, and draining old pods on deploy.
-   - `deploy-local` on the kube pool in k3d. Remove `instance-start`,
-     `instance-stop` and `instance-pod.yaml`. Update the README.
+1. **homelab: install Agones.**
+   - Agones 1.60.0 or later through Argo CD. Game server namespace
+     `fantasy-rpg`.
+   - Exclude `agones.dev/role: gameserver` pods from the descheduler.
+   - Check the PDB Agones makes for `eviction.safe: Never`, and that
+     `Always` has none.
+2. **homelab: install Redpanda.**
+   - Redpanda operator and one broker on Longhorn, through Argo CD.
+   - In-cluster listener only. No public route.
+   - Topic CRDs available for app charts.
+3. **Event bus and local Redpanda.**
+   - `internal/events` on franz-go, `proto/events.proto`, Topic resources
+     in the chart.
+   - Redpanda in Compose in place of NATS. `net-test` gets a throwaway one.
+   - world produces `player.session`. instance produces `instance.join`.
+4. **inventory service.**
+   - New binary. `Store` behind HTTP: load, create, lobby save, `StartRun`,
+     `ClearRun`. Contract suite runs against it.
+   - world and instance call it. Only inventory gets `DATABASE_URL`.
+   - Outbox table and relay. Deployment and Service in the chart.
+5. **run.ended through Redpanda.**
+   - instance produces `run.ended` with retry until acked. `EndRun` leaves
+     the instance server.
+   - inventory consumes it idempotently by run id and emits
+     `inventory.applied` through the outbox. World clears "Saving..." on it.
+   - `inventory_consumer_lag` and `outbox_pending`.
+6. **Agones SDK in instance-server.**
+   - `GameServer` interface, Agones and local implementations. Ready,
+     Health, boot annotation, runs list, Shutdown on empty.
+   - SIGTERM drain with `DRAIN_TIMEOUT`.
+   - Still runs under the StatefulSet with the local SDK.
+7. **instance-manager service.**
+   - New binary. `/v1/allocate` with the two selectors and `addValues`,
+     `/v1/instances/{id}`.
+   - Service and IngressRoute on Ready and on allocate, owned by the
+     GameServer.
+   - `instance_startup_seconds`, `instance_allocation_seconds`, routing
+     errors. Tests on fake clientsets.
+8. **Chart switch to Agones.**
+   - Fleet with `portPolicy: None`, `runs` list, `eviction.safe: Always`.
+     FleetAutoscaler buffer. RBAC and Deployment for the manager.
+   - World sets `INSTANCE_MANAGER_URL`. Remove the StatefulSet, its
+     Services and routes, the PDB and the `INSTANCES` helper.
+   - homelab: ignore `/spec/replicas` on the Fleet in the Application.
+9. **Transport interface.**
+   - Listener and connection interfaces in the Go servers. WebSocket is
+     the one implementation.
+   - The client picks its connection by the ticket URL's scheme.
+10. **Optional: predictive scaler.**
+    - FleetAutoscaler webhook policy, served by instance-manager, reading
+      `player.session` and `instance.lifecycle`.
+    - Chained after the buffer policy, so a webhook failure falls back to
+      the buffer.
+    - Only if the buffer leaves walk-ins waiting.
 
 ## Later
 
-- **Instances of more than one kind.** `CAVE` is per pod today. The pool
-  could take the cave as an argument when caves differ.
-- **A pod per node pool or region**, if the cluster ever has more than one.
-- **Reconnect into a run** (FOM-217) needs the pod to still exist when the
-  player comes back. An instance with a held body is not empty, so the
-  rules above already keep it.
+- More than one replica of world, manager or inventory.
+- UDP or WebTransport, past Cloudflare. See Transport.
+- Reconnect into a run (FOM-217). An Allocated server with a held body
+  keeps its run id in `runs`, so it stays up.
