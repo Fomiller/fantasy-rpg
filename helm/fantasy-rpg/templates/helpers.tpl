@@ -39,18 +39,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-instance" (include "chart.fullname" .) | trunc 52 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- /* The world server's INSTANCES, from the same replica count as the
-       StatefulSet, so the two never disagree. */ -}}
-{{- define "chart.instancesEnv" -}}
-{{- $name := include "chart.instanceName" . -}}
-{{- $public := ternary (printf "wss://%s" .Values.ingressRoute.host) "ws://localhost:8080" (ne .Values.ingressRoute.host "") -}}
-{{- $list := list -}}
-{{- range $i := until (int .Values.instances.replicas) -}}
-{{- $pod := printf "%s-%d" $name $i -}}
-{{- $list = append $list (printf "%s=http://%s:8080=%s/instances/%s/ws" $pod $pod $public $pod) -}}
+{{- define "chart.managerSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-instance-manager
+app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
-- name: INSTANCES
-  value: {{ join " " $list | quote }}
+
+{{- define "chart.managerName" -}}
+{{- printf "%s-instance-manager" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "chart.joinKeyEnv" -}}

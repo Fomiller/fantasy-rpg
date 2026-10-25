@@ -138,8 +138,8 @@ spec:
   FleetAutoscaler. Agones makes GameServerSets and GameServers with owner
   references and no tracking annotation, so Argo CD never prunes them.
 - The FleetAutoscaler writes `spec.replicas`. The chart leaves `replicas`
-  off the Fleet. The Application ignores `/spec/replicas` on it, so Argo
-  CD does not fight the autoscaler.
+  off the Fleet. Argo CD only diffs fields the chart sets, so it does not
+  fight the autoscaler. No `ignoreDifferences` is needed.
 
 ### The runs list
 
@@ -438,7 +438,7 @@ In build order. Each one merges on its own and leaves the game playable.
      FleetAutoscaler buffer. RBAC and Deployment for the manager.
    - World sets `INSTANCE_MANAGER_URL`. Remove the StatefulSet, its
      Services and routes, the PDB and the `INSTANCES` helper.
-   - homelab: ignore `/spec/replicas` on the Fleet in the Application.
+   - No `replicas` on the Fleet, so homelab needs no `ignoreDifferences`.
 9. **Transport interface.**
    - Listener and connection interfaces in the Go servers. WebSocket is
      the one implementation.

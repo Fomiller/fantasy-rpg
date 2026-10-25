@@ -18,23 +18,28 @@ imagePullSecrets: []
 # Plain configuration in the container env shape, e.g. TICK_RATE or LOOT_SEED.
 env: []
 
-# The instance servers: a StatefulSet, so each pod has a stable name that is
-# its instance id and its route, /instances/<pod>/. One instance per pod.
+# The instance servers: an Agones Fleet. Each GameServer's name is its
+# instance id and its route, /instances/<name>/. One instance per pod.
 instances:
-  replicas: 2
-  # Players in one instance at once, joining or in the cave.
+  # Players in one instance at once, joining or in the cave. Also the
+  # capacity of each GameServer's runs list.
   maxPlayers: 8
+  # A buffer FleetAutoscaler. It owns the Fleet's replicas.
+  autoscaler:
+    bufferSize: 1
+    minReplicas: 1
+    maxReplicas: 8
 
-# The world server, from the same image with its own command. It has /ws and
-# sends players to the instances. Off by default because the default image
-# above is http-echo, which has no /world-server.
+# The world server and instance-manager, from the same image with their own
+# commands. The world has /ws and asks the manager for an instance. Off by
+# default because the default image above is http-echo, which has neither.
 world:
   enabled: false
   # Extra container env, in the same shape as env above.
   env: []
 
-# The Secret both servers read JOIN_TOKEN_KEY from. Empty means neither gets
-# one, which only the http-echo default can run without. Point it at a Secret
+# The Secret the world and instance servers read JOIN_TOKEN_KEY from. Empty
+# means neither gets one, which only the http-echo default can run without. Point it at a Secret
 # from externalSecrets below.
 joinKey:
   secretName: ""

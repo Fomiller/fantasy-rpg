@@ -72,20 +72,10 @@ k8s-down:
     k3d cluster delete fantasy-rpg
 
 deploy-local: k8s-up images
-    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev fantasy-rpg/instance-server:dev
+    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev
     {{kube}} apply -f deploy/kubernetes/world-server.yaml
     {{kube}} -n fantasy-rpg rollout restart deployment/world-server
     {{kube}} -n fantasy-rpg rollout status deployment/world-server
-
-instance-start id:
-    sed 's/INSTANCE_ID/{{id}}/g' deploy/kubernetes/instance-pod.yaml | {{kube}} apply -f -
-    {{kube}} -n fantasy-rpg wait --for=condition=Ready pod/instance-{{id}} --timeout=60s
-
-instance-stop id:
-    {{kube}} -n fantasy-rpg delete pod instance-{{id}}
-
-instances:
-    {{kube}} -n fantasy-rpg get pods -l app=instance-server
 
 client:
     {{godot}} --path client/godot --editor

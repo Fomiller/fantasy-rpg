@@ -11,13 +11,10 @@ fullnameOverride: fantasy-rpg
 image:
   repository: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
 
-# The image holds both servers. The world server has /ws and sends players
-# to the instance servers' StatefulSet.
+# The image holds every server. The world server has /ws and asks
+# instance-manager for a GameServer in the instance Fleet.
 world:
   enabled: true
-
-instances:
-  replicas: 2
 
 # Both servers sign and check join tokens with this key. The AWS secret holds
 # one JSON key, JOIN_TOKEN_KEY, with at least 32 random bytes.

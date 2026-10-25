@@ -1,0 +1,120 @@
+{{- /* instance-manager: allocates GameServers for the world server and routes
+       each one. Same image, its own command. Off with the world server, since
+       nothing else calls it and the default image has no /instance-manager. */ -}}
+{{- if .Values.world.enabled }}
+{{- $name := include "chart.managerName" . -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+---
+{{- /* Only what the manager calls. It never deletes: owner references on the
+       Services and IngressRoutes do that when a GameServer goes. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+rules:
+  - apiGroups: [allocation.agones.dev]
+    resources: [gameserverallocations]
+    verbs: [create]
+  - apiGroups: [agones.dev]
+    resources: [gameservers]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, create]
+  - apiGroups: [traefik.io]
+    resources: [ingressroutes]
+    verbs: [get, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  {{- /* One process holds the GameServer informer. Two would race to route
+         the same server. */}}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "chart.managerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.managerSelectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: instance-manager
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [/instance-manager]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: FLEET
+              value: {{ include "chart.instanceName" . }}
+            - name: PUBLIC_URL
+              value: {{ ternary (printf "wss://%s" .Values.ingressRoute.host) "ws://localhost:8080" (ne .Values.ingressRoute.host "") | quote }}
+            - name: ROUTE_HOST
+              value: {{ .Values.ingressRoute.host | quote }}
+            - name: ROUTE_ENTRY_POINT
+              value: {{ .Values.ingressRoute.entryPoint | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+{{- end }}
