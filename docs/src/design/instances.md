@@ -190,7 +190,7 @@ is compact JSON with fixed tags, made and checked by a small Go package,
 - The check is a hash and a compare. No database call, no call to the
   world server. A flood of bad tokens never reaches Postgres.
 - The key is a Secret, `fantasy-rpg-join-key`, from AWS Secrets Manager at
-  `dev/fomiller/homelab/fantasy-rpg-join-key` through the chart's
+  `dev/fomiller/fantasy-rpg-join-key` through the chart's
   `externalSecrets` map, like the backup key. Both Deployments read it as
   `JOIN_TOKEN_KEY`. At least 32 random bytes.
 - Without `JOIN_TOKEN_KEY` both servers refuse to start. The local recipes

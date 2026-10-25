@@ -118,7 +118,7 @@ The game runs in the homelab cluster. The world server is public at `wss://fanta
 - homelab's services ApplicationSet reads `argocd.yaml` and deploys `argocd/overlays/dev`.
 - Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
 - The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server and each `/instances/<pod>/` prefix to that pod's Service.
-- Both servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/homelab/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
+- Both servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 
 A cave lives in its pod's memory, so restarting an instance pod ends its runs. Players keep the gear they took in.
 

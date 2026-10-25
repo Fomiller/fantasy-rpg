@@ -28,7 +28,7 @@ externalSecrets:
   fantasy-rpg-join-key:
     secretStore:
       name: aws-clustersecretstore
-    remoteKey: dev/fomiller/homelab/fantasy-rpg-join-key
+    remoteKey: dev/fomiller/fantasy-rpg-join-key
 
 # http-echo takes its port and text as args. The instance-server does not.
 args: []
