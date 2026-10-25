@@ -18,7 +18,47 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Kargo pairs the newest chart with the newest image. A chart that lands
+  # before its commit's image ships with the previous image, so wait for it.
+  wait-for-image:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BEFORE: ${{ github.event.before }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Wait for this commit's image
+        run: |
+          changed=$(gh api "repos/$GH_REPO/compare/$BEFORE...$SHA" --jq '.files[].filename')
+          # The same paths that trigger publish-image.yml.
+          if ! grep -qE '^(src/|Dockerfile$|\.github/workflows/publish-image\.yml$)' <<<"$changed"; then
+            echo "This push changes no image paths."
+            exit 0
+          fi
+          run=""
+          for _ in $(seq 30); do
+            run=$(gh run list --workflow publish-image.yml --commit "$SHA" --event push \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run" ] && break
+            sleep 10
+          done
+          if [ -z "$run" ]; then
+            echo "::error::No Publish image run for $SHA."
+            exit 1
+          fi
+          gh run watch "$run" --exit-status --interval 15
+
   chart:
+    needs: wait-for-image
+    # The wait is skipped outside a push to main. A skipped need skips this job
+    # too unless it says otherwise.
+    if: ${{ !failure() && !cancelled() }}
     # No chart list. The workflow walks helm/*/Chart.yaml and publishes each
     # one to the ECR repository named by its own Chart.yaml.
     uses: Fomiller/gh-actions/.github/workflows/helm-ecr.yaml@main
