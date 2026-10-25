@@ -256,8 +256,9 @@ row tables in "What to save" below.
 
 ### Stash and the extraction loop
 
-1. **Lobby.** The player sees their character and stash on the world server.
-   They move gear between stash and equipment. Bag items can be packed
+1. **Town.** The player walks the [hub town](hub-town.md) on the world
+   server and opens the stash chest there. They move gear between stash
+   and equipment. Bag items can be packed
    too, such as potions.
 2. **Enter.** Everything equipped and packed goes into the cave. All of it
    is at risk.
@@ -279,7 +280,8 @@ FOM-215 built this loop. Where it differs from the plan above:
 - **The lobby is in the instance-server for now.** The world server is still
   only a health check, so a join lands in a lobby on the same connection.
   Moving it to the world server later changes where the lobby lives, not
-  the messages.
+  the messages. FOM-227 moved it to the world server, and FOM-230 made it
+  the [hub town](hub-town.md).
 - **A full stash.** What does not fit stays in the bag, so it goes into
   the next run at risk. `RunSummary.overflow` lists it.
 - **After a run the player goes back to the lobby** on the same

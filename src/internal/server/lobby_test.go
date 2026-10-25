@@ -126,7 +126,7 @@ func rejected(t *testing.T, conn *websocket.Conn) *gamev1.StashMoveRejected {
 	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetStashMoveRejected() != nil }).GetStashMoveRejected()
 }
 
-// A joined player is in the world's lobby, not the cave, until they enter.
+// A joined player is in the world's town, not the cave, until they enter.
 func TestJoinLandsInLobby(t *testing.T) {
 	h := start(t)
 	seed(t, h, inventory.Character{Name: "ann", XP: 120, Loadout: h.srv.starterKit()})
@@ -145,7 +145,7 @@ func TestJoinLandsInLobby(t *testing.T) {
 		t.Fatalf("bag = %v, stash = %v", inv, st)
 	}
 
-	// Cave commands from the lobby do nothing, and the cave has one player.
+	// Cave commands from the town do nothing, and the cave has one player.
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
 		Attack: &gamev1.AttackRequest{Seq: 1, TargetId: uint64(h.enemy), AbilityId: "basic"},
 	}})
@@ -157,7 +157,7 @@ func TestJoinLandsInLobby(t *testing.T) {
 			players++
 		}
 		if e.GetId() == uint64(h.enemy) && e.GetHealth() != 30 {
-			t.Fatalf("a lobby player hit the enemy: %v", e)
+			t.Fatalf("a town player hit the enemy: %v", e)
 		}
 	}
 	if players != 1 || entity(snap, otherID) == nil {
@@ -259,7 +259,11 @@ func rejoinLobby(t *testing.T, url, name string) (*websocket.Conn, *gamev1.Lobby
 			if err := proto.Unmarshal(b, &msg); err != nil {
 				t.Fatal(err)
 			}
-			return conn, msg.GetLobby()
+			if msg.GetJoined() == nil {
+				t.Fatalf("first message on rejoin = %v, want JoinAccepted", &msg)
+			}
+			townIDs.Store(conn, msg.GetJoined().GetPlayerId())
+			return conn, waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil }).GetLobby()
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("could not rejoin as %s: %v", name, err)

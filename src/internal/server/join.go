@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -32,24 +33,35 @@ const (
 	closeGrace = 2 * time.Second
 )
 
-// Lobby is the world server: join, character load and create, the lobby,
+// Lobby is the world server: join, character load and create, the town,
 // stash moves, and handing players to an instance. Its connection and store
 // write handling is shared with the instance server's Server.
 type Lobby struct {
 	// Store keeps characters and stashes by player name. Set it before
 	// serving. Only connection and writer goroutines call it.
 	Store inventory.Store
-	// rules answers class, gear and stat questions. The lobby never steps it.
+	// TickRate is sent to clients on join. It must match the tick loop.
+	TickRate int
+	// TownMaxPlayers caps the players walking the town. Players in a run do
+	// not count.
+	TownMaxPlayers int
+	// rules answers class, gear and stat questions. On the world server it is
+	// the town, which Step runs. On an instance server it is the cave.
 	rules *sim.World
-	loot  *items.Roller
-	log   *slog.Logger
-	inbox chan func()
-	done  chan struct{}
-	stop  sync.Once
+	// town is empty on an instance server.
+	town caves.Cave
+	// inTown has every player with a body in the town.
+	inTown     map[sim.EntityID]*client
+	townSpawns int
+	loot       *items.Roller
+	log        *slog.Logger
+	inbox      chan func()
+	done       chan struct{}
+	stop       sync.Once
 	// conns has every connected player by name, until their last write lands.
 	conns map[string]*client
-	// Instances is where Enter Cave sends players. With none, every instance
-	// is full.
+	// Instances is where the town's entrance sends players. With none, every
+	// instance is full.
 	Instances *Directory
 	// JoinKey signs the tokens instance servers check.
 	JoinKey []byte
@@ -72,9 +84,14 @@ type client struct {
 	kick chan closeMsg
 	// gone is set once the connection has closed.
 	gone bool
-	// id is the player's entity in the cave. In the lobby it is 0 and lobby is set.
-	id    sim.EntityID
+	// id is the player's entity in the town or the cave, or 0 with none.
+	id sim.EntityID
+	// lobby is the player's items while they are in the town. It is the
+	// source of truth there, and the town's player only mirrors it.
 	lobby *lobby
+	// atEntrance is set while the player stands in the town's entrance, so
+	// only the step in sends them to a run.
+	atEntrance bool
 	// entering is set while the player is on their way into a run: behind
 	// their lobby saves on the world server, taking the lease on an instance.
 	entering bool
@@ -92,16 +109,26 @@ type client struct {
 	lobbySeq, savedSeq int
 }
 
-// NewLobby makes a world server with no instances to send anyone to.
-func NewLobby(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
+// NewLobby makes a world server with town as its town, and no instances to
+// send anyone to.
+func NewLobby(town caves.Cave, cfg sim.Config, loot *items.Roller, log *slog.Logger) *Lobby {
+	s := newShared(town.NewWorld(cfg, nil), loot, log)
+	s.town = town
+	return s
+}
+
+func newShared(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 	return &Lobby{
-		Store: inventory.NewMemory(),
-		rules: rules,
-		loot:  loot,
-		log:   log,
-		inbox: make(chan func(), 1024),
-		done:  make(chan struct{}),
-		conns: map[string]*client{},
+		Store:          inventory.NewMemory(),
+		TickRate:       20,
+		TownMaxPlayers: 32,
+		rules:          rules,
+		inTown:         map[sim.EntityID]*client{},
+		loot:           loot,
+		log:            log,
+		inbox:          make(chan func(), 1024),
+		done:           make(chan struct{}),
+		conns:          map[string]*client{},
 
 		PendingSaves: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "store_pending_saves",
@@ -114,16 +141,22 @@ func NewLobby(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 	}
 }
 
-// Run does the lobby's work until ctx ends. The world server has no tick
-// loop, so this is the one goroutine that touches lobby state.
-func (s *Lobby) Run(ctx context.Context) {
-	for {
-		select {
-		case f := <-s.inbox:
-			f()
-		case <-ctx.Done():
-			return
-		}
+// Step runs the town on the tick loop goroutine, the one goroutine that
+// touches lobby state.
+func (s *Lobby) Step(dt time.Duration) {
+	s.drain()
+	s.rules.Step(dt)
+	s.checkEntrance()
+	if len(s.inTown) == 0 {
+		return
+	}
+	b, err := protocol.EncodeServer(protocol.Snapshot(s.rules))
+	if err != nil {
+		s.log.Error("encode town snapshot", "err", err)
+		return
+	}
+	for _, c := range s.inTown {
+		c.send(b)
 	}
 }
 
@@ -218,6 +251,7 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	name := join.GetName()
 	class := join.GetClassId()
+	returning := join.GetReturning()
 	if class == "" {
 		class = classes.Starter
 	}
@@ -270,7 +304,7 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 		s.clearRun(c, ch.Run.RunID)
 		ch.Run = inventory.Lease{}
 	}
-	if !s.enqueue(func() { s.openLobby(c, ch) }) {
+	if !s.enqueue(func() { s.enterTown(c, ch, returning) }) {
 		conn.Close(websocket.StatusGoingAway, "server shutting down")
 		return
 	}
@@ -303,18 +337,31 @@ func (s *Lobby) readLoop(ctx context.Context, conn *websocket.Conn, log *slog.Lo
 
 // leave runs on the loop once the connection is gone.
 func (s *Lobby) leave(c *client) {
+	s.leaveTown(c)
 	c.gone = true
 	c.writes.close()
 }
 
-// handle runs on the loop, which is the only place c.lobby changes. Run
-// commands mean nothing here.
+// handle runs on the loop, which is the only place c.lobby changes. Only
+// moves reach the town's sim. Attacks, pickups, loot windows, drops and
+// potions are dropped here, so nothing in the town can fight or make loot.
+// Equip and unequip are lobby moves.
 func (s *Lobby) handle(c *client, msg *gamev1.ClientMessage) {
-	switch {
-	case msg.GetEnterInstance() != nil:
-		s.enterInstance(c)
-	case msg.GetStashMove() != nil:
-		s.moveItem(c, msg.GetStashMove())
+	switch p := msg.GetPayload().(type) {
+	case *gamev1.ClientMessage_Move:
+		if cmd, ok := protocol.Command(msg, c.id); ok && c.id != 0 {
+			s.rules.Submit(cmd)
+		}
+	case *gamev1.ClientMessage_StashMove:
+		s.moveItem(c, p.StashMove.GetItemId(), p.StashMove.GetTo())
+	case *gamev1.ClientMessage_Equip:
+		s.moveItem(c, p.Equip.GetItemId(), gamev1.ItemPlace_ITEM_PLACE_GEAR)
+	case *gamev1.ClientMessage_Unequip:
+		id := ""
+		if c.lobby != nil {
+			id = c.lobby.gear[items.Slot(p.Unequip.GetSlot())].ID
+		}
+		s.moveItem(c, id, gamev1.ItemPlace_ITEM_PLACE_BAG)
 	}
 }
 

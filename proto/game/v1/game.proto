@@ -7,6 +7,8 @@ package game.v1;
 
 message ClientMessage {
   uint32 protocol_version = 1;
+  // 20 was EnterInstanceRequest, which the town's entrance replaced. Never
+  // reuse it. It is not marked reserved because Godobuf cannot parse that.
   oneof payload {
     JoinRequest join = 10;
     MoveInput move = 11;
@@ -18,7 +20,6 @@ message ClientMessage {
     UseRequest use = 17;
     LootOpenRequest loot_open = 18;
     LootCloseRequest loot_close = 19;
-    EnterInstanceRequest enter_instance = 20;
     StashMoveRequest stash_move = 21;
     InstanceJoinRequest instance_join = 22;
   }
@@ -60,15 +61,20 @@ message Rect {
 
 // Player
 
-// JoinRequest puts the player in the world server's lobby. It is the first
+// JoinRequest puts the player in the world server's town. It is the first
 // message on the world server. An instance server closes on it.
 message JoinRequest {
   string name = 1;
   // Empty means warrior. An unknown class closes the connection.
   string class_id = 2;
+  // Set on the first join after a run, so the town spawns the player at
+  // the cave entrance.
+  bool returning = 3;
 }
 
-// JoinAccepted is sent when the instance server lets the player in.
+// JoinAccepted is sent when the world server puts the player in the town,
+// and when an instance server lets them into the cave. A town over
+// TOWN_MAX_PLAYERS closes with 1013 "town full" instead.
 message JoinAccepted {
   uint64 player_id = 1;
   InstanceLayout layout = 2;
@@ -79,6 +85,9 @@ message JoinAccepted {
   // already has on every Object.
   ClassInfo class_info = 5;
   CharacterInfo character = 6;
+  // The world server's town. Moves only: no abilities, pickups, drops or
+  // potions.
+  bool town = 7;
 }
 
 // CharacterInfo is the player's own level and XP, and the name the server
@@ -283,7 +292,12 @@ message InstanceLayout {
   string name = 1;
   Rect bounds = 2;
   repeated Rect walls = 3;
+  // Empty in the town.
   Rect extraction = 4;
+  // Town only. Walking in sends the player to an instance.
+  Rect entrance = 5;
+  // Town only. Where the stash chest stands.
+  Vec2 stash = 6;
 }
 
 // Inventory
@@ -401,20 +415,21 @@ message UseRequest {
   string item_id = 1;
 }
 
-// Lobby
+// Town
 
-// Lobby is sent on a world server join, and again when the last run lands.
-// The player is out of the cave until they send EnterInstanceRequest. EquipmentUpdated, InventoryUpdated and
-// StashContents follow it.
+// Lobby says the town state changed: the character, the class, or saving.
+// The world server sends it after JoinAccepted, and again when the last run
+// lands. EquipmentUpdated, InventoryUpdated and StashContents follow it.
 message Lobby {
   CharacterInfo character = 1;
   ClassInfo class_info = 2;
-  // True while the last run's result is not in the database yet. Lobby moves
-  // and Enter Instance are rejected until a Lobby comes with it false.
+  // True while the last run's result is not in the database yet. Stash and
+  // gear moves and the entrance are rejected until a Lobby comes with it
+  // false.
   bool saving = 3;
 }
 
-// StashContents is everything in the player's stash. It is sent in the lobby
+// StashContents is everything in the player's stash. It is sent in the town
 // whenever it changes.
 message StashContents {
   repeated Item items = 1;
@@ -429,8 +444,10 @@ enum ItemPlace {
 }
 
 // StashMoveRequest moves a whole item to the stash, the bag or its gear slot.
-// Lobby only. Gear already in the slot goes where the item came from. A
-// stack that only partly fits leaves the rest where it was.
+// Town only, and a move from or to the stash needs the stash chest in range.
+// Gear already in the slot goes where the item came from. A stack that only
+// partly fits leaves the rest where it was. In the town, EquipRequest and
+// UnequipRequest are moves like this one.
 message StashMoveRequest {
   string item_id = 1;
   ItemPlace to = 2;
@@ -439,22 +456,20 @@ message StashMoveRequest {
 // StashMoveRejected is sent to the player whose move did nothing.
 message StashMoveRejected {
   string item_id = 1;
-  // One of not_in_lobby, unknown_item, full, cannot_equip, saving, in_run.
+  // One of not_in_lobby, unknown_item, full, cannot_equip, saving, in_run,
+  // far. far is the stash chest out of range.
   string reason = 2;
 }
 
-// EnterInstanceRequest leaves the lobby. The world server answers with
-// InstanceTicket.
-message EnterInstanceRequest {}
-
-// EnterInstanceRejected is sent when the player stays in the lobby.
+// EnterInstanceRejected is sent when the player walks into the town's
+// entrance and stays in the town.
 message EnterInstanceRejected {
   // saving: the last run is still being saved. in_run: a run elsewhere holds
   // the account. full: no instance has room.
   string reason = 1;
 }
 
-// InstanceTicket is the world server's answer to EnterInstanceRequest. The
+// InstanceTicket is sent when the player walks into the town's entrance. The
 // world server closes the socket right after it, with reason
 // "entering instance".
 message InstanceTicket {

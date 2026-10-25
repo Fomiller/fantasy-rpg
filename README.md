@@ -41,7 +41,7 @@ just deps                    # only postgres + nats
 just migrate                 # apply database migrations to the Compose postgres
 ```
 
-The client connects to the world server on :8080 by default. It has the lobby and the stash. Enter cave gets a ticket from it, and the client moves to that instance server for the run. When the run ends the client goes back to the world server. All three processes share the Compose database and the dev join key.
+The client connects to the world server on :8080 by default. The player walks around the hub town there, uses the stash chest, and walks into the cave entrance to get a ticket. The client then moves to that instance server for the run. When the run ends the client goes back to the town. All three processes share the Compose database and the dev join key.
 
 **2. Full Compose.** Every server runs as a container.
 

@@ -208,3 +208,34 @@ func TestPreview(t *testing.T) {
 		t.Fatal("previewed an unknown class")
 	}
 }
+
+// Reload replaces what Restore would add to, and moves the level with XP.
+func TestReloadReplacesGearAndBag(t *testing.T) {
+	w := NewWorld(passive(), nil)
+	id := w.AddPlayer(Vec2{})
+	boots := gear(items.Feet, map[items.Stat]int{items.MoveSpeed: 10})
+	boots.ID = "boots"
+	if err := w.Restore(id, inventory.Loadout{Equipment: []items.Instance{boots}, Items: []items.Instance{{ID: "potion", Slot: items.Consumable, Quantity: 1}}}); err != nil {
+		t.Fatal(err)
+	}
+	fast, _ := w.Player(id)
+
+	helm := gear(items.Head, map[items.Stat]int{items.MaxHealth: 20})
+	helm.ID = "helm"
+	if err := w.Reload(id, 500, inventory.Loadout{Equipment: []items.Instance{helm}}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := w.Player(id)
+	if _, ok := p.Equipment[items.Feet]; ok || p.Equipment[items.Head].ID != "helm" || len(p.Inventory.Items) != 0 {
+		t.Fatalf("equipment %v bag %v, want only the helm", p.Equipment, ids(p.Inventory.Items))
+	}
+	if p.XP != 500 || p.Level != passive().Classes.Progression.LevelFor(500) || p.Level < 2 {
+		t.Fatalf("xp %d level %d", p.XP, p.Level)
+	}
+	if w.MaxSpeed(p) >= w.MaxSpeed(fast) || p.Health != p.MaxHealth {
+		t.Fatalf("speed %v after %v, health %d/%d", w.MaxSpeed(p), w.MaxSpeed(fast), p.Health, p.MaxHealth)
+	}
+	if err := w.Reload(99, 0, inventory.Loadout{}); err == nil {
+		t.Fatal("reloaded a player that does not exist")
+	}
+}

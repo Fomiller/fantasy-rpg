@@ -303,7 +303,7 @@ func saving(saving bool) func(*gamev1.ServerMessage) bool {
 
 // A run end that fails past its patience is kept and retried, and the
 // instance keeps its run in /status. Until it lands the world lobby says
-// saving and turns away moves and Enter Cave.
+// saving and turns away moves and the entrance.
 func TestPendingRunEndHoldsTheLobby(t *testing.T) {
 	spy := newSpy()
 	spy.endRunFails = math.MaxInt
@@ -422,7 +422,8 @@ func TestDeadLeaseIsClearedOnJoin(t *testing.T) {
 	enterInstance(t, conn)
 }
 
-// A run that takes the lease after the join turns the next Enter Cave away.
+// A run that takes the lease after the join turns the next walk into the
+// entrance away.
 func TestEnterWhileInRunElsewhere(t *testing.T) {
 	h := start(t)
 	conn := dial(t, h.url)
@@ -430,9 +431,8 @@ func TestEnterWhileInRunElsewhere(t *testing.T) {
 	if _, err := h.srv.Store.StartRun(context.Background(), "ann", classes.Starter, items.NewID(), h.srv.Instance()); err != nil {
 		t.Fatal(err)
 	}
-	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
-	if r := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEnterInstanceRejected() != nil }).GetEnterInstanceRejected(); r.GetReason() != MoveInRun {
-		t.Fatalf("enter rejected = %v, want in_run", r)
+	if r := enterRejected(t, conn); r != MoveInRun {
+		t.Fatalf("enter rejected = %q, want in_run", r)
 	}
 }
 

@@ -21,7 +21,9 @@ const (
 	MoveFull         = "full"
 	MoveCannotEquip  = "cannot_equip"
 	MoveUnknownPlace = "unknown_place"
-	// MoveSaving and MoveInRun are also why Enter Cave did nothing.
+	// MoveFar is a move from or to the stash with the chest out of range.
+	MoveFar = "far"
+	// MoveSaving and MoveInRun are also why the entrance did nothing.
 	MoveSaving = "saving"
 	// MoveInRun is a run holding the account somewhere else.
 	MoveInRun = "in_run"
@@ -29,8 +31,15 @@ const (
 	EnterFull = "full"
 )
 
-// lobby is a player between runs. Their items live here, not in the world,
-// until they enter the cave.
+// StashRange is how far from the stash chest's center a player can stand to
+// use it, by their server position. The client mirrors it as STASH_RANGE.
+const StashRange = 64
+
+// reasonTownFull is the close when the town is at TownMaxPlayers.
+const reasonTownFull = "town full"
+
+// lobby is a player's items between runs. They live here, not in the town's
+// sim, until the player enters the cave.
 type lobby struct {
 	xp    int
 	gear  map[items.Slot]items.Instance
@@ -143,8 +152,68 @@ func (lb *lobby) bagAt(place gamev1.ItemPlace) *inventory.Bag {
 	return &lb.bag
 }
 
-// openLobby puts the player in the lobby with ch and sends it. ch is what
-// the store has, or is about to have once the player's queued writes land.
+// enterTown gives a joining player a body in the town, then opens their
+// lobby on ch. A returning player lands outside the entrance.
+func (s *Lobby) enterTown(c *client, ch inventory.Character, returning bool) {
+	if len(s.inTown) >= s.TownMaxPlayers {
+		c.close(websocket.StatusTryAgainLater, reasonTownFull)
+		return
+	}
+	spawns := s.town.PlayerSpawns
+	if returning {
+		spawns = s.town.ReturnSpawns
+	}
+	spawn := spawns[s.townSpawns%len(spawns)]
+	s.townSpawns++
+	id, err := s.rules.AddPlayerAs(spawn, c.class, ch.XP)
+	if err != nil {
+		s.log.Error("enter town", "name", c.name, "err", err)
+		c.close(websocket.StatusInternalError, "characters unavailable")
+		return
+	}
+	c.id = id
+	s.inTown[id] = c
+	p, _ := s.rules.Player(id)
+	prog := s.rules.Classes().Progression
+	character := protocol.Character(prog, c.name, c.class, p.Level, p.XP, 0)
+	s.sendToClient(c, protocol.Joined(id, s.town, spawn, s.TickRate, protocol.ClassInfo(s.rules.Classes(), c.class), character))
+	s.openLobby(c, ch)
+}
+
+// leaveTown takes the player's body out of the town. Town run XP is always
+// 0, so the run end it reports means nothing.
+func (s *Lobby) leaveTown(c *client) {
+	if c.id == 0 || s.inTown[c.id] != c {
+		return
+	}
+	s.rules.RemovePlayer(c.id)
+	delete(s.inTown, c.id)
+	c.id = 0
+}
+
+// checkEntrance sends a player who just stepped into the entrance toward a
+// run. Only the step in counts, so standing in it tries once.
+func (s *Lobby) checkEntrance() {
+	for _, p := range s.rules.Players() {
+		c, ok := s.inTown[p.ID]
+		if !ok {
+			continue
+		}
+		in := s.town.Entrance.Contains(p.Pos)
+		if in && !c.atEntrance {
+			s.enterInstance(c)
+		}
+		c.atEntrance = in
+	}
+}
+
+func (s *Lobby) nearStash(c *client) bool {
+	p, ok := s.rules.Player(c.id)
+	return ok && p.Pos.DistanceTo(s.town.Stash) <= StashRange
+}
+
+// openLobby opens the player's lobby with ch and sends it. ch is what the
+// store has, or is about to have once the player's queued writes land.
 func (s *Lobby) openLobby(c *client, ch inventory.Character) {
 	c.lobby = newLobby(ch.XP, s.rules.BagSize(), ch.Loadout, ch.Stash)
 	c.runID, c.stash = "", nil
@@ -162,7 +231,14 @@ func (s *Lobby) sendLobby(c *client) {
 	s.sendToClient(c, protocol.Lobby(character, protocol.ClassInfo(s.rules.Classes(), c.class), c.pending != nil || c.inRun))
 }
 
+// sendLobbyItems follows every lobby change, so it also reloads the town's
+// player. The snapshot then shows the level and speed the gear gives.
 func (s *Lobby) sendLobbyItems(c *client) {
+	if c.id != 0 {
+		if err := s.rules.Reload(c.id, c.lobby.xp, c.lobby.loadout()); err != nil {
+			s.log.Error("reload town player", "name", c.name, "err", err)
+		}
+	}
 	p, err := s.rules.Preview(c.class, c.lobby.xp, c.lobby.loadout())
 	if err != nil {
 		s.log.Error("preview loadout", "name", c.name, "err", err)
@@ -173,8 +249,10 @@ func (s *Lobby) sendLobbyItems(c *client) {
 	s.sendToClient(c, protocol.Stash(c.lobby.stash))
 }
 
-// moveItem checks a lobby move and saves what changed.
-func (s *Lobby) moveItem(c *client, req *gamev1.StashMoveRequest) {
+// moveItem checks a lobby move and saves what changed. Moves between bag
+// and gear work anywhere in the town. Moves from or to the stash need the
+// chest in range.
+func (s *Lobby) moveItem(c *client, id string, to gamev1.ItemPlace) {
 	reason := MoveNotInLobby
 	switch {
 	case c.lobby == nil || c.entering:
@@ -183,15 +261,22 @@ func (s *Lobby) moveItem(c *client, req *gamev1.StashMoveRequest) {
 		reason = MoveSaving
 	case c.inRun:
 		reason = MoveInRun
+	case c.lobby.touchesStash(id, to) && !s.nearStash(c):
+		reason = MoveFar
 	default:
-		reason = c.lobby.move(req.GetItemId(), req.GetTo(), func(inst items.Instance) error { return s.rules.CanEquip(c.class, inst) })
+		reason = c.lobby.move(id, to, func(inst items.Instance) error { return s.rules.CanEquip(c.class, inst) })
 	}
 	if reason != "" {
-		s.sendToClient(c, protocol.StashMoveRejected(req.GetItemId(), reason))
+		s.sendToClient(c, protocol.StashMoveRejected(id, reason))
 		return
 	}
-	s.saveLobby(c, req.GetItemId())
+	s.saveLobby(c, id)
 	s.sendLobbyItems(c)
+}
+
+func (lb *lobby) touchesStash(id string, to gamev1.ItemPlace) bool {
+	from, _, ok := lb.find(id)
+	return to == gamev1.ItemPlace_ITEM_PLACE_STASH || (ok && from == gamev1.ItemPlace_ITEM_PLACE_STASH)
 }
 
 // enterInstance checks the lobby can be left. The check waits behind the
@@ -262,6 +347,7 @@ func (s *Lobby) sendTicket(c *client) {
 		return
 	}
 	c.lobby = nil
+	s.leaveTown(c)
 	s.sendToClient(c, protocol.Ticket(inst.Public, token, inst.ID, jointoken.Lifetime))
 	time.AfterFunc(s.closeGrace, func() { c.close(websocket.StatusNormalClosure, "entering instance") })
 	s.log.Info("sent to instance", "name", c.name, "instance", inst.ID, "run", runID)

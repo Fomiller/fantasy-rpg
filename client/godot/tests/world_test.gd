@@ -1,7 +1,8 @@
 extends SceneTree
 
-# The whole loop: the world's lobby, a ticket into an instance, a run that
-# loots and extracts, and back to the world with the loot in the stash.
+# The whole loop: the world's town and its stash chest, a walk into the
+# entrance and a ticket into an instance, a run that loots and extracts, and
+# back to the town with the loot in the stash.
 # Needs a world-server on the URL in --server whose one instance runs the
 # yard cave. `just net-test` starts both and passes the URL.
 const TIMEOUT_MSEC := 5000
@@ -17,33 +18,43 @@ func _run() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	var connection: ServerConnection = main.get_node("ServerConnection")
-	var lobby: LobbyWindow = main.get_node("HUD/Lobby")
+	var stash: StashWindow = main.get_node("HUD/Stash")
+	var cave: Cave = main.get_node("Cave")
+	var latest := {"snapshot": null}
+	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
+	connection.joined.connect(func(_id: int) -> void: latest.snapshot = null)
+	var server_pos := func() -> Vector2:
+		var me: GameV1.EntityState = _me(latest.snapshot, connection) if latest.snapshot else null
+		return Vector2(me.get_position().get_x(), me.get_position().get_y()) if me else Vector2.INF
 
-	var in_lobby := await _until(func() -> bool: return connection.in_lobby and lobby.visible)
-	_check(in_lobby and not connection.is_joined(), "the world server puts the player in the lobby")
-	if not in_lobby:
+	var in_town := await _until(func() -> bool: return connection.in_town and latest.snapshot != null)
+	_check(in_town and connection.is_joined(), "the world server puts the player in the town")
+	if not in_town:
 		_finish()
 		return
 	_check(":8090/" in connection._url, "the client is pointed at the world server")
-	_check(not connection.saving and not lobby.saving, "a new character is not saving")
-	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "To stash") != null), "the lobby lists the starter sword as gear")
-	_check("Stash 0/100" in _texts(lobby), "the lobby shows an empty stash")
+	_check(not connection.saving and not stash.saving, "a new character is not saving")
 
-	_lobby_button(lobby, "Rusty Sword", "To stash").pressed.emit()
-	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "Equip") != null), "the world server moves the sword to the stash")
-	_check("Stash 1/100" in _texts(lobby), "the stash counts the sword")
-	_lobby_button(lobby, "Rusty Sword", "Equip").pressed.emit()
-	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "To stash") != null), "the sword is equipped again from the stash")
+	await _walk(main, "move_left", func() -> bool: return server_pos.call().x < cave.stash.x + 40.0)
+	await _press("interact")
+	_check(await _until(func() -> bool: return stash.visible), "interact at the chest opens the stash")
+	_check(await _until(func() -> bool: return _window_button(stash, "Rusty Sword", "To stash") != null), "the stash lists the starter sword as gear")
+	_check("Stash 0/100" in _texts(stash), "the stash starts empty")
+	_window_button(stash, "Rusty Sword", "To stash").pressed.emit()
+	_check(await _until(func() -> bool: return _window_button(stash, "Rusty Sword", "Equip") != null), "the world server moves the sword to the stash")
+	_check("Stash 1/100" in _texts(stash), "the stash counts the sword")
+	_window_button(stash, "Rusty Sword", "Equip").pressed.emit()
+	_check(await _until(func() -> bool: return _window_button(stash, "Rusty Sword", "To stash") != null), "the sword is equipped again from the stash")
 
-	_lobby_button(lobby, "", "Enter cave").pressed.emit()
-	var joined := await _until(func() -> bool: return connection.is_joined())
-	_check(joined and "/instances/" in connection._url, "Enter cave sends the client to an instance server (at %s)" % connection._url)
+	await _walk(main, "move_right", func() -> bool: return server_pos.call().x > cave.entrance.get_center().x - 16.0)
+	Input.action_press("move_up")
+	var joined := await _until(func() -> bool: return connection.is_joined() and not connection.in_town, 8000)
+	Input.action_release("move_up")
+	_check(joined and "/instances/" in connection._url, "walking into the entrance sends the client to an instance server (at %s)" % connection._url)
 	if not joined:
 		_finish()
 		return
 	var ticket := {"url": connection._url, "token": connection._token}
-	var latest := {"snapshot": null}
-	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
 	_check(await _until(func() -> bool: return latest.snapshot != null), "the instance sends snapshots")
 
 	# The yard's chest and exit are straight right of the spawn.
@@ -76,10 +87,15 @@ func _run() -> void:
 	Input.action_release("move_right")
 	_check(extracted and _has_label(summary, "Extracted"), "walking into the exit extracts and shows the summary")
 
-	var back := await _until(func() -> bool: return connection.in_lobby and lobby.visible and not connection.saving)
-	_check(back and ":8090/" in connection._url, "the client is back on the world server's lobby")
-	_check(summary.visible, "the summary stays up over the lobby")
-	_check(await _until(func() -> bool: return "Stash 0/100" not in _texts(lobby) and _lobby_button(lobby, item_name, "To bag") != null), "the loot is in the stash (lobby shows %s)" % _texts(lobby).replace("\n", " | "))
+	var back := await _until(func() -> bool: return connection.in_town and latest.snapshot != null and not connection.saving, 10000)
+	_check(back and ":8090/" in connection._url, "the client is back in the world server's town")
+	_check(cave.entrance.has_area() and connection.spawn.distance_to(cave.entrance.get_center()) < 160.0 and not cave.entrance.has_point(connection.spawn), "a returning player lands just outside the entrance")
+	_check(summary.visible, "the summary stays up over the town")
+
+	await _walk(main, "move_down", func() -> bool: return server_pos.call().y > cave.stash.y - 8.0)
+	await _walk(main, "move_left", func() -> bool: return server_pos.call().x < cave.stash.x + 40.0)
+	await _press("interact")
+	_check(await _until(func() -> bool: return stash.visible and _window_button(stash, item_name, "To bag") != null), "the loot is in the stash (stash shows %s)" % _texts(stash).replace("\n", " | "))
 
 	await _test_reused_token(ticket.url, ticket.token)
 	_finish()
@@ -137,22 +153,31 @@ func _press(action: String) -> void:
 		await physics_frame
 
 
-func _texts(lobby: LobbyWindow) -> String:
+# Holds one key until done, then waits for the player to stop.
+func _walk(main: Node, action: String, done: Callable) -> void:
+	Input.action_press(action)
+	await _until(done, 8000)
+	Input.action_release(action)
+	var player: Player = main.get_node("Player")
+	await _until(func() -> bool: return player.velocity.is_zero_approx(), 1000)
+	await _until(func() -> bool: return false, 200)
+
+
+func _texts(window: Control) -> String:
 	var out := ""
-	for node in lobby.find_children("*", "Label", true, false):
+	for node in window.find_children("*", "Label", true, false):
 		if not node.is_queued_for_deletion():
 			out += (node as Label).text + "\n"
 	return out
 
 
-# An empty item_name finds a button that is not on an item row.
-func _lobby_button(lobby: LobbyWindow, item_name: String, text: String) -> Button:
-	for node in lobby.find_children("*", "Button", true, false):
+func _window_button(window: Control, item_name: String, text: String) -> Button:
+	for node in window.find_children("*", "Button", true, false):
 		var button := node as Button
 		if button.text != text or button.is_queued_for_deletion():
 			continue
 		var label := button.get_parent().get_child(0)
-		if item_name == "" or (label is RichTextLabel and item_name in (label as RichTextLabel).get_parsed_text()):
+		if label is RichTextLabel and item_name in (label as RichTextLabel).get_parsed_text():
 			return button
 	return null
 

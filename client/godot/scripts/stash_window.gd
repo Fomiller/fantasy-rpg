@@ -1,31 +1,24 @@
-class_name LobbyWindow
+class_name StashWindow
 extends PanelContainer
 
 const REJECTED_TEXT := {
 	"full": "no room",
 	"cannot_equip": "cannot equip that",
 	"unknown_item": "item is gone",
-	"not_in_lobby": "not in the lobby",
+	"not_in_lobby": "not in the town",
 	"saving": "Couldn't save, try again",
 	"in_run": "Your character is in a run",
-}
-const ENTER_REJECTED_TEXT := {
-	"saving": "Still saving your last run",
-	"in_run": "Your character is in a run",
-	"full": "All instances are full.",
+	"far": "too far from the chest",
 }
 
-# Set by main. Tests swap them for fakes. Every button sends a request, and
+# Set by main. Tests swap it for a fake. Every button sends a request, and
 # the window only changes when the server answers.
 var send_move: Callable
-var send_enter: Callable
 
 var message := ""
-# Enter Cave stays off until the server says the last run is saved.
+# Moves are turned away until the server says the last run is saved.
 var saving := false
 
-var _character: GameV1.CharacterInfo
-var _info: GameV1.ClassInfo
 var _gear: Array[GameV1.Item] = []
 var _bag: Array[GameV1.Item] = []
 var _bag_capacity := 0
@@ -35,18 +28,20 @@ var _stash_capacity := 0
 @onready var _list: VBoxContainer = $Scroll/List
 
 
-# Not in the windows group: Escape must not close the only way into the cave.
 func _ready() -> void:
+	add_to_group("windows")
 	_rebuild()
 
 
-func show_lobby(character: GameV1.CharacterInfo, info: GameV1.ClassInfo, is_saving := false) -> void:
-	_character = character
-	_info = info
-	saving = is_saving
+func open() -> void:
 	message = ""
 	_rebuild()
 	visible = true
+
+
+func set_saving(is_saving: bool) -> void:
+	saving = is_saving
+	_rebuild()
 
 
 func show_equipment(items: Array[GameV1.Item]) -> void:
@@ -72,17 +67,6 @@ func show_rejected(event: GameV1.StashMoveRejected) -> void:
 	_rebuild()
 
 
-# Why the last trip to an instance ended early.
-func show_notice(text: String) -> void:
-	message = text
-	_rebuild()
-
-
-func show_enter_rejected(event: GameV1.EnterInstanceRejected) -> void:
-	message = ENTER_REJECTED_TEXT.get(event.get_reason(), event.get_reason())
-	_rebuild()
-
-
 func _move(item_id: String, to: int) -> void:
 	send_move.call(item_id, to)
 
@@ -94,12 +78,10 @@ func _rebuild() -> void:
 		_list.remove_child(child)
 		child.queue_free()
 
-	var title := "Lobby"
-	if _character:
-		title = "%s · %s · level %d" % [_character.get_name(), _info.get_name() if _info else "", _character.get_level()]
-	_label(title)
 	if message != "":
 		_label(message).modulate = Color(1, 0.6, 0.5)
+	if saving:
+		_label("Saving...")
 
 	_label("Gear")
 	for item in _gear:
@@ -110,12 +92,6 @@ func _rebuild() -> void:
 	_label("Stash %d/%d" % [_stash.size(), _stash_capacity])
 	for item in _stash:
 		_row(item, _equip_or({"To bag": GameV1.ItemPlace.BAG}, item))
-
-	if saving:
-		_label("Saving...")
-	var enter := ItemRow.button("Enter cave", func() -> void: send_enter.call())
-	enter.disabled = saving
-	_list.add_child(enter)
 
 
 func _equip_or(places: Dictionary, item: GameV1.Item) -> Dictionary:

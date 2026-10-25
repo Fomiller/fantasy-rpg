@@ -49,6 +49,66 @@ func TestYardIsOneStraightWalk(t *testing.T) {
 	}
 }
 
+func TestTownParses(t *testing.T) {
+	c := Town()
+	if !c.Town || len(c.PlayerSpawns) != 3 || len(c.ReturnSpawns) != 1 || len(c.Enemies) != 0 || len(c.Chests) != 0 || c.Extraction != (sim.Rect{}) {
+		t.Fatalf("town = %+v", c)
+	}
+	if c.Bounds.Max != (sim.Vec2{X: 24 * TileSize, Y: 13 * TileSize}) {
+		t.Fatalf("bounds = %v", c.Bounds)
+	}
+	if c.Entrance != (sim.Rect{Min: sim.Vec2{X: 10 * TileSize, Y: TileSize}, Max: sim.Vec2{X: 12 * TileSize, Y: 2 * TileSize}}) {
+		t.Fatalf("entrance = %v", c.Entrance)
+	}
+	if c.Stash != (sim.Vec2{X: 5.5 * TileSize, Y: 7.5 * TileSize}) {
+		t.Fatalf("stash = %v", c.Stash)
+	}
+	if ret := c.ReturnSpawns[0]; c.Entrance.Contains(ret) {
+		t.Fatalf("return spawn %v is in the entrance", ret)
+	}
+}
+
+// Tests walk from a spawn to the stash and from the return spawn into the
+// entrance with one direction, so those lines must stay clear.
+func TestTownWalksAreStraight(t *testing.T) {
+	c := Town()
+	w := c.NewWorld(sim.DefaultConfig(), nil)
+	walk := func(from sim.Vec2, dir sim.Vec2, done func(sim.Vec2) bool) bool {
+		id := w.AddPlayer(from)
+		defer w.RemovePlayer(id)
+		w.Submit(sim.MoveCommand{Player: id, Seq: 1, Direction: dir})
+		for range 200 {
+			w.Step(50 * time.Millisecond)
+			if p, _ := w.Player(id); done(p.Pos) {
+				return true
+			}
+		}
+		return false
+	}
+	spawn := c.PlayerSpawns[0]
+	if !walk(spawn, sim.Vec2{X: -1}, func(p sim.Vec2) bool { return p.X-c.Stash.X < 32 }) {
+		t.Fatal("a walk left from the first spawn does not reach the stash")
+	}
+	if !walk(c.ReturnSpawns[0], sim.Vec2{Y: -1}, c.Entrance.Contains) {
+		t.Fatal("a walk up from the return spawn does not reach the entrance")
+	}
+	if len(w.Players()) != 0 {
+		t.Fatal("players left in the world")
+	}
+}
+
+func TestTownWorldHasNoExit(t *testing.T) {
+	c := Town()
+	w := c.NewWorld(sim.DefaultConfig(), nil)
+	id := w.AddPlayer(sim.Vec2{})
+	if ev := w.Step(time.Hour); len(ev.Extracted) != 0 {
+		t.Fatalf("extracted %v from the town", ev.Extracted)
+	}
+	if _, ok := w.Player(id); !ok {
+		t.Fatal("player left the town")
+	}
+}
+
 func TestWallsCoverEveryWallTileOnce(t *testing.T) {
 	c := Loop()
 	rows := splitArt(loopArt)
@@ -101,6 +161,15 @@ func TestParseErrors(t *testing.T) {
 		"no spawn":   "####\n#.X#\n####",
 		"no exit":    "####\n#S.#\n####",
 		"split exit": "#####\n#XSX#\n#####",
+		"town enemy": "######\n#DSTR#\n#m...#\n######",
+		"town chest": "######\n#DSTR#\n#c...#\n######",
+		"town exit":  "######\n#DSTR#\n#X...#\n######",
+		"cave door":  "#####\n#SXD#\n#####",
+		"split door": "######\n#DSDT#\n#R...#\n######",
+		"no stash":   "#####\n#DSR#\n#####",
+		"two stash":  "######\n#DSTT#\n#R...#\n######",
+		"no return":  "#####\n#DST#\n#####",
+		"no door":    "#####\n#RST#\n#####",
 	}
 	for name, art := range tests {
 		if _, err := Parse(name, art); err == nil {

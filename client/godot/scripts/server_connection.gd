@@ -1,11 +1,14 @@
 class_name ServerConnection
 extends Node
 
-# The player entered the cave.
+# The player entered the town or the cave. in_town says which.
 signal joined(player_id: int)
-# On a world server join, and again when the last run lands. Gear, bag and
-# stash follow.
-signal lobby_entered
+# The town state changed: the character, the class or saving. It follows a
+# town join, and comes again when the last run lands. Gear, bag and stash
+# follow it.
+signal town_state_changed
+# Any socket closed, including on the way to or from an instance.
+signal left
 signal disconnected
 signal extracted(player_id: int)
 signal equipment_received(items: Array[GameV1.Item])
@@ -28,7 +31,7 @@ signal enter_instance_rejected(event: GameV1.EnterInstanceRejected)
 # The world server. Every session starts here and comes back here after a run.
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
-# Why an instance turned the player away or the run ended early, as the lobby
+# Why an instance turned the player away or the run ended early, as the town
 # says it. The empty reason is a dropped connection.
 const INSTANCE_CLOSE_TEXT := {
 	"": "The run ended when the connection dropped.",
@@ -55,13 +58,14 @@ var tick_rate := 20
 var class_info: GameV1.ClassInfo
 # Level and XP as the server last sent them. A run summary replaces it.
 var character: GameV1.CharacterInfo
-# Between runs. player_id is 0 while it is set.
-var in_lobby := false
-# The last run is not in the database yet, so the server turns away Enter Cave.
+# In the world server's town, where only moves and item moves work.
+var in_town := false
+# The last run is not in the database yet, so the server turns away stash
+# moves and the entrance.
 var saving := false
 # Why the server last closed the socket. Empty when it gave no reason.
 var close_reason := ""
-# Why the last trip to an instance ended early, for the lobby to say. Main
+# Why the last trip to an instance ended early, for the town to say. Main
 # clears it once shown.
 var notice := ""
 
@@ -75,6 +79,9 @@ var _token := ""
 # Set when this player's run summary came, so the close that follows is the
 # run ending, not a drop.
 var _run_over := false
+# Set on the way back from an instance, so the town spawns the player at the
+# entrance. Cleared once the town takes them.
+var _returning := false
 var _was_open := false
 var _retry_in := 0.0
 var _move_seq := 0
@@ -97,17 +104,9 @@ func is_joined() -> bool:
 	return player_id != 0
 
 
-func send_enter_instance() -> void:
-	if not in_lobby:
-		return
-	var msg := _new_message()
-	msg.new_enter_instance()
-	_send(msg)
-
-
 # to is a GameV1.ItemPlace.
 func send_stash_move(item_id: String, to: int) -> void:
-	if not in_lobby:
+	if not in_town:
 		return
 	var msg := _new_message()
 	var move := msg.new_stash_move()
@@ -131,9 +130,10 @@ func send_move(direction: Vector2) -> int:
 	return _move_seq
 
 
-# With no aim the server aims at target_id. Returns the seq, or 0 when not joined.
+# With no aim the server aims at target_id. Returns the seq, or 0 when not
+# in the cave.
 func send_attack(target_id: int, ability_id := "basic", aim := Vector2.ZERO) -> int:
-	if not is_joined():
+	if not is_joined() or in_town:
 		return 0
 	_attack_seq += 1
 	var msg := _new_message()
@@ -151,7 +151,7 @@ func send_attack(target_id: int, ability_id := "basic", aim := Vector2.ZERO) -> 
 
 # An empty item_id takes everything that fits.
 func send_pickup(target_id: int, item_id := "") -> void:
-	if not is_joined():
+	if not is_joined() or in_town:
 		return
 	var msg := _new_message()
 	var pickup := msg.new_pickup()
@@ -161,7 +161,7 @@ func send_pickup(target_id: int, item_id := "") -> void:
 
 
 func send_loot_open(target_id: int) -> void:
-	if not is_joined():
+	if not is_joined() or in_town:
 		return
 	var msg := _new_message()
 	msg.new_loot_open().set_target_id(target_id)
@@ -193,7 +193,7 @@ func send_unequip(slot: String) -> void:
 
 
 func send_drop(item_id: String) -> void:
-	if not is_joined():
+	if not is_joined() or in_town:
 		return
 	var msg := _new_message()
 	msg.new_drop().set_item_id(item_id)
@@ -201,7 +201,7 @@ func send_drop(item_id: String) -> void:
 
 
 func send_use(item_id: String) -> void:
-	if not is_joined():
+	if not is_joined() or in_town:
 		return
 	var msg := _new_message()
 	msg.new_use().set_item_id(item_id)
@@ -236,10 +236,11 @@ func _process(delta: float) -> void:
 func _closed(code: int, reason: String) -> void:
 	_was_open = false
 	player_id = 0
-	in_lobby = false
+	in_town = false
 	saving = false
 	close_reason = reason
 	print("disconnected from %s (%d %s)" % [_url, code, reason])
+	left.emit()
 	# A token while on the world means a ticket came, whoever closed first.
 	if _token != "" and _url == _world_url:
 		_url = _ticket_url
@@ -259,6 +260,7 @@ func _back_to_world(why: String) -> void:
 	_ticket_url = ""
 	_url = _world_url
 	_retry_in = 0.0
+	_returning = true
 	if why != "run over":
 		notice = INSTANCE_CLOSE_TEXT.get(why, why)
 
@@ -282,6 +284,7 @@ func _send_join() -> void:
 	var join := msg.new_join()
 	join.set_name(player_name)
 	join.set_class_id(class_id)
+	join.set_returning(_returning)
 	_send(msg)
 
 
@@ -292,12 +295,10 @@ func _handle(bytes: PackedByteArray) -> void:
 		return
 	if msg.has_lobby():
 		var lobby := msg.get_lobby()
-		player_id = 0
-		in_lobby = true
 		saving = lobby.get_saving()
 		class_info = lobby.get_class_info()
 		character = lobby.get_character() if lobby.has_character() else null
-		lobby_entered.emit()
+		town_state_changed.emit()
 	elif msg.has_stash():
 		stash_received.emit(msg.get_stash().get_items(), msg.get_stash().get_capacity())
 	elif msg.has_stash_move_rejected():
@@ -312,7 +313,9 @@ func _handle(bytes: PackedByteArray) -> void:
 		_socket.close(1000, "entering instance")
 	elif msg.has_joined():
 		var accepted := msg.get_joined()
-		in_lobby = false
+		in_town = accepted.get_town()
+		if in_town:
+			_returning = false
 		player_id = accepted.get_player_id()
 		layout = accepted.get_layout()
 		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())
@@ -374,7 +377,10 @@ func _new_message() -> GameV1.ClientMessage:
 	return msg
 
 
+# A key held through a ticket or a run's end would send on a closing socket.
 func _send(msg: GameV1.ClientMessage) -> void:
+	if _socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
 	_socket.send(msg.to_bytes(), WebSocketPeer.WRITE_MODE_BINARY)
 
 

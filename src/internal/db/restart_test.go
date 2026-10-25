@@ -209,15 +209,21 @@ func TestRestartKeepsCharacters(t *testing.T) {
 	}
 }
 
-// worldServer is a world-server on store. stop shuts it down as a restart would.
+// worldServer is a world-server on store, whose town has the stash chest
+// next to the spawn. stop shuts it down as a restart would.
 func worldServer(t *testing.T, store inventory.Store) (url string, stop func()) {
 	t.Helper()
-	lobby := server.NewLobby(sim.NewWorld(sim.DefaultConfig(), nil), items.NewRoller(items.Default(), 1), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	town, err := caves.Parse("restart town", "#####\n#DST#\n#R..#\n#####")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lobby := server.NewLobby(town, sim.DefaultConfig(), items.NewRoller(items.Default(), 1), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	lobby.Store = store
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	loop := &tick.Loop{Interval: 10 * time.Millisecond, Metrics: tick.NewMetrics(prometheus.NewRegistry(), "test"), Step: lobby.Step}
 	go func() {
-		lobby.Run(ctx)
+		loop.Run(ctx)
 		close(done)
 	}()
 	hs := httptest.NewServer(http.HandlerFunc(lobby.HandleWS))

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -16,11 +17,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
+	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
 
 func main() {
@@ -34,6 +37,14 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	rate, err := positive("TICK_RATE", 20)
+	if err != nil {
+		return err
+	}
+	townMax, err := positive("TOWN_MAX_PLAYERS", 32)
+	if err != nil {
+		return err
+	}
 	key, err := jointoken.Key(os.Getenv("JOIN_TOKEN_KEY"))
 	if err != nil {
 		return err
@@ -43,7 +54,7 @@ func run() error {
 		return err
 	}
 	if len(list) == 0 {
-		slog.Warn("INSTANCES is empty, so every Enter Cave is full")
+		slog.Warn("INSTANCES is empty, so the town's entrance is always full")
 	}
 
 	reg := prometheus.NewRegistry()
@@ -56,15 +67,20 @@ func run() error {
 	defer closeStore()
 	slog.Info("character store", "store", storeName)
 
-	// The world is only the game's rules, for lobby stats and gear checks. It
-	// is never stepped.
-	rules := sim.NewWorld(sim.DefaultConfig(), nil)
-	lobby := server.NewLobby(rules, items.NewRoller(items.Default(), rand.Uint64()), slog.Default())
+	lobby := server.NewLobby(caves.Town(), sim.DefaultConfig(), items.NewRoller(items.Default(), rand.Uint64()), slog.Default())
+	lobby.TickRate = rate
+	lobby.TownMaxPlayers = townMax
 	lobby.Store = store
 	lobby.JoinKey = key
 	lobby.Instances = server.NewDirectory(list)
 	reg.MustRegister(lobby.PendingSaves)
 	defer lobby.Close()
+
+	loop := &tick.Loop{
+		Interval: time.Second / time.Duration(rate),
+		Metrics:  tick.NewMetrics(reg, "world-server"),
+		Step:     lobby.Step,
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -86,14 +102,16 @@ func run() error {
 			errc <- err
 		}
 	}()
-	go lobby.Run(ctx)
+	go func() { errc <- loop.Run(ctx) }()
 	go lobby.Instances.Run(ctx, pollEvery)
-	slog.Info("world-server listening", "addr", srv.Addr, "instances", len(list))
+	slog.Info("world-server listening", "addr", srv.Addr, "instances", len(list), "tick_rate", rate, "town_max_players", townMax)
 
 	select {
 	case <-ctx.Done():
 	case err := <-errc:
-		return err
+		if !errors.Is(err, context.Canceled) {
+			return err
+		}
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -103,6 +121,18 @@ func run() error {
 
 // pollEvery is how often each instance's /status is read.
 const pollEvery = 2 * time.Second
+
+func positive(name string, fallback int) (int, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 0, errors.New(name + " must be a positive integer")
+	}
+	return n, nil
+}
 
 func port() string {
 	if p := os.Getenv("PORT"); p != "" {

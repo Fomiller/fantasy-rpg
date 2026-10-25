@@ -2,6 +2,7 @@ package sim
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -142,6 +143,25 @@ func (w *World) Restore(id EntityID, l inventory.Loadout) error {
 		return errNoPlayer
 	}
 	w.restore(p, l)
+	return nil
+}
+
+// Reload replaces a player's XP, gear and bag. The town's players mirror
+// the world server's lobby with it. Restore only adds, so it cannot.
+func (w *World) Reload(id EntityID, xp int, l inventory.Loadout) error {
+	p, ok := w.players[id]
+	if !ok {
+		return errNoPlayer
+	}
+	if xp < 0 {
+		return fmt.Errorf("xp is %d", xp)
+	}
+	p.XP, p.RunXP = xp, 0
+	p.Level = w.cfg.Classes.Progression.LevelFor(xp)
+	p.Equipment = map[items.Slot]items.Instance{}
+	p.Inventory = inventory.Bag{Size: w.cfg.InventorySize}
+	w.restore(p, l)
+	w.applyGear(p)
 	return nil
 }
 
