@@ -11,14 +11,14 @@
   };
 
   # The instance-server is the image's entrypoint, which the migrate Job runs.
-  # The image holds world-server too, and its Deployment picks it with command.
+  # The image holds world-server and instance-manager too, picked with command.
   service = {
     binary = "instance-server";
     port = 8080;
   };
 
-  # golden-service builds one binary per image, and the image holds both
-  # servers, so the Dockerfile is written by hand. The pack's Deployment and
+  # golden-service builds one binary per image, and the image holds every
+  # service, so the Dockerfile is written by hand. The pack's Deployment and
   # Service are listed so generate does not bring them back: instance servers
   # are a StatefulSet with a Service per pod.
   unmanaged = [
@@ -70,7 +70,7 @@
     "migrate: deps\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate"
     "up:\n    {{compose}} --profile full up -d --build --wait"
     "down:\n    {{compose}} --profile full down"
-    "images:\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev ."
+    "images:\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=world-server -t fantasy-rpg/world-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-server -t fantasy-rpg/instance-server:dev .\n    docker build -f deploy/docker/Dockerfile --build-arg BINARY=instance-manager -t fantasy-rpg/instance-manager:dev ."
     "k8s-up:\n    k3d cluster list fantasy-rpg >/dev/null 2>&1 || k3d cluster create fantasy-rpg --wait --kubeconfig-switch-context=false"
     "k8s-down:\n    k3d cluster delete fantasy-rpg"
     "deploy-local: k8s-up images\n    k3d image import -c fantasy-rpg fantasy-rpg/world-server:dev fantasy-rpg/instance-server:dev\n    {{kube}} apply -f deploy/kubernetes/world-server.yaml\n    {{kube}} -n fantasy-rpg rollout restart deployment/world-server\n    {{kube}} -n fantasy-rpg rollout status deployment/world-server"

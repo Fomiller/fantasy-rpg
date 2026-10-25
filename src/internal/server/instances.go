@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -33,6 +34,26 @@ type InstanceStatus struct {
 	// not landed.
 	Runs []string `json:"runs"`
 }
+
+// Pool is where the town's entrance sends players. Directory is the static
+// pool from INSTANCES, and InstanceManager asks the instance manager.
+type Pool interface {
+	// Reserve takes a seat for every run in runs on one instance, so a party
+	// lands together.
+	Reserve(ctx context.Context, runs []string, now time.Time) (Placement, error)
+	// DeadLease reports a lease whose run is gone for sure. When in doubt it
+	// is false, since the run end may still land.
+	DeadLease(ctx context.Context, l inventory.Lease, now time.Time) bool
+}
+
+// Placement is where a reserved party goes. URL is the WebSocket URL a
+// client gets in its ticket.
+type Placement struct {
+	ID, Boot, URL string
+}
+
+// ErrFull is a Reserve that found no instance with room.
+var ErrFull = errors.New("every instance is full")
 
 // Instance is one instance server the world server can send players to.
 type Instance struct {
@@ -142,11 +163,10 @@ func (d *Directory) fetch(ctx context.Context, inst Instance) (InstanceStatus, e
 // Reserve picks one instance with room for every run in runs and counts
 // them against it until their tokens expire. Of those with room it takes
 // the one with the most players, so one cave fills before the next. A
-// draining instance is never picked. A party passes one run per member, so
-// they all land together.
-func (d *Directory) Reserve(runs []string, now time.Time) (Instance, InstanceStatus, bool) {
+// draining instance is never picked.
+func (d *Directory) Reserve(_ context.Context, runs []string, now time.Time) (Placement, error) {
 	if d == nil {
-		return Instance{}, InstanceStatus{}, false
+		return Placement{}, ErrFull
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -161,13 +181,13 @@ func (d *Directory) Reserve(runs []string, now time.Time) (Instance, InstanceSta
 		}
 	}
 	if best < 0 {
-		return Instance{}, InstanceStatus{}, false
+		return Placement{}, ErrFull
 	}
 	inst := d.list[best]
 	for _, run := range runs {
 		d.issued[inst.ID] = append(d.issued[inst.ID], issued{run: run, at: now})
 	}
-	return inst, d.status[inst.ID], true
+	return Placement{ID: inst.ID, Boot: d.status[inst.ID].Boot, URL: inst.Public}, nil
 }
 
 // inFlight counts tickets that are still good and not yet a player the
@@ -188,7 +208,7 @@ func (d *Directory) inFlight(id string, st InstanceStatus, now time.Time) int {
 // the list, restarted, or answers without the run long after the token
 // expired. An instance that does not answer is waited on, since it may
 // still land the run end.
-func (d *Directory) DeadLease(l inventory.Lease, now time.Time) bool {
+func (d *Directory) DeadLease(_ context.Context, l inventory.Lease, now time.Time) bool {
 	if d == nil || !l.Held() {
 		return false
 	}
@@ -206,4 +226,8 @@ func (d *Directory) DeadLease(l inventory.Lease, now time.Time) bool {
 		return true
 	}
 	return !slices.Contains(st.Runs, l.RunID) && now.Sub(l.Since) > deadLeaseAge
+}
+
+func (s *Lobby) deadLease(ctx context.Context, l inventory.Lease) bool {
+	return s.Instances != nil && s.Instances.DeadLease(ctx, l, time.Now())
 }

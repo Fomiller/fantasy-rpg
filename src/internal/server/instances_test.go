@@ -58,14 +58,14 @@ func TestReservePicksTheBusiestWithRoom(t *testing.T) {
 		// No boot means it did not answer its last poll.
 		InstanceStatus{ID: "down", Players: 7, Capacity: 8},
 	)
-	if inst, st, ok := d.Reserve([]string{"r1"}, now); !ok || inst.ID != "b" || st.Boot != "1" {
-		t.Fatalf("first pick = %v, %v, want b", inst, ok)
+	if p, err := d.Reserve(t.Context(), []string{"r1"}, now); err != nil || p != (Placement{ID: "b", Boot: "1", URL: "ws://b"}) {
+		t.Fatalf("first pick = %v, %v, want b", p, err)
 	}
-	if inst, _, _ := d.Reserve([]string{"r2"}, now); inst.ID != "b" {
+	if inst, _ := d.Reserve(t.Context(), []string{"r2"}, now); inst.ID != "b" {
 		t.Fatalf("second pick = %v, want b, which still has room", inst)
 	}
 	// b has 6 players and 2 tickets on the way, so it is full.
-	if inst, _, _ := d.Reserve([]string{"r3"}, now); inst.ID != "a" {
+	if inst, _ := d.Reserve(t.Context(), []string{"r3"}, now); inst.ID != "a" {
 		t.Fatalf("third pick = %v, want a", inst)
 	}
 }
@@ -76,11 +76,11 @@ func TestReserveSkipsDraining(t *testing.T) {
 		InstanceStatus{ID: "a", Boot: "1", Players: 1, Capacity: 8},
 		InstanceStatus{ID: "b", Boot: "1", Players: 6, Capacity: 8, Draining: true},
 	)
-	if inst, _, ok := d.Reserve([]string{"r1"}, time.Now()); !ok || inst.ID != "a" {
-		t.Fatalf("pick = %v, %v, want a, since b is draining", inst, ok)
+	if inst, err := d.Reserve(t.Context(), []string{"r1"}, time.Now()); err != nil || inst.ID != "a" {
+		t.Fatalf("pick = %v, %v, want a, since b is draining", inst, err)
 	}
 	d = directory(InstanceStatus{ID: "b", Boot: "1", Capacity: 8, Draining: true})
-	if inst, _, ok := d.Reserve([]string{"r1"}, time.Now()); ok {
+	if inst, err := d.Reserve(t.Context(), []string{"r1"}, time.Now()); err == nil {
 		t.Fatalf("pick = %v, want none with only a draining instance", inst)
 	}
 }
@@ -92,10 +92,10 @@ func TestReserveKeepsAPartyTogether(t *testing.T) {
 		InstanceStatus{ID: "a", Boot: "1", Players: 1, Capacity: 8},
 		InstanceStatus{ID: "b", Boot: "1", Players: 6, Capacity: 8},
 	)
-	if inst, _, ok := d.Reserve([]string{"p1", "p2", "p3"}, now); !ok || inst.ID != "a" {
-		t.Fatalf("party of 3 = %v, %v, want a, the only one with room for all", inst, ok)
+	if inst, err := d.Reserve(t.Context(), []string{"p1", "p2", "p3"}, now); err != nil || inst.ID != "a" {
+		t.Fatalf("party of 3 = %v, %v, want a, the only one with room for all", inst, err)
 	}
-	if _, _, ok := d.Reserve(make([]string, 9), now); ok {
+	if _, err := d.Reserve(t.Context(), make([]string, 9), now); err == nil {
 		t.Fatal("a party bigger than any instance got a pick")
 	}
 }
@@ -105,16 +105,16 @@ func TestReserveKeepsAPartyTogether(t *testing.T) {
 func TestReserveCountsTicketsOnce(t *testing.T) {
 	now := time.Now()
 	d := directory(InstanceStatus{ID: "a", Boot: "1", Capacity: 2})
-	d.Reserve([]string{"r1"}, now)
-	d.Reserve([]string{"r2"}, now)
-	if _, _, ok := d.Reserve([]string{"r3"}, now); ok {
+	d.Reserve(t.Context(), []string{"r1"}, now)
+	d.Reserve(t.Context(), []string{"r2"}, now)
+	if _, err := d.Reserve(t.Context(), []string{"r3"}, now); err == nil {
 		t.Fatal("picked an instance with two tickets out and room for two")
 	}
 	d.status["a"] = InstanceStatus{ID: "a", Boot: "1", Players: 1, Capacity: 2, Runs: []string{"r1"}}
-	if _, _, ok := d.Reserve([]string{"r3"}, now); ok {
+	if _, err := d.Reserve(t.Context(), []string{"r3"}, now); err == nil {
 		t.Fatal("r1 joined, r2 is on the way, so there is no room")
 	}
-	if _, _, ok := d.Reserve([]string{"r4"}, now.Add(jointoken.Lifetime)); !ok {
+	if _, err := d.Reserve(t.Context(), []string{"r4"}, now.Add(jointoken.Lifetime)); err != nil {
 		t.Fatal("r2 and r3 expired, so there is room")
 	}
 }
@@ -139,12 +139,12 @@ func TestDeadLease(t *testing.T) {
 		{"instance not answering", inventory.Lease{RunID: "x", Instance: "down@1", Since: old}, false},
 		{"instance not listed", inventory.Lease{RunID: "x", Instance: "gone@1", Since: young}, true},
 	} {
-		if got := d.DeadLease(tc.lease, now); got != tc.dead {
+		if got := d.DeadLease(t.Context(), tc.lease, now); got != tc.dead {
 			t.Errorf("%s: dead = %v, want %v", tc.name, got, tc.dead)
 		}
 	}
 	var none *Directory
-	if none.DeadLease(inventory.Lease{RunID: "x", Instance: "a@0"}, now) {
+	if none.DeadLease(t.Context(), inventory.Lease{RunID: "x", Instance: "a@0"}, now) {
 		t.Error("no directory cleared a lease")
 	}
 }

@@ -140,10 +140,11 @@ func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.St
 	lobby.JoinKey = testKey
 	lobby.leaseRetry = 20 * time.Millisecond
 	lobby.closeGrace = 10 * time.Millisecond
-	lobby.Instances = NewDirectory([]Instance{{ID: srv.ID, Internal: is.URL, Public: wsURL(is.URL) + "/instances/" + srv.ID + "/ws"}})
-	lobby.Instances.Poll(ctx)
+	dir := NewDirectory([]Instance{{ID: srv.ID, Internal: is.URL, Public: wsURL(is.URL) + "/instances/" + srv.ID + "/ws"}})
+	dir.Poll(ctx)
+	lobby.Instances = dir
 	runTown(ctx, lobby)
-	go lobby.Instances.Run(ctx, 10*time.Millisecond)
+	go dir.Run(ctx, 10*time.Millisecond)
 	ws := httptest.NewServer(http.HandlerFunc(lobby.HandleWS))
 
 	t.Cleanup(func() {
@@ -162,7 +163,7 @@ func wsURL(httpURL string) string {
 
 // instanceURL is where the harness's instance takes joins.
 func (h harness) instanceURL() string {
-	return h.world.Instances.list[0].Public
+	return h.world.Instances.(*Directory).list[0].Public
 }
 
 // token makes a join token for this harness's instance, as the world would.

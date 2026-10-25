@@ -49,11 +49,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	managerURL := os.Getenv("INSTANCE_MANAGER_URL")
 	list, err := server.ParseInstances(os.Getenv("INSTANCES"))
 	if err != nil {
 		return err
 	}
-	if len(list) == 0 {
+	if managerURL == "" && len(list) == 0 {
 		slog.Warn("INSTANCES is empty, so the town's entrance is always full")
 	}
 
@@ -72,7 +73,7 @@ func run() error {
 	lobby.TownMaxPlayers = townMax
 	lobby.Store = store
 	lobby.JoinKey = key
-	lobby.Instances = server.NewDirectory(list)
+	lobby.Instances = server.NewPool(managerURL, list)
 	reg.MustRegister(lobby.PendingSaves)
 	defer lobby.Close()
 
@@ -103,8 +104,10 @@ func run() error {
 		}
 	}()
 	go func() { errc <- loop.Run(ctx) }()
-	go lobby.Instances.Run(ctx, pollEvery)
-	slog.Info("world-server listening", "addr", srv.Addr, "instances", len(list), "tick_rate", rate, "town_max_players", townMax)
+	if dir, ok := lobby.Instances.(*server.Directory); ok {
+		go dir.Run(ctx, pollEvery)
+	}
+	slog.Info("world-server listening", "addr", srv.Addr, "instances", len(list), "instance_manager", managerURL, "tick_rate", rate, "town_max_players", townMax)
 
 	select {
 	case <-ctx.Done():

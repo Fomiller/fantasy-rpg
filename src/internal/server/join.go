@@ -62,7 +62,7 @@ type Lobby struct {
 	conns map[string]*client
 	// Instances is where the town's entrance sends players. With none, every
 	// instance is full.
-	Instances *Directory
+	Instances Pool
 	// JoinKey signs the tokens instance servers check.
 	JoinKey []byte
 
@@ -302,7 +302,7 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 		conn.Close(websocket.StatusTryAgainLater, "characters unavailable")
 		return
 	}
-	if s.Instances.DeadLease(ch.Run, time.Now()) {
+	if s.deadLease(ctx, ch.Run) {
 		log.Warn("clearing a dead run lease", "run", ch.Run.RunID, "instance", ch.Run.Instance)
 		s.clearRun(c, ch.Run.RunID)
 		ch.Run = inventory.Lease{}
@@ -394,7 +394,7 @@ func (s *Lobby) waitRun(c *client) {
 		if err != nil || !ok {
 			continue
 		}
-		if s.Instances.DeadLease(ch.Run, time.Now()) {
+		if s.deadLease(c.ctx, ch.Run) {
 			s.log.Warn("clearing a dead run lease", "name", c.name, "run", ch.Run.RunID, "instance", ch.Run.Instance)
 			s.clearRun(c, ch.Run.RunID)
 			continue

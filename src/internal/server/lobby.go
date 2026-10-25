@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -331,16 +332,37 @@ func (s *Lobby) enterBlocked(c *client) string {
 
 // sendTicket picks an instance, sends the player there and closes. The
 // instance server takes the lease, so a ticket never used leaves nothing
-// behind.
+// behind. The pick can be a call to the instance manager, so it runs off the
+// loop and the player stays entering until it answers.
 func (s *Lobby) sendTicket(c *client) {
-	now := time.Now()
-	runID := items.NewID()
-	inst, st, ok := s.Instances.Reserve([]string{runID}, now)
-	if !ok {
+	if s.Instances == nil {
 		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))
 		return
 	}
-	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: st.ID + "@" + st.Boot, Run: runID}, now)
+	c.entering = true
+	runID := items.NewID()
+	go func() {
+		ctx, cancel := context.WithTimeout(c.ctx, managerTimeout)
+		p, err := s.Instances.Reserve(ctx, []string{runID}, time.Now())
+		cancel()
+		s.enqueue(func() { s.ticket(c, runID, p, err) })
+	}()
+}
+
+func (s *Lobby) ticket(c *client, runID string, p Placement, err error) {
+	c.entering = false
+	if c.gone || c.lobby == nil {
+		return
+	}
+	if err != nil {
+		if !errors.Is(err, ErrFull) {
+			s.log.Error("reserve instance", "name", c.name, "err", err)
+		}
+		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))
+		return
+	}
+	now := time.Now()
+	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: p.ID + "@" + p.Boot, Run: runID}, now)
 	if err != nil {
 		s.log.Error("sign join token", "name", c.name, "err", err)
 		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))
@@ -348,9 +370,9 @@ func (s *Lobby) sendTicket(c *client) {
 	}
 	c.lobby = nil
 	s.leaveTown(c)
-	s.sendToClient(c, protocol.Ticket(inst.Public, token, inst.ID, jointoken.Lifetime))
+	s.sendToClient(c, protocol.Ticket(p.URL, token, p.ID, jointoken.Lifetime))
 	time.AfterFunc(s.closeGrace, func() { c.close(websocket.StatusNormalClosure, "entering instance") })
-	s.log.Info("sent to instance", "name", c.name, "instance", inst.ID, "run", runID)
+	s.log.Info("sent to instance", "name", c.name, "instance", p.ID, "run", runID)
 }
 
 // stashKept adds an extracted bag to a copy of the stash. What does not fit
