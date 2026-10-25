@@ -12,3 +12,4 @@
 - [Instances](design/instances.md)
 - [Hub town](design/hub-town.md)
 - [Instance manager](design/instance-manager.md)
+- [Scaling](design/scaling.md)
