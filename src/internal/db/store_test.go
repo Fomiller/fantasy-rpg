@@ -53,7 +53,7 @@ func sword() items.Instance {
 // The saved shape is the contract with every row already in the database.
 // Changing it needs a migration that rewrites the JSON.
 func TestItemJSONShape(t *testing.T) {
-	b, err := encodeItems([]items.Instance{sword()})
+	b, err := items.EncodeJSON([]items.Instance{sword()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestItemJSONShape(t *testing.T) {
 	if string(b) != want {
 		t.Fatalf("encoded\n%s\nwant\n%s", b, want)
 	}
-	got, err := decodeItems(b)
+	got, err := items.DecodeJSON(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestItemJSONShape(t *testing.T) {
 }
 
 func TestEmptyListsAreArrays(t *testing.T) {
-	b, err := encodeItems(nil)
+	b, err := items.EncodeJSON(nil)
 	if err != nil || string(b) != "[]" {
 		t.Fatalf("encoded nil as %s, %v", b, err)
 	}

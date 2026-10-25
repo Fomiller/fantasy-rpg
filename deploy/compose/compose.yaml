@@ -45,7 +45,7 @@ services:
       args:
         BINARY: world-server
     environment:
-      DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+      INVENTORY_URL: http://inventory:8080
       JOIN_TOKEN_KEY: dev-only
       KAFKA_BROKERS: redpanda:9092
       # Polled inside the network, handed to the client as localhost.
@@ -54,6 +54,26 @@ services:
         instance-1=http://instance-1:8080=ws://localhost:8082/instances/instance-1/ws
     ports:
       - "8080:8080"
+    depends_on:
+      inventory:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
+
+  # The only service with the database.
+  inventory:
+    profiles: [full]
+    image: fantasy-rpg/inventory:dev
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BINARY: inventory
+    environment:
+      DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8070:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -84,15 +104,15 @@ services:
       args:
         BINARY: instance-server
     environment: &instance-env
-      DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+      INVENTORY_URL: http://inventory:8080
       JOIN_TOKEN_KEY: dev-only
       INSTANCE_ID: instance-0
       KAFKA_BROKERS: redpanda:9092
     ports:
       - "8081:8080"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      inventory:
+        condition: service_started
       redpanda:
         condition: service_healthy
 

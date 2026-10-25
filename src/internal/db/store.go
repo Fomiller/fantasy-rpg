@@ -8,7 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	eventsv1 "github.com/Fomiller/fantasy-rpg/gen/go/events/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 )
@@ -48,7 +51,7 @@ func (s *Store) Load(ctx context.Context, name, class string) (inventory.Charact
 		return c, false, err
 	}
 	c.Run = lease.lease()
-	if c.Stash, err = decodeItems(stash); err != nil {
+	if c.Stash, err = items.DecodeJSON(stash); err != nil {
 		return c, false, fmt.Errorf("stash of %s: %w", name, err)
 	}
 	if xp == nil {
@@ -108,7 +111,8 @@ func (s *Store) SaveLobby(ctx context.Context, name, class string, l inventory.L
 		if tag.RowsAffected() == 0 {
 			return fmt.Errorf("%w: %s %s", inventory.ErrNoCharacter, name, class)
 		}
-		return saveStash(ctx, tx, account, stashJSON, false)
+		_, err = saveStash(ctx, tx, account, stashJSON, false)
+		return err
 	})
 }
 
@@ -140,7 +144,7 @@ func (s *Store) StartRun(ctx context.Context, name, class, runID, instance strin
 		if lastRun != nil && *lastRun == runID {
 			return inventory.ErrRunUsed
 		}
-		if c.Stash, err = decodeItems(stash); err != nil {
+		if c.Stash, err = items.DecodeJSON(stash); err != nil {
 			return fmt.Errorf("stash of %s: %w", name, err)
 		}
 		if err := decodeLoadout(&c, equipment, bag); err != nil {
@@ -196,7 +200,17 @@ func (s *Store) EndRun(ctx context.Context, runID string, c inventory.Character)
 			WHERE account_id = $1 AND class_id = $2`, account, c.Class, c.XP, equipment, bag, runID); err != nil {
 			return err
 		}
-		return saveStash(ctx, tx, account, stash, true)
+		version, err := saveStash(ctx, tx, account, stash, true)
+		if err != nil {
+			return err
+		}
+		return writeOutbox(ctx, tx, events.TopicInventoryApplied, c.Name, &eventsv1.InventoryApplied{
+			Version:      events.Version,
+			Account:      c.Name,
+			RunId:        runID,
+			StashVersion: version,
+			Time:         timestamppb.Now(),
+		})
 	})
 }
 
@@ -224,15 +238,18 @@ func lockAccount(ctx context.Context, tx pgx.Tx, name, class string) (int64, nul
 	return account, lease, err
 }
 
-// saveStash also drops the lease when the write is a run end.
-func saveStash(ctx context.Context, tx pgx.Tx, account int64, stash []byte, endRun bool) error {
-	_, err := tx.Exec(ctx, `
-		UPDATE accounts SET stash = $2, updated_at = now(),
+// saveStash also drops the lease when the write is a run end. It returns the
+// new stash version.
+func saveStash(ctx context.Context, tx pgx.Tx, account int64, stash []byte, endRun bool) (int64, error) {
+	var version int64
+	err := tx.QueryRow(ctx, `
+		UPDATE accounts SET stash = $2, stash_version = stash_version + 1, updated_at = now(),
 			active_run_id = CASE WHEN $3 THEN NULL ELSE active_run_id END,
 			active_instance = CASE WHEN $3 THEN NULL ELSE active_instance END,
 			active_since = CASE WHEN $3 THEN NULL ELSE active_since END
-		WHERE id = $1`, account, stash, endRun)
-	return err
+		WHERE id = $1
+		RETURNING stash_version`, account, stash, endRun).Scan(&version)
+	return version, err
 }
 
 type nullLease struct {
@@ -256,10 +273,10 @@ func (n nullLease) lease() inventory.Lease {
 
 func decodeLoadout(c *inventory.Character, equipment, bag []byte) error {
 	var err error
-	if c.Loadout.Equipment, err = decodeItems(equipment); err != nil {
+	if c.Loadout.Equipment, err = items.DecodeJSON(equipment); err != nil {
 		return fmt.Errorf("equipment of %s %s: %w", c.Name, c.Class, err)
 	}
-	if c.Loadout.Items, err = decodeItems(bag); err != nil {
+	if c.Loadout.Items, err = items.DecodeJSON(bag); err != nil {
 		return fmt.Errorf("bag of %s %s: %w", c.Name, c.Class, err)
 	}
 	return nil
@@ -275,12 +292,12 @@ func checkStash(stash []items.Instance) error {
 }
 
 func encodeAll(c inventory.Character) (stash, equipment, bag []byte, err error) {
-	if stash, err = encodeItems(c.Stash); err != nil {
+	if stash, err = items.EncodeJSON(c.Stash); err != nil {
 		return
 	}
-	if equipment, err = encodeItems(c.Loadout.Equipment); err != nil {
+	if equipment, err = items.EncodeJSON(c.Loadout.Equipment); err != nil {
 		return
 	}
-	bag, err = encodeItems(c.Loadout.Items)
+	bag, err = items.EncodeJSON(c.Loadout.Items)
 	return
 }

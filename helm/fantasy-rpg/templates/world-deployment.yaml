@@ -47,9 +47,7 @@ spec:
             {{- if .Values.joinKey.secretName }}
             {{- include "chart.joinKeyEnv" . | nindent 12 }}
             {{- end }}
-            {{- if .Values.postgres.enabled }}
-            {{- include "chart.databaseEnv" . | nindent 12 }}
-            {{- end }}
+            {{- include "chart.inventoryEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /healthz

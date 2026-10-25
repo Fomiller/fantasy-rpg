@@ -48,6 +48,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-instance-manager" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "chart.inventorySelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-inventory
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "chart.inventoryName" -}}
+{{- printf "%s-inventory" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "chart.inventoryEnv" -}}
+- name: INVENTORY_URL
+  value: http://{{ include "chart.inventoryName" . }}:8080
+{{- end -}}
+
 {{- define "chart.joinKeyEnv" -}}
 - name: JOIN_TOKEN_KEY
   valueFrom:
