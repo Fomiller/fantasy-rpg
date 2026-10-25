@@ -66,6 +66,9 @@ type Lobby struct {
 	// JoinKey signs the tokens instance servers check.
 	JoinKey []byte
 
+	// released runs on the loop once a player's last write lands.
+	released func(*client)
+
 	// PendingSaves counts run ends that are past their patience and still
 	// retrying. Register it to export it.
 	PendingSaves prometheus.Gauge

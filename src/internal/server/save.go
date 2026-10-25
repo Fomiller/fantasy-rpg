@@ -145,8 +145,11 @@ func (s *Lobby) saveLoop(name string, w *writer) {
 		}
 	}
 	s.enqueue(func() {
-		if s.owner(name, w) != nil {
+		if c := s.owner(name, w); c != nil {
 			delete(s.conns, name)
+			if s.released != nil {
+				s.released(c)
+			}
 		}
 	})
 }

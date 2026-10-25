@@ -13,6 +13,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
+	"github.com/Fomiller/fantasy-rpg/src/internal/gameserver"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
@@ -216,5 +217,97 @@ func TestEmptyInstanceResets(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if n := resets.Load(); n != 1 {
 		t.Fatalf("resets = %d, want no more while the new player is in", n)
+	}
+}
+
+func listedRuns(t *testing.T, h harness) []string {
+	t.Helper()
+	runs, err := h.srv.GameServer.Runs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runs
+}
+
+// A run holds a seat on the runs list until its run end lands.
+func TestRunsListHoldsTheSeat(t *testing.T) {
+	spy := newSpy()
+	spy.hold = make(chan struct{})
+	h := serveWith(t, testCave(), calm(sim.DefaultConfig()), spy)
+	conn, _ := joinAs(t, h, "ann")
+	lease := leaseOf(t, spy.Memory, "ann")
+	if runs := listedRuns(t, h); !slices.Equal(runs, []string{lease.RunID}) {
+		t.Fatalf("runs in a run = %v, want %s", runs, lease.RunID)
+	}
+	conn.Close(websocket.StatusNormalClosure, "")
+	waitCalls(t, spy, []string{"load", "create", "load", "load", "start run", "end run"})
+	if runs := listedRuns(t, h); !slices.Equal(runs, []string{lease.RunID}) {
+		t.Fatalf("runs with the run end held = %v, want the seat kept", runs)
+	}
+	close(spy.hold)
+	deadline := time.Now().Add(2 * time.Second)
+	for len(listedRuns(t, h)) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("runs = %v, want the seat freed once the run end landed", listedRuns(t, h))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// A run started before SIGTERM lands its run end. The drain turns new joins
+// away and, once it times out, ends the run as a disconnect does.
+func TestDrainLandsTheRunEnd(t *testing.T) {
+	h := start(t)
+	conn, _ := joinAs(t, h, "ann")
+	if !leaseOf(t, h.srv.Store, "ann").Held() {
+		t.Fatal("ann has no lease")
+	}
+
+	drained := make(chan struct{})
+	go func() {
+		h.srv.Drain(context.Background(), 300*time.Millisecond)
+		close(drained)
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for !instanceStatus(t, h).Draining {
+		if time.Now().After(deadline) {
+			t.Fatal("status never said draining")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if capacity := h.srv.GameServer.(*gameserver.Local).RunCapacity(); capacity != 0 {
+		t.Fatalf("run capacity while draining = %d, want 0", capacity)
+	}
+	seed(t, h, inventory.Character{Name: "bob", Loadout: h.srv.starterKit()})
+	late := dial(t, h.instanceURL())
+	sendToken(t, late, h.token(t, "bob", items.NewID(), time.Now()))
+	wantClose(t, late, websocket.StatusTryAgainLater, "instance draining")
+
+	wantClose(t, conn, websocket.StatusGoingAway, "instance draining")
+	select {
+	case <-drained:
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain never returned")
+	}
+	if l := leaseOf(t, h.srv.Store, "ann"); l.Held() {
+		t.Fatalf("lease after the drain = %+v, want the run end landed", l)
+	}
+	if runs := listedRuns(t, h); len(runs) != 0 {
+		t.Fatalf("runs after the drain = %v, want none", runs)
+	}
+}
+
+// With no one in, the drain is done at once.
+func TestDrainOnEmptyReturns(t *testing.T) {
+	h := start(t)
+	done := make(chan struct{})
+	go func() {
+		h.srv.Drain(context.Background(), time.Minute)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain on an empty instance waited")
 	}
 }

@@ -165,15 +165,18 @@ type GameServer interface {
 	// resets the world, as an empty instance does today.
 	Shutdown() error
 	SetAnnotation(key, value string) error
+	AddRun(runID string) error
 	RemoveRun(runID string) error
+	Runs() ([]string, error)
 	SetRunCapacity(n int64) error
 }
 ```
 
 - The Agones one is used when the sidecar's `AGONES_SDK_GRPC_PORT` is
   set. Otherwise a local one.
-- On start: build the world, set the `fantasy-rpg.fomiller.com/boot`
-  annotation, call `Ready()`. `Health()` every 2 s from the tick loop, so a
+- On start: build the world, set the `boot` annotation, call `Ready()`
+  once the server listens. The SDK prefixes the key, so it lands as
+  `agones.dev/sdk-boot`. `Health()` every 2 s from the tick loop, so a
   stuck tick fails health.
 - On empty: set run capacity to 0, so no allocation can add a seat. Read
   the list again. If a run id landed first, restore capacity and stay.
@@ -193,7 +196,7 @@ order:
   server wins. One cave fills before the next, as now.
 - No match is `full`. With the buffer, that only happens at `maxReplicas`.
 - The answer's GameServer name is the instance id. The boot id comes from
-  the annotation in the allocation status. The token's `inst` keeps its
+  the `agones.dev/sdk-boot` annotation in the allocation status. The token's `inst` keeps its
   `id@boot` form.
 
 ## Routing
