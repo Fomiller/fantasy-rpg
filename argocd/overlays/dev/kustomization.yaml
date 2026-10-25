@@ -7,6 +7,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Agones is cluster-wide, and this repo runs one environment per cluster, so
+# it installs once from here.
+resources:
+  - ../../agones
+
 helmCharts:
   # Nothing is published on the first commit, so this version does not exist
   # yet. Merging to the default branch runs publish-chart.yml, and the

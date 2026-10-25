@@ -117,7 +117,7 @@ The game runs in the homelab cluster. The world server is public at `wss://fanta
 - `infra/` creates both ECR repositories. `deploy-infra.yml` applies it.
 - homelab's services ApplicationSet reads `argocd.yaml` and deploys `argocd/overlays/dev`.
 - Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
-- `argocd/agones` installs Agones into `agones-system`, once for the cluster. homelab's `k8s/apps/agones` is the Application that syncs it.
+- `argocd/agones` installs Agones into `agones-system`. `argocd/overlays/dev` includes it, so it syncs with the same Application.
 - The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server and each `/instances/<pod>/` prefix to that pod's Service.
 - Both servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 
