@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,17 +20,26 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
+	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
 
+// testKey signs every token in these tests.
+var testKey = []byte("test-join-key")
+
+// harness is a world server and one instance server on one store, as the
+// game runs them.
 type harness struct {
+	// url is the world server's.
 	url   string
 	enemy sim.EntityID
 	srv   *Server
+	world *Lobby
 }
 
 // testCave spawns players at the origin, next to one enemy, with the exit
@@ -48,9 +58,9 @@ func start(t *testing.T) harness {
 	return startCave(t, testCave(), sim.DefaultConfig())
 }
 
-func startCave(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
+func startCave(t *testing.T, cave caves.Cave, cfg sim.Config, configure ...func(*Server)) harness {
 	t.Helper()
-	return serve(t, cave, calm(cfg))
+	return serveWith(t, cave, calm(cfg), inventory.NewMemory(), configure...)
 }
 
 // calm stops enemies moving or reaching anyone, so the only damage in these
@@ -69,14 +79,18 @@ func serve(t *testing.T, cave caves.Cave, cfg sim.Config) harness {
 	return serveWith(t, cave, cfg, inventory.NewMemory())
 }
 
-// configure runs before the server starts, so it can set what the tick reads.
+func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+// configure runs before the servers start, so it can set what they read.
 func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.Store, configure ...func(*Server)) harness {
 	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
 	world := cave.NewWorld(cfg, loot)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, sim.Melee)
-	srv := New(world, cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(world, cave, loot, quiet())
 	srv.Store = store
+	srv.Tokens = jointoken.NewVerifier(testKey)
+	srv.closeGrace = 10 * time.Millisecond
 	for _, f := range configure {
 		f(srv)
 	}
@@ -88,14 +102,49 @@ func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.St
 		Step:     srv.Step,
 	}
 	go loop.Run(ctx)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /status", srv.HandleStatus)
+	mux.HandleFunc("GET /instances/"+srv.ID+"/ws", srv.HandleWS)
+	is := httptest.NewServer(mux)
 
-	hs := httptest.NewServer(http.HandlerFunc(srv.HandleWS))
+	lobby := NewLobby(sim.NewWorld(cfg, nil), items.NewRoller(items.Default(), 2), quiet())
+	lobby.Store = store
+	lobby.JoinKey = testKey
+	lobby.leaseRetry = 20 * time.Millisecond
+	lobby.closeGrace = 10 * time.Millisecond
+	lobby.Instances = NewDirectory([]Instance{{ID: srv.ID, Internal: is.URL, Public: wsURL(is.URL) + "/instances/" + srv.ID + "/ws"}})
+	lobby.Instances.Poll(ctx)
+	go lobby.Run(ctx)
+	go lobby.Instances.Run(ctx, 10*time.Millisecond)
+	ws := httptest.NewServer(http.HandlerFunc(lobby.HandleWS))
+
 	t.Cleanup(func() {
-		hs.Close()
+		ws.Close()
+		is.Close()
 		cancel()
+		lobby.Close()
 		srv.Close()
 	})
-	return harness{url: "ws" + strings.TrimPrefix(hs.URL, "http"), enemy: enemy, srv: srv}
+	return harness{url: wsURL(ws.URL), enemy: enemy, srv: srv, world: lobby}
+}
+
+func wsURL(httpURL string) string {
+	return "ws" + strings.TrimPrefix(httpURL, "http")
+}
+
+// instanceURL is where the harness's instance takes joins.
+func (h harness) instanceURL() string {
+	return h.world.Instances.list[0].Public
+}
+
+// token makes a join token for this harness's instance, as the world would.
+func (h harness) token(t *testing.T, name, run string, at time.Time) string {
+	t.Helper()
+	tok, err := jointoken.Sign(testKey, jointoken.Claims{Name: name, Class: classes.Starter, Inst: h.srv.Instance(), Run: run}, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
 }
 
 func dial(t *testing.T, url string) *websocket.Conn {
@@ -121,23 +170,26 @@ func send(t *testing.T, conn *websocket.Conn, msg *gamev1.ClientMessage) {
 	}
 }
 
-func join(t *testing.T, conn *websocket.Conn) uint64 {
-	t.Helper()
-	return joinAccepted(t, conn).GetPlayerId()
-}
-
 var testers atomic.Int64
 
-func joinAccepted(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
+// join puts a new player in the cave and returns their instance connection.
+func join(t *testing.T, h harness) (*websocket.Conn, uint64) {
 	t.Helper()
-	return joinAs(t, conn, fmt.Sprintf("tester%d", testers.Add(1)))
+	conn, joined := joinAccepted(t, h)
+	return conn, joined.GetPlayerId()
 }
 
-// joinAs joins and goes straight from the lobby into the cave.
-func joinAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.JoinAccepted {
+func joinAccepted(t *testing.T, h harness) (*websocket.Conn, *gamev1.JoinAccepted) {
 	t.Helper()
-	lobbyAs(t, conn, name)
-	return enterInstance(t, conn)
+	return joinAs(t, h, fmt.Sprintf("tester%d", testers.Add(1)))
+}
+
+// joinAs joins the world and goes straight from its lobby into the cave.
+func joinAs(t *testing.T, h harness, name string) (*websocket.Conn, *gamev1.JoinAccepted) {
+	t.Helper()
+	world := dial(t, h.url)
+	lobbyAs(t, world, name)
+	return enterInstance(t, world)
 }
 
 func lobbyAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.Lobby {
@@ -148,10 +200,55 @@ func lobbyAs(t *testing.T, conn *websocket.Conn, name string) *gamev1.Lobby {
 	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil }).GetLobby()
 }
 
-func enterInstance(t *testing.T, conn *websocket.Conn) *gamev1.JoinAccepted {
+// enterInstance sends Enter Cave on a world connection and follows the
+// ticket, as the client does.
+func enterInstance(t *testing.T, world *websocket.Conn) (*websocket.Conn, *gamev1.JoinAccepted) {
 	t.Helper()
-	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
-	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
+	ticket := enterTicket(t, world)
+	conn := dial(t, ticket.GetUrl())
+	sendToken(t, conn, ticket.GetToken())
+	return conn, waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
+}
+
+func enterTicket(t *testing.T, world *websocket.Conn) *gamev1.InstanceTicket {
+	t.Helper()
+	send(t, world, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
+	ticket := waitFor(t, world, func(m *gamev1.ServerMessage) bool { return m.GetTicket() != nil }).GetTicket()
+	wantClose(t, world, websocket.StatusNormalClosure, "entering instance")
+	return ticket
+}
+
+func sendToken(t *testing.T, conn *websocket.Conn, token string) {
+	t.Helper()
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_InstanceJoin{InstanceJoin: &gamev1.InstanceJoinRequest{Token: token}}})
+}
+
+// wantClose reads past any messages until the server closes with code and reason.
+func wantClose(t *testing.T, conn *websocket.Conn, code websocket.StatusCode, reason string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for {
+		_, _, err := conn.Read(ctx)
+		if err == nil {
+			continue
+		}
+		var closed websocket.CloseError
+		if !errors.As(err, &closed) || closed.Code != code || closed.Reason != reason {
+			t.Fatalf("got %v, want close %d %q", err, code, reason)
+		}
+		return
+	}
+}
+
+// backInWorld rejoins the world after a run and waits for the run end to land.
+func backInWorld(t *testing.T, h harness, name string) *websocket.Conn {
+	t.Helper()
+	conn, lobby := rejoinLobby(t, h.url, name)
+	if lobby.GetSaving() {
+		waitFor(t, conn, saving(false))
+	}
+	return conn
 }
 
 // waitFor reads until match returns true, or fails after two seconds.
@@ -185,8 +282,7 @@ func entity(snap *gamev1.WorldSnapshot, id uint64) *gamev1.EntityState {
 
 func TestJoinThenMoveShowsInSnapshot(t *testing.T) {
 	h := start(t)
-	conn := dial(t, h.url)
-	id := join(t, conn)
+	conn, id := join(t, h)
 
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Move{
 		Move: &gamev1.MoveInput{Seq: 1, Direction: &gamev1.Vec2{X: 0, Y: 1}},
@@ -199,8 +295,7 @@ func TestJoinThenMoveShowsInSnapshot(t *testing.T) {
 
 func TestAttackBroadcastsDamage(t *testing.T) {
 	h := start(t)
-	conn := dial(t, h.url)
-	id := join(t, conn)
+	conn, id := join(t, h)
 
 	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Attack{
 		Attack: &gamev1.AttackRequest{Seq: 1, TargetId: uint64(h.enemy), AbilityId: "basic"},
@@ -213,10 +308,8 @@ func TestAttackBroadcastsDamage(t *testing.T) {
 
 func TestBothClientsSeeEachOther(t *testing.T) {
 	h := start(t)
-	a := dial(t, h.url)
-	b := dial(t, h.url)
-	idA := join(t, a)
-	idB := join(t, b)
+	a, idA := join(t, h)
+	b, idB := join(t, h)
 
 	waitFor(t, a, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), idB) != nil })
 	waitFor(t, b, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), idA) != nil })
@@ -224,10 +317,8 @@ func TestBothClientsSeeEachOther(t *testing.T) {
 
 func TestDisconnectRemovesPlayer(t *testing.T) {
 	h := start(t)
-	a := dial(t, h.url)
-	b := dial(t, h.url)
-	idA := join(t, a)
-	join(t, b)
+	a, idA := join(t, h)
+	b, _ := join(t, h)
 
 	a.Close(websocket.StatusNormalClosure, "")
 	waitFor(t, b, func(m *gamev1.ServerMessage) bool {
@@ -268,10 +359,8 @@ func attack(t *testing.T, conn *websocket.Conn, seq uint32, target sim.EntityID)
 
 func TestTwoClientsKillSameEnemy(t *testing.T) {
 	h := start(t)
-	a := dial(t, h.url)
-	b := dial(t, h.url)
-	idA := join(t, a)
-	idB := join(t, b)
+	a, idA := join(t, h)
+	b, idB := join(t, h)
 
 	// Both clients must see every hit the same way. Starter weapon damage
 	// rolls, so track health from each hit instead of assuming a number.
@@ -316,8 +405,8 @@ func TestJoinSendsInstanceLayout(t *testing.T) {
 	cave.PlayerSpawns = []sim.Vec2{{X: 1, Y: 2}, {X: 3, Y: 4}}
 	h := startCave(t, cave, sim.DefaultConfig())
 
-	first := joinAccepted(t, dial(t, h.url))
-	second := joinAccepted(t, dial(t, h.url))
+	_, first := joinAccepted(t, h)
+	_, second := joinAccepted(t, h)
 	layout := first.GetLayout()
 	if layout.GetName() != "test" || len(layout.GetWalls()) != 1 || layout.GetExtraction().GetMin().GetX() != 500 {
 		t.Fatalf("layout = %v", layout)
@@ -327,34 +416,35 @@ func TestJoinSendsInstanceLayout(t *testing.T) {
 	}
 }
 
-func TestExtractionReturnsToLobby(t *testing.T) {
+// An extraction ends the run: the instance closes, the world opens the lobby
+// on what the run banked, and the next Enter Cave is a new run.
+func TestExtractionEndsTheRun(t *testing.T) {
 	cave := testCave()
 	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
 	cfg := sim.DefaultConfig()
 	cfg.ExtractTime = 100 * time.Millisecond
 	h := startCave(t, cave, cfg)
 
-	leaver := dial(t, h.url)
-	other := dial(t, h.url)
-	id := join(t, leaver)
-	join(t, other)
+	leaver, joined := joinAs(t, h, "ann")
+	id := joined.GetPlayerId()
+	other, _ := join(t, h)
 
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
 	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
-	waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil && !m.GetLobby().GetSaving() })
+	wantClose(t, leaver, websocket.StatusNormalClosure, "run over")
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool {
 		return m.GetSnapshot() != nil && entity(m.GetSnapshot(), id) == nil
 	})
 
-	if again := enterInstance(t, leaver); again.GetPlayerId() == id || again.GetPlayerId() == 0 {
+	world := backInWorld(t, h, "ann")
+	if _, again := enterInstance(t, world); again.GetPlayerId() == id || again.GetPlayerId() == 0 {
 		t.Fatalf("entered again as %d, want a new player after %d", again.GetPlayerId(), id)
 	}
 }
 
 func TestJoinEquipsStarterKit(t *testing.T) {
 	h := start(t)
-	conn := dial(t, h.url)
-	id := join(t, conn)
+	conn, id := join(t, h)
 
 	eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment()
 	if len(eq.GetItems()) != len(items.StarterKit) || eq.GetItems()[0].GetItemDefId() != "rusty_sword" {
@@ -377,8 +467,7 @@ func stat(eq *gamev1.EquipmentUpdated, name string) int32 {
 
 func TestUnequipSendsNewStats(t *testing.T) {
 	h := start(t)
-	conn := dial(t, h.url)
-	join(t, conn)
+	conn, _ := join(t, h)
 
 	armed := waitFor(t, conn, equipmentWith("rusty_sword")).GetEquipment()
 	if stat(armed, "max_health") != 120 || stat(armed, "armor") < 5 {
@@ -423,8 +512,7 @@ func equipmentWith(defID string) func(*gamev1.ServerMessage) bool {
 
 func TestLootThenEquip(t *testing.T) {
 	h := start(t)
-	conn := dial(t, h.url)
-	join(t, conn)
+	conn, _ := join(t, h)
 
 	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
 	inv := waitFor(t, conn, inventoryWith("rusty_sword")).GetInventory()
@@ -454,52 +542,34 @@ func TestLootThenEquip(t *testing.T) {
 	}
 }
 
+// A dropped connection ends the run with what the player carried, and the
+// world lobby opens on it.
 func TestReconnectGetsItemsBack(t *testing.T) {
 	h := start(t)
-	first := dial(t, h.url)
-	joinAs(t, first, "ann")
+	first, _ := joinAs(t, h, "ann")
 	sendItem(t, first, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Unequip{Unequip: &gamev1.UnequipRequest{Slot: "weapon"}}})
 	sword := waitFor(t, first, inventoryWith("rusty_sword")).GetInventory().GetItems()[0]
 	first.Close(websocket.StatusNormalClosure, "")
 
-	// The server frees the name once it handles the disconnect, so retry
-	// until it does.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		conn := dial(t, h.url)
-		send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		_, _, err := conn.Read(ctx)
-		cancel()
-		if err == nil {
-			inv := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetInventory() != nil }).GetInventory()
-			if len(inv.GetItems()) != 1 || inv.GetItems()[0].GetId() != sword.GetId() {
-				t.Fatalf("inventory after reconnect = %v, want %v", inv.GetItems(), sword)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("could not rejoin as ann: %v", err)
-		}
-		time.Sleep(20 * time.Millisecond)
+	conn := backInWorld(t, h, "ann")
+	if inv := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetInventory() != nil }).GetInventory(); len(inv.GetItems()) != 1 || inv.GetItems()[0].GetId() != sword.GetId() {
+		t.Fatalf("inventory after reconnect = %v, want %v", inv.GetItems(), sword)
 	}
 }
 
+// A second token for a name already in this instance is turned away, even
+// for a new run.
 func TestNameInUseIsRejected(t *testing.T) {
 	h := start(t)
-	joinAs(t, dial(t, h.url), "ann")
-	second := dial(t, h.url)
-	send(t, second, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{Name: "ann"}}})
-	_, _, err := second.Read(context.Background())
-	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
-		t.Fatalf("got %v, want policy violation close", err)
-	}
+	joinAs(t, h, "ann")
+	second := dial(t, h.instanceURL())
+	sendToken(t, second, h.token(t, "ann", items.NewID(), time.Now()))
+	wantClose(t, second, websocket.StatusPolicyViolation, "already in a run")
 }
 
 func TestAbilitiesOverTheWire(t *testing.T) {
 	h := start(t)
-	conn := dial(t, h.url)
-	joined := joinAccepted(t, conn)
+	conn, joined := joinAccepted(t, h)
 	if c := joined.GetClassInfo(); c.GetId() != "warrior" || c.GetBasic() != "slash" || len(c.GetAbilities()) != 3 {
 		t.Fatalf("class = %v", c)
 	}
@@ -552,9 +622,8 @@ func TestLootWindowOverTheWire(t *testing.T) {
 	cave := testCave()
 	cave.Chests = []sim.Vec2{{X: 0, Y: 20}}
 	h := startCave(t, cave, sim.DefaultConfig())
-	ann, bob := dial(t, h.url), dial(t, h.url)
-	join(t, ann)
-	join(t, bob)
+	ann, _ := join(t, h)
+	bob, _ := join(t, h)
 
 	chest := chestID(t, ann)
 	isLoot := func(m *gamev1.ServerMessage) bool { return m.GetLoot().GetTargetId() == chest }
@@ -592,8 +661,7 @@ func TestLootOpenOutOfRangeIsClosed(t *testing.T) {
 	cave := testCave()
 	cave.Chests = []sim.Vec2{{X: -300}}
 	h := startCave(t, cave, sim.DefaultConfig())
-	conn := dial(t, h.url)
-	join(t, conn)
+	conn, _ := join(t, h)
 
 	chest := chestID(t, conn)
 	sendItem(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_LootOpen{LootOpen: &gamev1.LootOpenRequest{TargetId: chest}}})
@@ -625,8 +693,8 @@ func TestExtractionSavesXP(t *testing.T) {
 	cfg.ExtractTime = 100 * time.Millisecond
 	h := startCave(t, cave, cfg)
 
-	conn := dial(t, h.url)
-	id := joinAs(t, conn, "ann").GetPlayerId()
+	conn, joined := joinAs(t, h, "ann")
+	id := joined.GetPlayerId()
 	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id })
 	// An empty run still banks the flat extraction bonus.
 	waitSaved(t, h, "ann", func(c inventory.Character) bool { return c.XP == cfg.Classes.Progression.ExtractBonus })
@@ -636,8 +704,7 @@ func TestJoinLoadsBankedXP(t *testing.T) {
 	h := start(t)
 	prog := sim.DefaultConfig().Classes.Progression
 	seed(t, h, inventory.Character{Name: "ann", XP: prog.XPToReach(prog.MaxLevel), Loadout: h.srv.starterKit()})
-	conn := dial(t, h.url)
-	joined := joinAs(t, conn, "ann")
+	conn, joined := joinAs(t, h, "ann")
 	if eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment(); stat(eq, "max_health") != 165 {
 		t.Fatalf("max health = %d, want the level 10 bonus", stat(eq, "max_health"))
 	}
@@ -657,7 +724,8 @@ func TestJoinLoadsBankedXP(t *testing.T) {
 func TestJoinSendsCharacter(t *testing.T) {
 	h := start(t)
 	seed(t, h, inventory.Character{Name: "ann", XP: 120, Loadout: h.srv.starterKit()})
-	c := joinAs(t, dial(t, h.url), "ann").GetCharacter()
+	_, joined := joinAs(t, h, "ann")
+	c := joined.GetCharacter()
 	want := &gamev1.CharacterInfo{Name: "ann", ClassId: "warrior", Level: 2, Xp: 120, LevelXp: 20, XpToNext: 150}
 	if !proto.Equal(c, want) {
 		t.Fatalf("character = %v, want %v", c, want)
@@ -703,7 +771,7 @@ func lootChest(t *testing.T, conn *websocket.Conn) {
 }
 
 // The chest's XP comes first, then the level it gave, then the summary on
-// Extracted, and only then the lobby.
+// Extracted, and only then the close.
 func TestExtractionSendsSummaryLast(t *testing.T) {
 	cave := testCave()
 	cave.Extraction = sim.Rect{Min: sim.Vec2{X: -20, Y: -20}, Max: sim.Vec2{X: 20, Y: 20}}
@@ -713,9 +781,9 @@ func TestExtractionSendsSummaryLast(t *testing.T) {
 	h := startCave(t, cave, cfg)
 	seed(t, h, inventory.Character{Name: "ann", XP: 90, Loadout: h.srv.starterKit()})
 
-	leaver, other := dial(t, h.url), dial(t, h.url)
-	id := joinAs(t, leaver, "ann").GetPlayerId()
-	join(t, other)
+	leaver, joined := joinAs(t, h, "ann")
+	id := joined.GetPlayerId()
+	other, _ := join(t, h)
 	lootChest(t, leaver)
 
 	var bag []*gamev1.Item
@@ -747,8 +815,11 @@ func TestExtractionSendsSummaryLast(t *testing.T) {
 	if len(bag) == 0 || !proto.Equal(summary, want) {
 		t.Fatalf("summary = %v, want %v", summary, want)
 	}
-	if next := waitFor(t, leaver, func(m *gamev1.ServerMessage) bool { return true }); next.GetLobby() == nil {
-		t.Fatalf("after the summary got %v, want the lobby", next)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var closed websocket.CloseError
+	if _, b, err := leaver.Read(ctx); !errors.As(err, &closed) || closed.Code != websocket.StatusNormalClosure || closed.Reason != "run over" {
+		t.Fatalf("after the summary got %x, %v, want the close", b, err)
 	}
 
 	seen := waitFor(t, other, func(m *gamev1.ServerMessage) bool { return m.GetExtracted().GetPlayerId() == id }).GetExtracted()
@@ -769,8 +840,7 @@ func TestDeathSendsRunEnded(t *testing.T) {
 	kit := h.srv.starterKit()
 	seed(t, h, inventory.Character{Name: "ann", XP: 99, Loadout: kit, Stash: []items.Instance{potion}})
 
-	conn := dial(t, h.url)
-	joinAs(t, conn, "ann")
+	conn, _ := joinAs(t, h, "ann")
 	lootChest(t, conn)
 
 	msgs := progress(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetRunEnded() != nil })
@@ -789,7 +859,8 @@ func TestDeathSendsRunEnded(t *testing.T) {
 	}
 
 	// Back in the lobby with the starter kit, an empty bag and the stash as it was.
-	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil })
+	wantClose(t, conn, websocket.StatusNormalClosure, "run over")
+	conn = backInWorld(t, h, "ann")
 	if eq := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetEquipment() != nil }).GetEquipment(); len(eq.GetItems()) != len(items.StarterKit) {
 		t.Fatalf("lobby gear after death = %v, want the starter kit", eq.GetItems())
 	}

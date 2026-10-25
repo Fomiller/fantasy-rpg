@@ -1,7 +1,5 @@
 # Written once, then it is yours. `nix run .#generate` never touches it again.
 
-replicas: 1
-
 # A hello-world until the repo has an image of its own. http-echo takes the
 # port on the command line, so it serves on whatever port the chart declares.
 image:
@@ -20,12 +18,26 @@ imagePullSecrets: []
 # Plain configuration in the container env shape, e.g. TICK_RATE or LOOT_SEED.
 env: []
 
-# The world server, from the same image with its own command. Off by default
-# because the default image above is http-echo, which has no /world-server.
+# The instance servers: a StatefulSet, so each pod has a stable name that is
+# its instance id and its route, /instances/<pod>/. One instance per pod.
+instances:
+  replicas: 2
+  # Players in one instance at once, joining or in the cave.
+  maxPlayers: 8
+
+# The world server, from the same image with its own command. It has /ws and
+# sends players to the instances. Off by default because the default image
+# above is http-echo, which has no /world-server.
 world:
   enabled: false
   # Extra container env, in the same shape as env above.
   env: []
+
+# The Secret both servers read JOIN_TOKEN_KEY from. Empty means neither gets
+# one, which only the http-echo default can run without. Point it at a Secret
+# from externalSecrets below.
+joinKey:
+  secretName: ""
 
 # No host means no IngressRoute. The overlay that owns the hostname sets it.
 ingressRoute:

@@ -34,20 +34,19 @@ There are three ways to run the stack, from fastest to most realistic.
 **1. Local process.** Postgres and NATS run in Compose. Each server runs as a normal Go process, so a restart is a few seconds.
 
 ```sh
-just instance    # instance-server on :8080 with the memory store
-just instance-db # migrate, then run instance-server with DATABASE_URL set
-just dev         # migrate, then run world-server on :8090 with DATABASE_URL set
-just client-world # run the client against the world server on :8090
-just deps        # only postgres + nats
-just migrate     # apply database migrations to the Compose postgres
+just dev                     # migrate, then run world-server on :8080
+just instance instance-0 8081 # an instance-server, in a second terminal
+just instance instance-1 8082 # another, in a third
+just deps                    # only postgres + nats
+just migrate                 # apply database migrations to the Compose postgres
 ```
 
-The client connects to the instance-server on :8080 by default. It has its own lobby and the way into the cave. The world server has the lobby and stash only: Enter cave says every instance is full until FOM-228 hands players from it to an instance. Run `just instance-db` and `just dev` together to share characters between them.
+The client connects to the world server on :8080 by default. It has the lobby and the stash. Enter cave gets a ticket from it, and the client moves to that instance server for the run. When the run ends the client goes back to the world server. All three processes share the Compose database and the dev join key.
 
 **2. Full Compose.** Every server runs as a container.
 
 ```sh
-just up      # world-server :8080, instance-server :8081, postgres :5432, nats :4222
+just up      # world-server :8080, instance-0 :8081, instance-1 :8082, postgres :5432, nats :4222
 just down
 ```
 
@@ -55,6 +54,7 @@ just down
 
 ```sh
 just deploy-local     # create the cluster, build and load images, deploy world-server
+# These have no database or INSTANCES yet, so the world cannot send anyone to them.
 just instance-start 1 # start an instance pod called instance-1
 just instances        # list instance pods
 just instance-stop 1
@@ -79,14 +79,14 @@ just client-run     # run the game against a local server
 just client-online  # run the game against the homelab server
 just client-check   # import and run headless; prints "main scene loaded"
 just client-test    # headless player tests: movement, walls, interact
-just net-test       # start instance-server and check a real client can join and move
+just net-test       # start two worlds and three instances on a throwaway Postgres, then play the whole loop
 ```
 
 Controls: WASD or arrow keys to move, Space or left click to attack in the direction the character faces, E to open the loot window on a chest or pile, then Take an item or Take all, I or Tab for the inventory, Escape to close an open window. The last mouse motion or move key sets the facing.
 
 The server keeps your items by player name. Reconnect with the same name to get them back. Set one with `-- --name=ann`; without it the client picks a random name each launch.
 
-To play against the server, start it with `just instance`, then run `just client-run`. The client joins `ws://127.0.0.1:8080/ws`. The top-left label shows your player ID and the server tick. A white outline marks where the server thinks you are. Without a server the label says "offline", the game still runs, and the client retries every 2 seconds. Point at another server with `/Applications/Godot.app/Contents/MacOS/Godot --path client/godot -- --server=ws://host:port/ws`.
+To play against the server, start `just dev` and two `just instance` recipes, then run `just client-run`. The client joins the world server at `ws://127.0.0.1:8080/ws`. An instance server can run another cave with `CAVE=yard`, a small room with no enemies. The top-left label shows your player ID and the server tick. A white outline marks where the server thinks you are. Without a server the label says "offline", the game still runs, and the client retries every 2 seconds. Point at another server with `/Applications/Godot.app/Contents/MacOS/Godot --path client/godot -- --server=ws://host:port/ws`.
 
 The recipes use `/Applications/Godot.app`. For another install, pass the path: `just godot=/path/to/godot client`.
 
@@ -110,16 +110,17 @@ Use Neovim for code. Use the Godot editor for scenes, nodes and the debugger.
 
 ## Hosting
 
-The instance-server runs in the homelab cluster and is public at `wss://fantasy-rpg.fomiller.com/ws`.
+The game runs in the homelab cluster. The world server is public at `wss://fantasy-rpg.fomiller.com/ws`. Instance servers are a StatefulSet, `fantasy-rpg-instance`, each public at `/instances/<pod>/ws`.
 
-- `Dockerfile` builds the instance-server. `publish-image.yml` pushes it to ECR on every merge to main.
+- `Dockerfile` builds one image with both servers. `publish-image.yml` pushes it to ECR on every merge to main.
 - `helm/fantasy-rpg` is the chart. `publish-chart.yml` pushes it to ECR the same way.
 - `infra/` creates both ECR repositories. `deploy-infra.yml` applies it.
 - homelab's services ApplicationSet reads `argocd.yaml` and deploys `argocd/overlays/dev`.
 - Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
-- The Cloudflare tunnel sends the hostname to Traefik, and the chart's IngressRoute sends it to the pod.
+- The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server and each `/instances/<pod>/` prefix to that pod's Service.
+- Both servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/homelab/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 
-There is one replica with the `Recreate` strategy. The cave lives in memory, so a deploy ends every run in progress.
+A cave lives in its pod's memory, so restarting an instance pod ends its runs. Players keep the gear they took in.
 
 ## Protocol
 

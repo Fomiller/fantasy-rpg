@@ -1,8 +1,9 @@
 extends SceneTree
 
-# Needs a fresh instance-server on 127.0.0.1:8080 running the loop cave.
-# The enemy fights back, so the players must win before they run out of health.
-# `just net-test` starts one.
+# Needs a world-server on 127.0.0.1:8080 with instance servers running the
+# loop cave. Both clients join the world and follow their tickets, and the
+# world puts them in the same instance. The enemy fights back, so the players
+# must win before they run out of health. `just net-test` starts them.
 const TIMEOUT_MSEC := 10000
 const ATTACK_EVERY_MSEC := 600
 const CORRIDOR_HALF_HEIGHT := 32.0
@@ -76,6 +77,7 @@ func _run() -> void:
 	if not joined:
 		_finish()
 		return
+	_check(a.connection._url == b.connection._url and "/instances/" in a.connection._url, "the world put both clients in one instance")
 	var target := a.nearest_enemy()
 	_check(target != null, "an enemy is alive")
 	if target == null:

@@ -21,6 +21,9 @@ spec:
       containers:
         - name: world-server
           image: fantasy-rpg/world-server:dev
+          env:
+            - name: JOIN_TOKEN_KEY
+              value: dev-only
           ports:
             - containerPort: 8080
           readinessProbe:

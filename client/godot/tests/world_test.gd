@@ -1,7 +1,9 @@
 extends SceneTree
 
-# Needs a world-server on the URL in --server. `just net-test` starts one on
-# 127.0.0.1:8090 and passes it.
+# The whole loop: the world's lobby, a ticket into an instance, a run that
+# loots and extracts, and back to the world with the loot in the stash.
+# Needs a world-server on the URL in --server whose one instance runs the
+# yard cave. `just net-test` starts both and passes the URL.
 const TIMEOUT_MSEC := 5000
 
 var _failures := 0
@@ -33,11 +35,106 @@ func _run() -> void:
 	_lobby_button(lobby, "Rusty Sword", "Equip").pressed.emit()
 	_check(await _until(func() -> bool: return _lobby_button(lobby, "Rusty Sword", "To stash") != null), "the sword is equipped again from the stash")
 
-	# No instance to go to until FOM-228.
 	_lobby_button(lobby, "", "Enter cave").pressed.emit()
-	_check(await _until(func() -> bool: return lobby.message == "All instances are full."), "Enter cave says every instance is full")
-	_check(not connection.is_joined() and connection.in_lobby, "the player stays in the lobby")
+	var joined := await _until(func() -> bool: return connection.is_joined())
+	_check(joined and "/instances/" in connection._url, "Enter cave sends the client to an instance server (at %s)" % connection._url)
+	if not joined:
+		_finish()
+		return
+	var ticket := {"url": connection._url, "token": connection._token}
+	var latest := {"snapshot": null}
+	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
+	_check(await _until(func() -> bool: return latest.snapshot != null), "the instance sends snapshots")
+
+	# The yard's chest and exit are straight right of the spawn.
+	var chest := _first(latest.snapshot, GameV1.EntityKind.CHEST)
+	Input.action_press("move_right")
+	await _until(func() -> bool:
+		var me := _me(latest.snapshot, connection)
+		return me != null and chest != null and me.get_position().get_x() > chest.get_position().get_x() - 20.0)
+	Input.action_release("move_right")
+	await _until(func() -> bool: return false, 300)
+	var loot: LootWindow = main.get_node("HUD/Loot")
+	await _press("interact")
+	_check(await _until(func() -> bool: return loot.visible and not loot._items.is_empty()), "interact opens the chest")
+	if not loot.visible or loot._items.is_empty():
+		_finish()
+		return
+	var item_name: String = loot._items[0].get_name()
+	var bag := {"names": []}
+	connection.inventory_received.connect(func(items: Array[GameV1.Item], _capacity: int) -> void:
+		bag.names = items.map(func(item: GameV1.Item) -> String: return item.get_name()))
+	for row in loot.get_node("List").get_children():
+		if row is HBoxContainer and row.get_child(1) is Button:
+			(row.get_child(1) as Button).pressed.emit()
+			break
+	_check(await _until(func() -> bool: return item_name in bag.names), "takes %s from the chest" % item_name)
+
+	var summary: RunSummaryWindow = main.get_node("HUD/RunSummary")
+	Input.action_press("move_right")
+	var extracted := await _until(func() -> bool: return summary.visible, 10000)
+	Input.action_release("move_right")
+	_check(extracted and _has_label(summary, "Extracted"), "walking into the exit extracts and shows the summary")
+
+	var back := await _until(func() -> bool: return connection.in_lobby and lobby.visible and not connection.saving)
+	_check(back and ":8090/" in connection._url, "the client is back on the world server's lobby")
+	_check(summary.visible, "the summary stays up over the lobby")
+	_check(await _until(func() -> bool: return "Stash 0/100" not in _texts(lobby) and _lobby_button(lobby, item_name, "To bag") != null), "the loot is in the stash (lobby shows %s)" % _texts(lobby).replace("\n", " | "))
+
+	await _test_reused_token(ticket.url, ticket.token)
 	_finish()
+
+
+# The token from the run that just ended never starts another.
+func _test_reused_token(url: String, token: String) -> void:
+	var socket := WebSocketPeer.new()
+	socket.connect_to_url(url)
+	var open := await _until(func() -> bool:
+		socket.poll()
+		return socket.get_ready_state() == WebSocketPeer.STATE_OPEN)
+	_check(open, "the instance takes a new connection")
+	if not open:
+		return
+	var msg := GameV1.ClientMessage.new()
+	msg.set_protocol_version(ServerConnection.PROTOCOL_VERSION)
+	msg.new_instance_join().set_token(token)
+	socket.send(msg.to_bytes(), WebSocketPeer.WRITE_MODE_BINARY)
+	var closed := await _until(func() -> bool:
+		socket.poll()
+		return socket.get_ready_state() == WebSocketPeer.STATE_CLOSED)
+	_check(closed and socket.get_close_code() == 1008 and socket.get_close_reason() == "token used", "a used token is turned away (%d %s)" % [socket.get_close_code(), socket.get_close_reason()])
+
+
+func _first(snapshot: GameV1.WorldSnapshot, kind: int) -> GameV1.EntityState:
+	for e: GameV1.EntityState in snapshot.get_entities():
+		if e.get_kind() == kind:
+			return e
+	return null
+
+
+func _me(snapshot: GameV1.WorldSnapshot, connection: ServerConnection) -> GameV1.EntityState:
+	for e: GameV1.EntityState in snapshot.get_entities():
+		if e.get_id() == connection.player_id:
+			return e
+	return null
+
+
+func _has_label(node: Node, text: String) -> bool:
+	for label in node.find_children("*", "Label", true, false):
+		if (label as Label).text == text and not label.is_queued_for_deletion():
+			return true
+	return false
+
+
+# Abilities and interact are read from input events, which Input.action_press does not make.
+func _press(action: String) -> void:
+	for pressed in [true, false]:
+		var event := InputEventAction.new()
+		event.action = action
+		event.pressed = pressed
+		Input.parse_input_event(event)
+		await physics_frame
+		await physics_frame
 
 
 func _texts(lobby: LobbyWindow) -> String:

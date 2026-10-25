@@ -1,6 +1,7 @@
 extends SceneTree
 
-# Needs an instance-server on 127.0.0.1:8080. `just net-test` starts one.
+# Needs a world-server on 127.0.0.1:8080 with instance servers running the
+# loop cave. `just net-test` starts them.
 const TIMEOUT_MSEC := 5000
 
 var _failures := 0
@@ -24,7 +25,7 @@ func _run() -> void:
 	await _test_lobby(lobby)
 
 	var joined := await _until(func() -> bool: return connection.is_joined())
-	_check(joined, "joined the server")
+	_check(joined and "/instances/" in connection._url, "Enter cave puts the player on an instance server")
 	if not joined:
 		_finish()
 		return

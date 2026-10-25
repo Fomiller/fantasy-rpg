@@ -126,12 +126,11 @@ func rejected(t *testing.T, conn *websocket.Conn) *gamev1.StashMoveRejected {
 	return waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetStashMoveRejected() != nil }).GetStashMoveRejected()
 }
 
-// A joined player is in the lobby, not the cave, until they enter.
+// A joined player is in the world's lobby, not the cave, until they enter.
 func TestJoinLandsInLobby(t *testing.T) {
 	h := start(t)
 	seed(t, h, inventory.Character{Name: "ann", XP: 120, Loadout: h.srv.starterKit()})
-	other := dial(t, h.url)
-	otherID := join(t, other)
+	other, otherID := join(t, h)
 
 	conn := dial(t, h.url)
 	lb := lobbyAs(t, conn, "ann")
@@ -165,7 +164,7 @@ func TestJoinLandsInLobby(t *testing.T) {
 		t.Fatalf("snapshot has %d players, want only the one in the cave", players)
 	}
 
-	joined := enterInstance(t, conn)
+	_, joined := enterInstance(t, conn)
 	waitFor(t, other, func(m *gamev1.ServerMessage) bool { return entity(m.GetSnapshot(), joined.GetPlayerId()) != nil })
 }
 
@@ -210,10 +209,10 @@ func TestLobbyMovesOverTheWire(t *testing.T) {
 	}
 
 	// Whatever is packed goes into the cave, and the stash cannot be touched there.
-	enterInstance(t, conn)
-	waitFor(t, conn, inventoryWith("health_potion"))
-	moveTo(t, conn, sword.GetId(), toGear)
-	if r := rejected(t, conn); r.GetReason() != MoveNotInLobby {
+	inst, _ := enterInstance(t, conn)
+	waitFor(t, inst, inventoryWith("health_potion"))
+	moveTo(t, inst, sword.GetId(), toGear)
+	if r := rejected(t, inst); r.GetReason() != MoveNotInLobby {
 		t.Fatalf("rejected = %v", r)
 	}
 }
@@ -285,14 +284,13 @@ func TestExtractionMovesBagToStash(t *testing.T) {
 	potion := mustMake(t, h.srv, "health_potion")
 	seed(t, h, inventory.Character{Name: "ann", Loadout: inventory.Loadout{Equipment: h.srv.starterKit().Equipment, Items: []items.Instance{potion}}})
 
-	conn := dial(t, h.url)
-	joinAs(t, conn, "ann")
+	conn, _ := joinAs(t, h, "ann")
 	summary := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted() != nil }).GetExtracted().GetSummary()
 	if len(summary.GetKept()) != 1 || len(summary.GetOverflow()) != 0 {
 		t.Fatalf("summary = %v", summary)
 	}
 
-	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil })
+	conn = backInWorld(t, h, "ann")
 	eq, inv, st := lobbyItems(t, conn)
 	if len(eq.GetItems()) != len(items.StarterKit) || len(inv.GetItems()) != 0 || len(st.GetItems()) != 1 || st.GetItems()[0].GetId() != potion.ID {
 		t.Fatalf("lobby after extraction: gear %v, bag %v, stash %v", eq.GetItems(), inv.GetItems(), st.GetItems())
@@ -310,13 +308,12 @@ func TestExtractionIntoFullStash(t *testing.T) {
 	fits, spills := mustMake(t, h.srv, "health_potion"), mustMake(t, h.srv, "rusty_sword")
 	seed(t, h, inventory.Character{Name: "ann", Loadout: inventory.Loadout{Items: []items.Instance{fits, spills}}, Stash: full})
 
-	conn := dial(t, h.url)
-	joinAs(t, conn, "ann")
+	conn, _ := joinAs(t, h, "ann")
 	summary := waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted() != nil }).GetExtracted().GetSummary()
 	if len(summary.GetKept()) != 2 || len(summary.GetOverflow()) != 1 || summary.GetOverflow()[0].GetId() != spills.ID {
 		t.Fatalf("summary kept %v, overflow %v", summary.GetKept(), summary.GetOverflow())
 	}
-	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetLobby() != nil })
+	conn = backInWorld(t, h, "ann")
 	_, inv, _ := lobbyItems(t, conn)
 	if len(inv.GetItems()) != 1 || inv.GetItems()[0].GetId() != spills.ID {
 		t.Fatalf("bag = %v, want the overflow", inv.GetItems())

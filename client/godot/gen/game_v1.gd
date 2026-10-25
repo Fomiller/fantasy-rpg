@@ -763,6 +763,12 @@ class ClientMessage:
 		service.func_ref = Callable(self, "new_stash_move")
 		data[__stash_move.tag] = service
 		
+		__instance_join = PBField.new("instance_join", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 22, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __instance_join
+		service.func_ref = Callable(self, "new_instance_join")
+		data[__instance_join.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -779,6 +785,7 @@ class ClientMessage:
 		LOOT_CLOSE = 19,
 		ENTER_INSTANCE = 20,
 		STASH_MOVE = 21,
+		INSTANCE_JOIN = 22,
 	}
 	var _payload_case: int = 0
 
@@ -828,6 +835,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__join.value = JoinRequest.new()
 		return __join.value
 	
@@ -864,6 +873,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__move.value = MoveInput.new()
 		return __move.value
 	
@@ -900,6 +911,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__attack.value = AttackRequest.new()
 		return __attack.value
 	
@@ -936,6 +949,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__pickup.value = PickupRequest.new()
 		return __pickup.value
 	
@@ -972,6 +987,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__equip.value = EquipRequest.new()
 		return __equip.value
 	
@@ -1008,6 +1025,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__unequip.value = UnequipRequest.new()
 		return __unequip.value
 	
@@ -1044,6 +1063,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__drop.value = DropRequest.new()
 		return __drop.value
 	
@@ -1080,6 +1101,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = UseRequest.new()
 		return __use.value
 	
@@ -1116,6 +1139,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__loot_open.value = LootOpenRequest.new()
 		return __loot_open.value
 	
@@ -1152,6 +1177,8 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = LootCloseRequest.new()
 		return __loot_close.value
 	
@@ -1188,6 +1215,8 @@ class ClientMessage:
 		_payload_case = 20
 		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance.value = EnterInstanceRequest.new()
 		return __enter_instance.value
 	
@@ -1224,8 +1253,48 @@ class ClientMessage:
 		data[20].state = PB_SERVICE_STATE.UNFILLED
 		data[21].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 21
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = StashMoveRequest.new()
 		return __stash_move.value
+	
+	var __instance_join: PBField
+	func has_instance_join() -> bool:
+		return data[22].state == PB_SERVICE_STATE.FILLED
+	func get_instance_join() -> InstanceJoinRequest:
+		return __instance_join.value
+	func clear_instance_join() -> void:
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_instance_join() -> InstanceJoinRequest:
+		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__enter_instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		data[22].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 22
+		__instance_join.value = InstanceJoinRequest.new()
+		return __instance_join.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -1361,6 +1430,12 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_enter_instance_rejected")
 		data[__enter_instance_rejected.tag] = service
 		
+		__ticket = PBField.new("ticket", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 27, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __ticket
+		service.func_ref = Callable(self, "new_ticket")
+		data[__ticket.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -1382,6 +1457,7 @@ class ServerMessage:
 		STASH = 24,
 		STASH_MOVE_REJECTED = 25,
 		ENTER_INSTANCE_REJECTED = 26,
+		TICKET = 27,
 	}
 	var _payload_case: int = 0
 
@@ -1441,6 +1517,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
 	
@@ -1487,6 +1565,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
 	
@@ -1533,6 +1613,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
 	
@@ -1579,6 +1661,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
 	
@@ -1625,6 +1709,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__extracted.value = Extracted.new()
 		return __extracted.value
 	
@@ -1671,6 +1757,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__equipment.value = EquipmentUpdated.new()
 		return __equipment.value
 	
@@ -1717,6 +1805,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__ability_used.value = AbilityUsed.new()
 		return __ability_used.value
 	
@@ -1763,6 +1853,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = AbilityRejected.new()
 		return __ability_rejected.value
 	
@@ -1809,6 +1901,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__loot.value = LootContents.new()
 		return __loot.value
 	
@@ -1855,6 +1949,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = PickupRejected.new()
 		return __pickup_rejected.value
 	
@@ -1901,6 +1997,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__xp_gained.value = XpGained.new()
 		return __xp_gained.value
 	
@@ -1947,6 +2045,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__level_up.value = LevelUp.new()
 		return __level_up.value
 	
@@ -1993,6 +2093,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = RunEnded.new()
 		return __run_ended.value
 	
@@ -2039,6 +2141,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__lobby.value = Lobby.new()
 		return __lobby.value
 	
@@ -2085,6 +2189,8 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__stash.value = StashContents.new()
 		return __stash.value
 	
@@ -2131,6 +2237,8 @@ class ServerMessage:
 		_payload_case = 25
 		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = StashMoveRejected.new()
 		return __stash_move_rejected.value
 	
@@ -2177,8 +2285,58 @@ class ServerMessage:
 		data[25].state = PB_SERVICE_STATE.UNFILLED
 		data[26].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 26
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = EnterInstanceRejected.new()
 		return __enter_instance_rejected.value
+	
+	var __ticket: PBField
+	func has_ticket() -> bool:
+		return data[27].state == PB_SERVICE_STATE.FILLED
+	func get_ticket() -> InstanceTicket:
+		return __ticket.value
+	func clear_ticket() -> void:
+		data[27].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_ticket() -> InstanceTicket:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[26].state = PB_SERVICE_STATE.UNFILLED
+		data[27].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 27
+		__ticket.value = InstanceTicket.new()
+		return __ticket.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -5716,6 +5874,150 @@ class EnterInstanceRejected:
 		__reason.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
 	func set_reason(value : String) -> void:
 		__reason.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class InstanceTicket:
+	func _init():
+		var service
+		
+		__url = PBField.new("url", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __url
+		data[__url.tag] = service
+		
+		__token = PBField.new("token", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __token
+		data[__token.tag] = service
+		
+		__instance = PBField.new("instance", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __instance
+		data[__instance.tag] = service
+		
+		__expires_in_ms = PBField.new("expires_in_ms", PB_DATA_TYPE.UINT32, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32])
+		service = PBServiceField.new()
+		service.field = __expires_in_ms
+		data[__expires_in_ms.tag] = service
+		
+	var data = {}
+	
+	var __url: PBField
+	func has_url() -> bool:
+		if __url.value != null:
+			return true
+		return false
+	func get_url() -> String:
+		return __url.value
+	func clear_url() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__url.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_url(value : String) -> void:
+		__url.value = value
+	
+	var __token: PBField
+	func has_token() -> bool:
+		if __token.value != null:
+			return true
+		return false
+	func get_token() -> String:
+		return __token.value
+	func clear_token() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__token.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_token(value : String) -> void:
+		__token.value = value
+	
+	var __instance: PBField
+	func has_instance() -> bool:
+		if __instance.value != null:
+			return true
+		return false
+	func get_instance() -> String:
+		return __instance.value
+	func clear_instance() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__instance.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_instance(value : String) -> void:
+		__instance.value = value
+	
+	var __expires_in_ms: PBField
+	func has_expires_in_ms() -> bool:
+		if __expires_in_ms.value != null:
+			return true
+		return false
+	func get_expires_in_ms() -> int:
+		return __expires_in_ms.value
+	func clear_expires_in_ms() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__expires_in_ms.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
+	func set_expires_in_ms(value : int) -> void:
+		__expires_in_ms.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class InstanceJoinRequest:
+	func _init():
+		var service
+		
+		__token = PBField.new("token", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __token
+		data[__token.tag] = service
+		
+	var data = {}
+	
+	var __token: PBField
+	func has_token() -> bool:
+		if __token.value != null:
+			return true
+		return false
+	func get_token() -> String:
+		return __token.value
+	func clear_token() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__token.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_token(value : String) -> void:
+		__token.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

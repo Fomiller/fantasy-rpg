@@ -9,7 +9,8 @@ image:
   tag: 0.14.1@sha256:719e6f269fa97979d8a301accbb937ece206f3db75b4fb9265f3cb6de8af151a
 
 # The Cloudflare tunnel forwards this hostname to Traefik because homelab lists
-# it in public_hostnames. Clients connect to wss://fantasy-rpg.fomiller.com/ws.
+# it in public_hostnames. Clients connect to wss://fantasy-rpg.fomiller.com/ws,
+# the world server, which sends them on to /instances/<pod>/ws.
 ingressRoute:
   host: fantasy-rpg.fomiller.com
 

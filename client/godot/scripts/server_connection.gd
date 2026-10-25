@@ -3,7 +3,8 @@ extends Node
 
 # The player entered the cave.
 signal joined(player_id: int)
-# On join and after every run. Gear, bag and stash follow.
+# On a world server join, and again when the last run lands. Gear, bag and
+# stash follow.
 signal lobby_entered
 signal disconnected
 signal extracted(player_id: int)
@@ -24,8 +25,21 @@ signal stash_received(items: Array[GameV1.Item], capacity: int)
 signal stash_move_rejected(event: GameV1.StashMoveRejected)
 signal enter_instance_rejected(event: GameV1.EnterInstanceRejected)
 
+# The world server. Every session starts here and comes back here after a run.
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
+# Why an instance turned the player away or the run ended early, as the lobby
+# says it. The empty reason is a dropped connection.
+const INSTANCE_CLOSE_TEXT := {
+	"": "The run ended when the connection dropped.",
+	"token expired": "Took too long to join. Try again.",
+	"instance full": "That instance filled up. Try again.",
+	"already in a run": "Your character is in a run",
+	"token used": "Couldn't join the instance. Try again.",
+	"bad token": "Couldn't join the instance. Try again.",
+	"wrong instance": "Couldn't join the instance. Try again.",
+	"characters unavailable": "Can't load your character. Try again in a minute.",
+}
 const RETRY_SECONDS := 2.0
 
 # The server keeps items by name, so the same name gets them back on reconnect.
@@ -47,9 +61,20 @@ var in_lobby := false
 var saving := false
 # Why the server last closed the socket. Empty when it gave no reason.
 var close_reason := ""
+# Why the last trip to an instance ended early, for the lobby to say. Main
+# clears it once shown.
+var notice := ""
 
 var _socket := WebSocketPeer.new()
+var _world_url := DEFAULT_URL
 var _url := DEFAULT_URL
+# Set from InstanceTicket until the instance connection ends. While set, the
+# socket is on, or on its way to, an instance server.
+var _ticket_url := ""
+var _token := ""
+# Set when this player's run summary came, so the close that follows is the
+# run ending, not a drop.
+var _run_over := false
 var _was_open := false
 var _retry_in := 0.0
 var _move_seq := 0
@@ -57,7 +82,8 @@ var _attack_seq := 0
 
 
 func _ready() -> void:
-	_url = _arg("--server=", DEFAULT_URL)
+	_world_url = _arg("--server=", DEFAULT_URL)
+	_url = _world_url
 	if player_name == "":
 		player_name = _arg("--name=", "player-%04x" % (randi() % 0x10000))
 	_connect()
@@ -184,21 +210,29 @@ func send_use(item_id: String) -> void:
 
 func _process(delta: float) -> void:
 	_socket.poll()
-	match _socket.get_ready_state():
-		WebSocketPeer.STATE_OPEN:
-			if not _was_open:
-				_was_open = true
-				_send_join()
-			while _socket.get_available_packet_count() > 0:
-				_handle(_socket.get_packet())
+	var state := _socket.get_ready_state()
+	if state == WebSocketPeer.STATE_OPEN and not _was_open:
+		_was_open = true
+		if _token != "":
+			_send_instance_join()
+		else:
+			_send_join()
+	if _was_open:
+		while _socket.get_available_packet_count() > 0:
+			_handle(_socket.get_packet())
+	match state:
 		WebSocketPeer.STATE_CLOSED:
 			if _was_open:
 				_closed(_socket.get_close_code(), _socket.get_close_reason())
+			elif _token != "" and _url == _ticket_url:
+				_back_to_world("Couldn't reach the instance. Try again.")
 			_retry_in -= delta
 			if _retry_in <= 0.0:
 				_connect()
 
 
+# One socket at a time: the world closes it to send the player to the
+# ticket's instance, and the instance closes it to send them back.
 func _closed(code: int, reason: String) -> void:
 	_was_open = false
 	player_id = 0
@@ -206,7 +240,27 @@ func _closed(code: int, reason: String) -> void:
 	saving = false
 	close_reason = reason
 	print("disconnected from %s (%d %s)" % [_url, code, reason])
+	# A token while on the world means a ticket came, whoever closed first.
+	if _token != "" and _url == _world_url:
+		_url = _ticket_url
+		_retry_in = 0.0
+		return
+	if _token != "":
+		var why := "run over" if _run_over else reason
+		_run_over = false
+		_back_to_world(why)
+		if why == "run over":
+			return
 	disconnected.emit()
+
+
+func _back_to_world(why: String) -> void:
+	_token = ""
+	_ticket_url = ""
+	_url = _world_url
+	_retry_in = 0.0
+	if why != "run over":
+		notice = INSTANCE_CLOSE_TEXT.get(why, why)
 
 
 func _connect() -> void:
@@ -215,6 +269,12 @@ func _connect() -> void:
 	var err := _socket.connect_to_url(_url)
 	if err != OK:
 		push_warning("cannot connect to %s: %s" % [_url, error_string(err)])
+
+
+func _send_instance_join() -> void:
+	var msg := _new_message()
+	msg.new_instance_join().set_token(_token)
+	_send(msg)
 
 
 func _send_join() -> void:
@@ -244,6 +304,12 @@ func _handle(bytes: PackedByteArray) -> void:
 		stash_move_rejected.emit(msg.get_stash_move_rejected())
 	elif msg.has_enter_instance_rejected():
 		enter_instance_rejected.emit(msg.get_enter_instance_rejected())
+	elif msg.has_ticket():
+		# Closing the world's socket here, not waiting for the world to, keeps
+		# the ticket: a close that lands with it empties the read buffer.
+		_ticket_url = msg.get_ticket().get_url()
+		_token = msg.get_ticket().get_token()
+		_socket.close(1000, "entering instance")
 	elif msg.has_joined():
 		var accepted := msg.get_joined()
 		in_lobby = false
@@ -295,6 +361,11 @@ func _end_run(summary: GameV1.RunSummary) -> void:
 	if summary.has_character():
 		character = summary.get_character()
 	run_ended.emit(summary)
+	# The instance closes too, but closing here keeps the summary for the
+	# same reason as the ticket.
+	if _token != "":
+		_run_over = true
+		_socket.close(1000, "run over")
 
 
 func _new_message() -> GameV1.ClientMessage:

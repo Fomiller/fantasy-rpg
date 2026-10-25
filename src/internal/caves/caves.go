@@ -71,6 +71,31 @@ const loopArt = `
 ###############################
 `
 
+// Yard is a small room with no enemies: a chest on the way from the spawn
+// to the exit. It is for trying the run loop without a fight.
+func Yard() Cave {
+	return mustParse("yard", yardArt)
+}
+
+const yardArt = `
+############
+#..........#
+#S...c...XX#
+#........XX#
+############
+`
+
+// ByName is the cave an instance server builds, from CAVE.
+func ByName(name string) (Cave, bool) {
+	switch name {
+	case "loop":
+		return Loop(), true
+	case "yard":
+		return Yard(), true
+	}
+	return Cave{}, false
+}
+
 func mustParse(name, art string) Cave {
 	c, err := Parse(name, art)
 	if err != nil {

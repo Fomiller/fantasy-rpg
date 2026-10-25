@@ -23,12 +23,42 @@ app.kubernetes.io/name: {{ include "chart.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- /* A name of its own, not an extra label, so the instance server's
-       Service, which selects on name and instance, never picks up world pods.
-       Deployment selectors cannot change, so the old ones stay as they are. */ -}}
+{{- /* Names of their own, not extra labels, so a Service for one kind of
+       pod never picks up another. Selectors cannot change once deployed. */ -}}
 {{- define "chart.worldSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "chart.name" . }}-world
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "chart.instanceSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-instance
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "chart.instanceName" -}}
+{{- printf "%s-instance" (include "chart.fullname" .) | trunc 52 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- /* The world server's INSTANCES, from the same replica count as the
+       StatefulSet, so the two never disagree. */ -}}
+{{- define "chart.instancesEnv" -}}
+{{- $name := include "chart.instanceName" . -}}
+{{- $public := ternary (printf "wss://%s" .Values.ingressRoute.host) "ws://localhost:8080" (ne .Values.ingressRoute.host "") -}}
+{{- $list := list -}}
+{{- range $i := until (int .Values.instances.replicas) -}}
+{{- $pod := printf "%s-%d" $name $i -}}
+{{- $list = append $list (printf "%s=http://%s:8080=%s/instances/%s/ws" $pod $pod $public $pod) -}}
+{{- end -}}
+- name: INSTANCES
+  value: {{ join " " $list | quote }}
+{{- end -}}
+
+{{- define "chart.joinKeyEnv" -}}
+- name: JOIN_TOKEN_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.joinKey.secretName }}
+      key: JOIN_TOKEN_KEY
 {{- end -}}
 
 {{- define "chart.dbName" -}}

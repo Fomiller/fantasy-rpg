@@ -20,15 +20,18 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
+	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
 
+var joinKey = []byte("restart-test-key")
+
 // instanceServer is an instance-server on store whose players spawn inside
 // the exit, so every run extracts. stop shuts it down as a restart would.
-func instanceServer(t *testing.T, store inventory.Store) (url string, stop func()) {
+func instanceServer(t *testing.T, store inventory.Store) (srv *server.Server, url string, stop func()) {
 	t.Helper()
 	cave := caves.Cave{
 		Name:         "restart",
@@ -39,8 +42,9 @@ func instanceServer(t *testing.T, store inventory.Store) (url string, stop func(
 	cfg := sim.DefaultConfig()
 	cfg.ExtractTime = 100 * time.Millisecond
 	loot := items.NewRoller(items.Default(), 1)
-	srv := server.New(cave.NewWorld(cfg, loot), cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv = server.New(cave.NewWorld(cfg, loot), cave, loot, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	srv.Store = store
+	srv.Tokens = jointoken.NewVerifier(joinKey)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	loop := &tick.Loop{Interval: 10 * time.Millisecond, Metrics: tick.NewMetrics(prometheus.NewRegistry(), "test"), Step: srv.Step}
@@ -63,7 +67,7 @@ func instanceServer(t *testing.T, store inventory.Store) (url string, stop func(
 		srv.Close()
 	}
 	t.Cleanup(stop)
-	return "ws" + strings.TrimPrefix(hs.URL, "http"), stop
+	return srv, "ws" + strings.TrimPrefix(hs.URL, "http"), stop
 }
 
 func send(t *testing.T, conn *websocket.Conn, msg *gamev1.ClientMessage) {
@@ -136,7 +140,8 @@ func make1(t *testing.T, r *items.Roller, def string, rarity items.Rarity) items
 	return inst
 }
 
-// A character, its gear and its stash outlive the server that saved them.
+// A character, its gear and its stash outlive the instance server that
+// banked a run, and the world server after a restart shows them.
 func TestRestartKeepsCharacters(t *testing.T) {
 	t.Parallel()
 	url := newDBURL(t, true)
@@ -153,9 +158,19 @@ func TestRestartKeepsCharacters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	wsURL, stop := instanceServer(t, first)
-	conn, _, _ := joinLobby(t, wsURL, "ann")
-	send(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_EnterInstance{EnterInstance: &gamev1.EnterInstanceRequest{}}})
+	srv, wsURL, stop := instanceServer(t, first)
+	token, err := jointoken.Sign(joinKey, jointoken.Claims{Name: "ann", Class: classes.Starter, Inst: srv.Instance(), Run: items.NewID()}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	send(t, conn, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_InstanceJoin{InstanceJoin: &gamev1.InstanceJoinRequest{Token: token}}})
 	waitFor(t, conn, func(m *gamev1.ServerMessage) bool { return m.GetExtracted() != nil })
 	// Extraction banks XP and moves the bag to the stash.
 	saved := waitLoaded(t, first, "ann", func(c inventory.Character) bool { return c.XP > 40 && len(c.Stash) == 3 })
@@ -163,8 +178,11 @@ func TestRestartKeepsCharacters(t *testing.T) {
 	first.Close()
 
 	second := newStore(t, url)
-	wsURL, _ = instanceServer(t, second)
+	wsURL, _ = worldServer(t, second)
 	_, lobby, stash := joinLobby(t, wsURL, "ann")
+	if lobby.GetSaving() {
+		t.Fatalf("lobby = %v, want the run landed", lobby)
+	}
 	if got := lobby.GetCharacter().GetXp(); int(got) != saved.XP {
 		t.Fatalf("lobby xp after restart = %d, want %d", got, saved.XP)
 	}

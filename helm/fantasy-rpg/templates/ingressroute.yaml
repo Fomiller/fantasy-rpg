@@ -1,7 +1,10 @@
 {{- /* Traefik's own CRD, like the blog. The Cloudflare tunnel forwards the
        hostname to Traefik, and Traefik passes the WebSocket upgrade through.
+       /ws is the world server. Each instance has its own prefix, and serves
+       its socket under it, so no rewrite is needed. /status is never routed.
        Off unless an overlay sets a host. */}}
 {{- if .Values.ingressRoute.host }}
+{{- $name := include "chart.instanceName" . }}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -10,9 +13,18 @@ spec:
   entryPoints:
     - {{ .Values.ingressRoute.entryPoint }}
   routes:
-    - match: Host(`{{ .Values.ingressRoute.host }}`)
+    {{- if .Values.world.enabled }}
+    - match: Host(`{{ .Values.ingressRoute.host }}`) && Path(`/ws`)
       kind: Rule
       services:
-        - name: {{ include "chart.fullname" . }}
+        - name: {{ include "chart.fullname" . }}-world
           port: 8080
+    {{- end }}
+    {{- range $i := until (int .Values.instances.replicas) }}
+    - match: Host(`{{ $.Values.ingressRoute.host }}`) && PathPrefix(`/instances/{{ printf "%s-%d" $name $i }}/`)
+      kind: Rule
+      services:
+        - name: {{ printf "%s-%d" $name $i }}
+          port: 8080
+    {{- end }}
 {{- end }}
