@@ -366,10 +366,9 @@ The Cluster follows `attic-db-cnpg` in the homelab:
 - CNPG makes `fantasy-rpg-db-app` itself, with a ready `uri` key. The
   Deployment and the migrate Job both set `DATABASE_URL` from it with
   `secretKeyRef`. No password is in git, Doppler or AWS.
-- The server uses Postgres when `DATABASE_URL` is set, and the memory store
-  when it is not. The chart sets it only when `postgres.enabled` is true.
-  Until FOM-216 lands, the server only checks the schema version with it
-  and still plays on the memory store.
+- The server uses Postgres when `DATABASE_URL` is set. The chart sets it
+  only when `postgres.enabled` is true. The memory store is used only with
+  `STORE=memory`. Otherwise a server with no store configured exits.
 - Backup credentials come through the chart's existing `externalSecrets`
   map. See Backups.
 

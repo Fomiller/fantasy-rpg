@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/db"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/storetest"
@@ -84,17 +85,24 @@ func TestServiceDown(t *testing.T) {
 	}
 }
 
-func TestOpenPicksByURL(t *testing.T) {
+func TestOpenPicksByConfig(t *testing.T) {
 	srv := serve(t, inventory.NewMemory())
-	for _, tt := range []struct{ inventoryURL, want string }{{"", "memory"}, {srv.URL, "inventory"}} {
-		s, name, closeStore, err := httpstore.Open(t.Context(), tt.inventoryURL, "", prometheus.NewRegistry())
+	for _, tt := range []struct{ inventoryURL, store, want string }{{"", db.Memory, "memory"}, {srv.URL, "", "inventory"}, {srv.URL, db.Memory, "inventory"}} {
+		s, name, closeStore, err := httpstore.Open(t.Context(), tt.inventoryURL, "", tt.store, prometheus.NewRegistry())
 		if err != nil || name != tt.want {
-			t.Fatalf("open %q = %s, %v, want %s", tt.inventoryURL, name, err, tt.want)
+			t.Fatalf("open %q STORE=%q = %s, %v, want %s", tt.inventoryURL, tt.store, name, err, tt.want)
 		}
 		ch := inventory.Character{Name: "ann", Class: "warrior", Stash: []items.Instance{{ID: "x", DefID: "iron_sword", Slot: items.Weapon, Quantity: 1, Stack: 1}}}
 		if err := s.Create(t.Context(), ch); err != nil {
 			t.Fatalf("create on %s: %v", name, err)
 		}
 		closeStore()
+	}
+}
+
+func TestOpenFailsClosed(t *testing.T) {
+	_, _, _, err := httpstore.Open(t.Context(), "", "", "", prometheus.NewRegistry())
+	if !errors.Is(err, db.ErrNoStore) || !strings.Contains(err.Error(), "INVENTORY_URL") {
+		t.Fatalf("open with no config = %v, want ErrNoStore naming INVENTORY_URL", err)
 	}
 }

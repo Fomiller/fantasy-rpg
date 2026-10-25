@@ -63,7 +63,7 @@ func run() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
-	store, storeName, closeStore, err := httpstore.Open(ctx, os.Getenv("INVENTORY_URL"), os.Getenv("DATABASE_URL"), reg)
+	store, storeName, closeStore, err := httpstore.Open(ctx, os.Getenv("INVENTORY_URL"), os.Getenv("DATABASE_URL"), os.Getenv("STORE"), reg)
 	if err != nil {
 		return err
 	}

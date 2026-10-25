@@ -37,7 +37,7 @@ func run() error {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	url := os.Getenv("DATABASE_URL")
-	store, storeName, closeStore, err := db.OpenStore(ctx, url, reg)
+	store, storeName, closeStore, err := db.OpenStore(ctx, url, os.Getenv("STORE"), reg)
 	if err != nil {
 		return err
 	}

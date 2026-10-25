@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -111,16 +112,26 @@ func TestRunIDMustBeAUUID(t *testing.T) {
 	}
 }
 
-func TestOpenStorePicksByURL(t *testing.T) {
+func TestOpenStorePicksByConfig(t *testing.T) {
 	t.Parallel()
-	for _, tt := range []struct{ url, want string }{{"", "memory"}, {newDBURL(t, true), "postgres"}} {
-		s, name, closeStore, err := OpenStore(t.Context(), tt.url, prometheus.NewRegistry())
+	for _, tt := range []struct{ url, store, want string }{{"", Memory, "memory"}, {newDBURL(t, true), "", "postgres"}, {newDBURL(t, true), Memory, "postgres"}} {
+		s, name, closeStore, err := OpenStore(t.Context(), tt.url, tt.store, prometheus.NewRegistry())
 		if err != nil || name != tt.want {
-			t.Fatalf("open %q = %s, %v, want %s", tt.url, name, err, tt.want)
+			t.Fatalf("open %q STORE=%q = %s, %v, want %s", tt.url, tt.store, name, err, tt.want)
 		}
 		if _, _, err := s.Load(t.Context(), "ann", "warrior"); err != nil {
 			t.Fatalf("load on %s: %v", name, err)
 		}
 		closeStore()
+	}
+}
+
+func TestOpenStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+	if _, _, _, err := OpenStore(t.Context(), "", "", prometheus.NewRegistry()); !errors.Is(err, ErrNoStore) {
+		t.Fatalf("open with no config = %v, want ErrNoStore", err)
+	}
+	if _, _, _, err := OpenStore(t.Context(), "", "disk", prometheus.NewRegistry()); err == nil {
+		t.Fatal("open with STORE=disk did not fail")
 	}
 }
