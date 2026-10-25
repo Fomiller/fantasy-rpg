@@ -1,0 +1,57 @@
+# One broker for this game's events. The operator in redpanda-operator watches
+# every namespace, so this only needs the CR. Keys left out take the chart's
+# defaults.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Redpanda
+metadata:
+  name: redpanda
+  # The operator sets these on the CR when it reconciles. Declaring them keeps
+  # Argo CD from showing a live-only diff, as homelab's shared cluster does.
+  annotations:
+    cluster.redpanda.com/managed: "true"
+    operator.redpanda.com/config-sync-mode: additive
+    operator.redpanda.com/restart-cluster-on-config-change: "false"
+  finalizers:
+    - operator.redpanda.com/finalizer
+spec:
+  clusterSpec:
+    # console.yaml is the Console. The inline one is deprecated.
+    console:
+      enabled: false
+
+    # Clients are pods in this cluster, and there is no external listener.
+    # TLS and SASL would add a CA and a credential to every service for no
+    # boundary that exists today.
+    tls:
+      enabled: false
+    auth:
+      sasl:
+        enabled: false
+    external:
+      enabled: false
+
+    listeners:
+      # Nothing uses the HTTP proxy. Schema registry stays for the Console.
+      http:
+        enabled: false
+
+    statefulset:
+      replicas: 1
+
+    resources:
+      cpu:
+        cores: 500m
+      memory:
+        container:
+          max: 1.5Gi
+
+    storage:
+      persistentVolume:
+        enabled: true
+        size: 5Gi
+        storageClass: longhorn
+
+    # The tuner runs as a privileged container, and this namespace also holds
+    # the game servers.
+    tuning:
+      tune_aio_events: false

@@ -11,6 +11,7 @@ kind: Kustomization
 # it installs once from here.
 resources:
   - ../../agones
+  - ../../redpanda
 
 helmCharts:
   # Nothing is published on the first commit, so this version does not exist

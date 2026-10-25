@@ -118,6 +118,7 @@ The game runs in the homelab cluster. The world server is public at `wss://fanta
 - homelab's services ApplicationSet reads `argocd.yaml` and deploys `argocd/overlays/dev`.
 - Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
 - `argocd/agones` installs Agones into `agones-system`. `argocd/overlays/dev` includes it, so it syncs with the same Application.
+- `argocd/redpanda` runs a one-broker Redpanda, its topics and the Console in `fantasy-rpg`. homelab's operator reconciles them. The Console is at redpanda-frpg-dev.fomiller.com, behind Cloudflare Access.
 - The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server and each `/instances/<pod>/` prefix to that pod's Service.
 - Both servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 

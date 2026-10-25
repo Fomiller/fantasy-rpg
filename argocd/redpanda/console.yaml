@@ -1,0 +1,18 @@
+# The operator names the Deployment and Service <name>-console, or just
+# console when the CR is named console. So the Service is console:8080.
+#
+# clusterRef only resolves in the Console's own namespace.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Console
+metadata:
+  name: console
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
