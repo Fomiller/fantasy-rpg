@@ -21,6 +21,7 @@ import (
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/db"
+	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/gameserver"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
@@ -78,6 +79,13 @@ func run() error {
 	defer closeStore()
 	slog.Info("character store", "store", storeName)
 
+	bus, busName, err := events.Open(os.Getenv("KAFKA_BROKERS"), reg, slog.Default())
+	if err != nil {
+		return err
+	}
+	defer bus.Close()
+	slog.Info("events", "producer", busName)
+
 	seed, err := lootSeed()
 	if err != nil {
 		return err
@@ -88,6 +96,7 @@ func run() error {
 	game.Store = store
 	game.MaxPlayers = maxPlayers
 	game.Tokens = jointoken.NewVerifier(key)
+	game.Events = bus
 	if id := os.Getenv("INSTANCE_ID"); id != "" {
 		game.ID = id
 	}

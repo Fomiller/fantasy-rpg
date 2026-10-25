@@ -18,12 +18,23 @@ services:
       interval: 2s
       retries: 15
 
-  nats:
-    image: nats:2
-    command: ["-js", "-m", "8222"]
+  # One node in dev mode, no auth. `just deps` creates the topics. Containers
+  # use redpanda:9092, the host uses localhost:19092.
+  redpanda:
+    image: redpandadata/redpanda:v26.2.6
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health -X brokers=localhost:9092 | grep -q 'Healthy:.*true'"]
+      interval: 2s
+      retries: 15
 
   world-server:
     profiles: [full]
@@ -36,6 +47,7 @@ services:
     environment:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
       JOIN_TOKEN_KEY: dev-only
+      KAFKA_BROKERS: redpanda:9092
       # Polled inside the network, handed to the client as localhost.
       INSTANCES: >-
         instance-0=http://instance-0:8080=ws://localhost:8081/instances/instance-0/ws
@@ -45,8 +57,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      nats:
-        condition: service_started
+      redpanda:
+        condition: service_healthy
 
   migrate:
     profiles: [full]
@@ -75,11 +87,14 @@ services:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
       JOIN_TOKEN_KEY: dev-only
       INSTANCE_ID: instance-0
+      KAFKA_BROKERS: redpanda:9092
     ports:
       - "8081:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
 
   instance-1:
     <<: *instance

@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+// Payloads on the Redpanda topics in docs/src/design/instance-manager.md. Only
+// the Go servers read these, so the Godobuf limits on game.proto do not apply.
+package events.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// player.session, keyed by account.
+message PlayerSession {
+  uint32 version = 1;
+  string account = 2;
+  PlayerSessionKind kind = 3;
+  string world = 4;
+  google.protobuf.Timestamp time = 5;
+}
+
+enum PlayerSessionKind {
+  PLAYER_SESSION_KIND_UNSPECIFIED = 0;
+  PLAYER_SESSION_KIND_ENTER = 1;
+  PLAYER_SESSION_KIND_LEAVE = 2;
+}
+
+// instance.join, keyed by run id.
+message InstanceJoin {
+  uint32 version = 1;
+  string run_id = 2;
+  string account = 3;
+  InstanceJoinResult result = 4;
+  // Empty when accepted.
+  string reason = 5;
+  // The id and boot id, like instance-0@3f9a1c.
+  string instance = 6;
+  google.protobuf.Timestamp time = 7;
+}
+
+enum InstanceJoinResult {
+  INSTANCE_JOIN_RESULT_UNSPECIFIED = 0;
+  INSTANCE_JOIN_RESULT_ACCEPTED = 1;
+  INSTANCE_JOIN_RESULT_REJECTED = 2;
+}
+
+// instance.lifecycle, keyed by GameServer name.
+message InstanceLifecycle {
+  uint32 version = 1;
+  string game_server = 2;
+  InstanceState state = 3;
+  google.protobuf.Timestamp time = 4;
+}
+
+enum InstanceState {
+  INSTANCE_STATE_UNSPECIFIED = 0;
+  INSTANCE_STATE_READY = 1;
+  INSTANCE_STATE_ALLOCATED = 2;
+  INSTANCE_STATE_SHUTDOWN = 3;
+  INSTANCE_STATE_GONE = 4;
+}
+
+// run.ended, keyed by run id. The carried loadout and loot come with the
+// ticket that produces it.
+message RunEnded {
+  uint32 version = 1;
+  string run_id = 2;
+  string account = 3;
+  string class = 4;
+  RunOutcome outcome = 5;
+  int64 xp = 6;
+  uint32 deaths = 7;
+  string instance = 8;
+  google.protobuf.Timestamp time = 9;
+}
+
+enum RunOutcome {
+  RUN_OUTCOME_UNSPECIFIED = 0;
+  RUN_OUTCOME_EXTRACTED = 1;
+  RUN_OUTCOME_DIED = 2;
+  RUN_OUTCOME_DISCONNECT = 3;
+}
+
+// inventory.applied, keyed by account.
+message InventoryApplied {
+  uint32 version = 1;
+  string account = 2;
+  string run_id = 3;
+  int64 stash_version = 4;
+  google.protobuf.Timestamp time = 5;
+}

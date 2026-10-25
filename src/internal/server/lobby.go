@@ -8,6 +8,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	eventsv1 "github.com/Fomiller/fantasy-rpg/gen/go/events/v1"
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -178,6 +179,7 @@ func (s *Lobby) enterTown(c *client, ch inventory.Character, returning bool) {
 	prog := s.rules.Classes().Progression
 	character := protocol.Character(prog, c.name, c.class, p.Level, p.XP, 0)
 	s.sendToClient(c, protocol.Joined(id, s.town, spawn, s.TickRate, protocol.ClassInfo(s.rules.Classes(), c.class), character))
+	s.sessionEvent(c, eventsv1.PlayerSessionKind_PLAYER_SESSION_KIND_ENTER)
 	s.openLobby(c, ch)
 }
 
@@ -190,6 +192,7 @@ func (s *Lobby) leaveTown(c *client) {
 	s.rules.RemovePlayer(c.id)
 	delete(s.inTown, c.id)
 	c.id = 0
+	s.sessionEvent(c, eventsv1.PlayerSessionKind_PLAYER_SESSION_KIND_LEAVE)
 }
 
 // checkEntrance sends a player who just stepped into the entrance toward a

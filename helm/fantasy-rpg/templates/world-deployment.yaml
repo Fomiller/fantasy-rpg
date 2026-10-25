@@ -40,6 +40,9 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "chart.instancesEnv" . | nindent 12 }}
+            {{- if .Values.events.brokers }}
+            {{- include "chart.eventsEnv" . | nindent 12 }}
+            {{- end }}
             {{- if .Values.joinKey.secretName }}
             {{- include "chart.joinKeyEnv" . | nindent 12 }}
             {{- end }}
