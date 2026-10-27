@@ -14,7 +14,14 @@ metadata:
            Removing the database is a job for a person. */}}
     argocd.argoproj.io/sync-options: Delete=false,Prune=false
 spec:
-  instances: 1
+  instances: {{ .Values.postgres.instances }}
+  {{- /* restart, the default, stops the primary in place on a spec change.
+         switchover promotes the replica first. */}}
+  primaryUpdateMethod: switchover
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: required
   {{- /* Pinned: CNPG never does an implicit major upgrade, so a floating tag
          can strand the cluster on an operator bump. */}}
   imageName: {{ .Values.postgres.imageName }}
