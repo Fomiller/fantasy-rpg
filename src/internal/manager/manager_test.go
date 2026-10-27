@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	dto "github.com/prometheus/client_model/go"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -274,6 +277,57 @@ func TestEnsureRoutesKeepsWhatExists(t *testing.T) {
 			t.Errorf("second ensure did %s %s, want only gets", a.GetVerb(), a.GetResource().Resource)
 		}
 	}
+}
+
+// Two replicas route one GameServer at once: one from a walk-in, the other
+// from its informer. Both read before either creates, so both create. The
+// loser's AlreadyExists is a success.
+func TestTwoManagersRouteOneGameServer(t *testing.T) {
+	gs := gameServer("gs-a", agonesv1.GameServerStateReady)
+	h := newHarness(t, allocated(gs), gs)
+	other := New(h.m.cfg, h.agones, h.kube, h.dynamic, NewMetrics(prometheus.NewRegistry()), h.m.log)
+
+	var racing atomic.Bool
+	racing.Store(true)
+	stale := func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if !racing.Load() {
+			return false, nil, nil
+		}
+		gr := action.GetResource().GroupResource()
+		return true, nil, apierrors.NewNotFound(gr, action.(k8stesting.GetAction).GetName())
+	}
+	h.kube.PrependReactor("get", "services", stale)
+	h.dynamic.PrependReactor("get", "ingressroutes", stale)
+
+	var wg sync.WaitGroup
+	var allocErr, routeErr error
+	var inst Instance
+	wg.Go(func() { inst, allocErr = h.m.Allocate(t.Context(), []string{"r1"}) })
+	wg.Go(func() { routeErr = other.EnsureRoutes(t.Context(), gs) })
+	wg.Wait()
+	racing.Store(false)
+	if allocErr != nil || inst.ID != "gs-a" {
+		t.Fatalf("allocate = %+v, %v", inst, allocErr)
+	}
+	if routeErr != nil {
+		t.Fatalf("informer route = %v", routeErr)
+	}
+
+	creates := map[string]int{}
+	for _, a := range append(h.kube.Actions(), h.dynamic.Actions()...) {
+		if a.GetVerb() == "create" {
+			creates[a.GetResource().Resource]++
+		}
+	}
+	if creates["services"] != 2 || creates["ingressroutes"] != 2 {
+		t.Fatalf("creates = %v, want both managers to try each", creates)
+	}
+	for _, m := range []*Manager{h.m, other} {
+		if n := testutil.ToFloat64(m.metrics.routingErrors.WithLabelValues("route")); n != 0 {
+			t.Errorf("route errors = %v, want 0", n)
+		}
+	}
+	assertRouted(t, h, gs)
 }
 
 func TestRouteFailureIsCounted(t *testing.T) {

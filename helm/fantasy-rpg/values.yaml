@@ -44,6 +44,11 @@ world:
 inventory:
   replicas: 2
 
+# instance-manager pods. They run active-active with no leader, and a PDB keeps
+# one up when there are two or more.
+instanceManager:
+  replicas: 2
+
 # The Secret the world and instance servers read JOIN_TOKEN_KEY from. Empty
 # means neither gets one, which only the http-echo default can run without. Point it at a Secret
 # from externalSecrets below.

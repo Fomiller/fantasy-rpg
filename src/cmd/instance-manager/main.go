@@ -24,6 +24,8 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/manager"
 )
 
+const drainDelay = 5 * time.Second
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("instance-manager stopped", "err", err)
@@ -96,6 +98,12 @@ func run() error {
 	case err := <-errc:
 		return err
 	}
+
+	// The Service drops a terminating pod a moment after SIGTERM. Keep
+	// answering until then, and close each connection after its reply so the
+	// world moves to the other replica.
+	srv.SetKeepAlivesEnabled(false)
+	time.Sleep(drainDelay)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
