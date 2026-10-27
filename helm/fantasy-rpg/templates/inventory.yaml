@@ -13,10 +13,14 @@ metadata:
     {{- /* After the migrate Job (0), so it never starts on an older schema. */}}
     argocd.argoproj.io/sync-wave: "1"
 spec:
-  replicas: 1
-  {{- /* One process relays the outbox. Two would send rows out of order. */}}
+  replicas: {{ .Values.inventory.replicas }}
+  {{- /* Replicas share the outbox relay through an advisory lock, so a new pod
+         can start before the old one stops. */}}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "chart.inventorySelectorLabels" . | nindent 6 }}
@@ -25,6 +29,15 @@ spec:
       labels:
         {{- include "chart.inventorySelectorLabels" . | nindent 8 }}
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "chart.inventorySelectorLabels" . | nindent 20 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -67,4 +80,19 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+{{- if gt (int .Values.inventory.replicas) 1 }}
+---
+{{- /* The join path needs one inventory pod up. */}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.inventorySelectorLabels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chart.inventorySelectorLabels" . | nindent 6 }}
+{{- end }}
 {{- end }}

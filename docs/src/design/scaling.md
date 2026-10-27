@@ -23,8 +23,9 @@ in Hub town.
 - `world-server` is one pod, `Recreate`, one town. `TOWN_MAX_PLAYERS` is
   32. One connection per name is a map in that process.
 - Caves run on the Agones Fleet with a buffer FleetAutoscaler, max 8.
-- `inventory` is one pod, `Recreate`. It owns Postgres and runs the outbox
-  relay.
+- `inventory` is two pods, `RollingUpdate`, with a PDB. It owns Postgres.
+  Each pod runs the outbox relay, and an advisory lock lets one send at a
+  time. Done in FOM-251.
 - `instance-manager` is one pod.
 - Postgres is CNPG with one instance. Redpanda is one broker, RF 1.
 - Public traffic is Cloudflare tunnel, then Traefik. WebSocket only. UDP is
@@ -353,6 +354,9 @@ On SIGTERM a shard:
   pod frees it at once. It also works through PgBouncer in transaction mode.
 - The `run.ended` consumer group splits partitions across replicas. 3
   partitions cap it at 3 useful consumers.
+- A rebalance can hand a record to the other replica before its offset is
+  committed. `EndRun` locks the account row and skips a run id it already
+  wrote, so the second apply is a no-op.
 
 ### instance-manager: active-active
 
@@ -506,7 +510,7 @@ In build order. Each one merges on its own and leaves the game playable.
      `just loadtest`.
    - Run it, in-cluster and public. Write the numbers into this doc. Set
      `TOWN_MAX_PLAYERS`, the soft cap and resource requests.
-6. **fantasy-rpg: inventory with 2 replicas.**
+6. **fantasy-rpg: inventory with 2 replicas.** Done, FOM-251.
    - Advisory lock in the relay, with a test of two relays on one table.
    - `RollingUpdate`, 2 replicas, PDB.
 7. **fantasy-rpg: instance-manager with 2 replicas.**

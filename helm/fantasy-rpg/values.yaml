@@ -39,6 +39,11 @@ world:
   # Extra container env, in the same shape as env above.
   env: []
 
+# inventory pods. Their outbox relays take turns through an advisory lock, so
+# more than one is safe. A PDB keeps one up when there are two or more.
+inventory:
+  replicas: 2
+
 # The Secret the world and instance servers read JOIN_TOKEN_KEY from. Empty
 # means neither gets one, which only the http-echo default can run without. Point it at a Secret
 # from externalSecrets below.
