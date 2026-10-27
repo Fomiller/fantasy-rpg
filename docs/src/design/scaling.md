@@ -30,13 +30,15 @@ in Hub town.
 - `instance-manager` is two pods, `RollingUpdate`, with a PDB. Both
   allocate and both route, with no leader. Agones `extensions` is two pods
   too. Done in FOM-252.
-- Postgres is CNPG with one instance. Redpanda is one broker, RF 1.
+- Postgres is CNPG with two instances, async, on
+  `longhorn-single-replica`. Done in FOM-254. Redpanda is one broker, RF 1.
 - Public traffic is Cloudflare tunnel, then Traefik. WebSocket only. UDP is
   parked in FOM-232.
 - The pods export Prometheus metrics, but the chart has no PodMonitor. Only
   CNPG's own PodMonitor is set. Unverified without kubectl: nothing may
   scrape the game today.
 - Longhorn storage is on two nodes, with 2 replicas per volume.
+  `longhorn-single-replica` has 1, for workloads that copy their own data.
 
 ## 1. Measure
 
@@ -422,19 +424,29 @@ On SIGTERM a shard:
 
 ### Postgres: a second CNPG instance
 
-- `instances: 2`. One per storage node, with CNPG's pod anti-affinity.
-- A Longhorn StorageClass with 1 replica for it. CNPG already copies the
-  data. Two Longhorn replicas each would be four copies on two nodes.
+Done in FOM-254. The details and the move off the old volume are in
+[Persistence](persistence.md), under Two instances.
+
+- `postgres.instances: 2`. One per storage node, with CNPG's pod
+  anti-affinity `required` on `kubernetes.io/hostname`.
+- `longhorn-single-replica` for new volumes. CNPG already copies the data.
+  Two Longhorn replicas each would be four copies on two nodes. CNPG does
+  not move an existing PVC to a new class, so moving the first instance is
+  a person's job.
+- Async replication. One sync replica would block every commit while it is
+  down, which is the outage this removes.
+- `primaryUpdateMethod: switchover`, so a rollout promotes the replica
+  instead of restarting the primary.
 - Failover takes tens of seconds. inventory calls fail meanwhile. Players
   see "characters unavailable" or "Saving...", as in any database outage.
-- Apps already use the `-rw` Service from the CNPG secret, so failover
-  needs no app change.
+- Apps use the `-rw` Service from the CNPG secret, so failover needs no app
+  change.
 - **Pooler: deferred.** pgxpool's default is `max(4, CPUs)` per pool.
   inventory has two pools. Three replicas stay well under the default 100
   connections. Add a CNPG Pooler in transaction mode when connections pass
-  half of `max_connections`.
-- HA is not a backup. The game's database has no ScheduledBackup yet,
-  unlike other homelab databases. That is its own ticket.
+  half of `max_connections`. Persistence, under Connections, has the query.
+- HA is not a backup. The nightly ScheduledBackup and WAL archiving are
+  FOM-255.
 
 ### Redpanda: stays at one broker for now
 
@@ -456,7 +468,8 @@ On SIGTERM a shard:
 | inventory | `minAvailable: 1` | The join path needs one |
 | instance-manager | `minAvailable: 1` | Same |
 | Agones extensions | `minAvailable: 1` | It serves `GameServerAllocation` |
-| Postgres, Redpanda | The operators make their own | |
+| Postgres | CNPG's own. `-primary` at `minAvailable: 1`, none for one replica | CNPG switches over before it lets the primary's node drain |
+| Redpanda | The operator makes its own | |
 | Caves | None | `eviction.safe: Always`. The drain is `DRAIN_TIMEOUT` |
 | Valkey | None | One pod. Losing it is safe |
 
@@ -564,9 +577,9 @@ In build order. Each one merges on its own and leaves the game playable.
    - `RollingUpdate`, 2 replicas, PDB. A test of two managers routing one
      GameServer.
    - Agones `extensions` at 2 replicas.
-8. **homelab: Longhorn 1-replica StorageClass.**
+8. **homelab: Longhorn 1-replica StorageClass.** Done, FOM-253.
    - For workloads that copy their own data.
-9. **fantasy-rpg: second Postgres instance.**
+9. **fantasy-rpg: second Postgres instance.** Done, FOM-254.
    - `instances: 2` on the new class. Fail over once by hand and watch the
      game.
    - Moving the existing volume to the new class is a person's job. Write

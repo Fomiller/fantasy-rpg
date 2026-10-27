@@ -344,14 +344,15 @@ starts on the memory store until someone turns it on.
 
 The Cluster follows `attic-db-cnpg` in the homelab:
 
-- `instances: 1`. Durability comes from backups, not a replica. An outage
-  stops joins, not runs.
+- `instances: 2`, a primary and one async streaming replica. FOM-254. A
+  restart or a node loss fails over in tens of seconds instead of stopping
+  joins until the pod is back. See Two instances.
 - `imageName` pinned to `ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie`.
   CNPG will not do an implicit major upgrade, so an unpinned image can
   strand the cluster on an operator bump.
 - `bootstrap.initdb` with database `fantasy`, owner `fantasy`.
-- `storage.size: 2Gi` on `longhorn`. One character is about 10 KB. Longhorn
-  can grow a volume but not shrink it, so start small.
+- `storage.size: 2Gi` on `longhorn-single-replica`. One character is about
+  10 KB. Longhorn can grow a volume but not shrink it, so start small.
 - `monitoring.enablePodMonitor: true`. CNPG marks this field deprecated
   and warns on apply. attic and directus use it too. Swap all three for a
   hand-written `PodMonitor` before CNPG removes it.
@@ -438,10 +439,12 @@ nix shell nixpkgs#kubectl-cnpg -c \
   kubectl cnpg --context admin@homelab -n fantasy-rpg psql fantasy-rpg-db -- -d fantasy
 ```
 
-Without the plugin, `kubectl exec` does the same:
+Without the plugin, `kubectl exec` into the primary does the same. Either
+instance can be the primary, so look it up:
 
 ```sh
-kubectl --context admin@homelab -n fantasy-rpg exec -it fantasy-rpg-db-1 -c postgres -- psql -d fantasy
+primary=$(kubectl --context admin@homelab -n fantasy-rpg get cluster fantasy-rpg-db -o jsonpath='{.status.currentPrimary}')
+kubectl --context admin@homelab -n fantasy-rpg exec -it $primary -c postgres -- psql -d fantasy
 ```
 
 For a client on your machine, port-forward the read-write Service and use
@@ -451,6 +454,195 @@ the `uri` from `fantasy-rpg-db-app`, with the host changed to `localhost`:
 kubectl --context admin@homelab -n fantasy-rpg port-forward svc/fantasy-rpg-db-rw 5432:5432
 kubectl --context admin@homelab -n fantasy-rpg get secret fantasy-rpg-db-app -o jsonpath='{.data.uri}' | base64 -d
 ```
+
+### Two instances
+
+FOM-254. A restart of the only instance broke every join during a load
+test. Two instances let CNPG fail over instead.
+
+- `postgres.instances: 2`. One primary, one replica that streams WAL from
+  it.
+- **Pod anti-affinity is `required` on `kubernetes.io/hostname`.** The two
+  pods never share a node. With two Longhorn nodes, a replica whose node is
+  down stays `Pending` until that node is back. That is the point: two
+  copies on one node are one copy.
+- **`longhorn-single-replica`.** Postgres keeps its own copy, so each volume
+  has one Longhorn replica. Two Longhorn replicas each would be four copies
+  on two nodes. The class has `dataLocality: best-effort`, so Longhorn moves
+  the replica to the node the pod runs on.
+- **`primaryUpdateMethod: switchover`.** The default, `restart`, stops the
+  primary in place for a spec change or an image bump. `switchover`
+  promotes the replica first, so a rollout costs a few seconds of writes,
+  not a restart.
+- **Async replication.** No `synchronous` block, no `minSyncReplicas`. With
+  one replica, `dataDurability: required` blocks every commit while the
+  replica is down: each rollout, each drain, each node loss. That is the
+  outage this ticket removes. `preferred` does not block, but it adds a
+  round trip to every commit and falls back to async in exactly those
+  moments. The cost of async: a failover can lose the last commits the
+  replica had not received. On one LAN that is milliseconds of writes, and
+  WAL also goes to S3.
+- **Clients use `-rw`.** The `uri` in `fantasy-rpg-db-app` points at
+  `fantasy-rpg-db-rw`, the Service for the current primary. inventory and
+  the migrate Job are the only clients, and both read it. A failover needs
+  no app change. inventory calls fail until the new primary is up. Players
+  see "characters unavailable" or "Saving...".
+- **PDBs are CNPG's.** It makes `fantasy-rpg-db-primary` with
+  `minAvailable: 1`. It makes the replica PDB only at 3 or more instances.
+  - Drain the replica's node: nothing blocks it. The replica goes `Pending`
+    until the node is back.
+  - Drain the primary's node: CNPG sees the node is cordoned and switches
+    over first. Then the old primary is a replica and the drain goes on.
+  - With one instance the primary PDB blocks the drain for good. That was
+    true before this change.
+- **A node that does not come back.** The instance on it stays `Pending`,
+  because its only volume is there. Destroy it and CNPG builds a new one
+  from the primary: `kubectl cnpg destroy fantasy-rpg-db <n>`.
+
+#### Moving the first instance to the new class
+
+CNPG uses `storage.storageClass` only when it creates a PVC. It never
+changes an existing one. Only the size and the volume attributes class are
+reconciled on existing PVCs, and `storageClassName` cannot change on a PVC
+anyway. The webhook allows the change. So the merge does not touch
+`fantasy-rpg-db-1`'s volume. It stays on `longhorn` until a person moves it.
+
+What the merge does by itself, once Kargo promotes the chart and Argo CD
+syncs:
+
+1. CNPG creates `fantasy-rpg-db-2` on `longhorn-single-replica`, on the
+   other node, and clones it from `-1`. Writes go on.
+2. `-1`'s pod spec changed, because the anti-affinity went from `preferred`
+   to `required`. CNPG rolls it with a switchover: `-2` becomes primary, a
+   few seconds without writes, then `-1` comes back as a replica on its old
+   `longhorn` volume.
+3. Argo CD waits for the Cluster to be healthy, in wave -1, then runs the
+   migrate Job.
+
+The steps below move `-1` off the old volume. Both classes are `Retain`, so
+a deleted PVC leaves its PV and Longhorn volume behind until a person
+deletes them.
+
+```sh
+k() { kubectl --context admin@homelab -n fantasy-rpg "$@"; }
+cnpg() { nix shell nixpkgs#kubectl-cnpg -c kubectl cnpg --context admin@homelab -n fantasy-rpg "$@"; }
+```
+
+**Before the merge.**
+
+1. Check the class exists and Longhorn has two nodes:
+
+   ```sh
+   kubectl --context admin@homelab get storageclass longhorn-single-replica
+   kubectl --context admin@homelab -n longhorn-system get nodes.longhorn.io
+   ```
+
+2. Check WAL archiving works, then take a base backup and wait for it. See
+   Backups. This backup is the real rollback.
+
+   ```sh
+   k get backup -w
+   ```
+
+   Wait for `PHASE` `completed`.
+
+3. Write down `-1`'s PV:
+
+   ```sh
+   k get pvc fantasy-rpg-db-1 -o jsonpath='{.spec.volumeName}{"\n"}'
+   ```
+
+**After the merge.**
+
+4. Wait for the Cluster, then look at it:
+
+   ```sh
+   k get cluster fantasy-rpg-db -w
+   cnpg status fantasy-rpg-db
+   k get pods -l cnpg.io/cluster=fantasy-rpg-db -L cnpg.io/instanceRole -o wide
+   k get pvc -l cnpg.io/cluster=fantasy-rpg-db \
+     -o custom-columns=NAME:.metadata.name,CLASS:.spec.storageClassName,PV:.spec.volumeName
+   ```
+
+   Go on when all of these hold:
+   - `STATUS` is `Cluster in healthy state`.
+   - The two pods are on different nodes.
+   - `status` shows `-2` streaming, with lag near 0.
+   - `-1` is on `longhorn` and `-2` is on `longhorn-single-replica`.
+
+5. If `-1` is still the primary, switch over:
+
+   ```sh
+   cnpg promote fantasy-rpg-db 2
+   ```
+
+   Wait for `Cluster in healthy state`, and check that `currentPrimary` is
+   `fantasy-rpg-db-2`. inventory calls fail for a few seconds.
+
+6. Destroy `-1`. This deletes its pod and its PVC. Only do it when `-1` is
+   a replica:
+
+   ```sh
+   k get cluster fantasy-rpg-db -o jsonpath='{.status.currentPrimary}{"\n"}'
+   cnpg destroy fantasy-rpg-db 1
+   ```
+
+7. CNPG makes a new replica on `longhorn-single-replica`, on the node
+   without the primary, and clones it from `-2`. CNPG reuses free serials,
+   so it is usually `-1` again. Run step 4 again. Both PVCs should now be on
+   `longhorn-single-replica`.
+
+8. Check each volume's one Longhorn replica is on its pod's node. Run it
+   for each PV from step 4:
+
+   ```sh
+   kubectl --context admin@homelab -n longhorn-system get replicas.longhorn.io \
+     -l longhornvolume=<pv> -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeID
+   ```
+
+   `best-effort` can take a few minutes to move it after the pod starts.
+
+9. Fail over once by hand, as the ticket asks, and watch the game. Promote
+   whichever instance is the replica:
+
+   ```sh
+   cnpg promote fantasy-rpg-db <replica serial>
+   ```
+
+10. After a few days, delete the old volume. The PV from step 3 is
+    `Released`:
+
+    ```sh
+    kubectl --context admin@homelab get pv <old pv>
+    kubectl --context admin@homelab delete pv <old pv>
+    kubectl --context admin@homelab -n longhorn-system delete volumes.longhorn.io <old pv>
+    ```
+
+**Rollback.**
+
+- Before step 6, nothing is lost. To go back to one instance on the old
+  volume, promote `-1` with `cnpg promote fantasy-rpg-db 1`, then revert
+  the PR. CNPG removes a replica on scale down, never the primary, so it
+  deletes `-2`. Its PV stays, because of `Retain`. Reverting the
+  anti-affinity restarts the primary in place once.
+- After step 6, the old PV holds data only up to the destroy. Do not bring
+  it back. If the new replica will not join, the cluster keeps running on
+  `-2` alone. `cnpg destroy fantasy-rpg-db <n>` again to retry.
+- If `-2` is lost too, restore from the backup in step 2. See Restore.
+
+### Connections
+
+The Pooler is deferred. Add a CNPG `Pooler` in transaction mode when
+connections pass half of `max_connections`. Check it on the primary:
+
+```sh
+cnpg psql fantasy-rpg-db -- -tAc \
+  "select count(*), current_setting('max_connections') from pg_stat_activity where backend_type = 'client backend'"
+```
+
+Grafana has the same number as `cnpg_backends_total` against
+`cnpg_pg_settings_setting{name="max_connections"}`. The replica has its own
+`max_connections`, and no app connects to it.
 
 ### Backups
 
@@ -478,7 +670,8 @@ Check that WAL archiving works and a base backup exists:
 
 ```sh
 kubectl --context admin@homelab -n fantasy-rpg get objectstore,scheduledbackup,backup
-kubectl --context admin@homelab -n fantasy-rpg exec fantasy-rpg-db-1 -c postgres -- \
+primary=$(kubectl --context admin@homelab -n fantasy-rpg get cluster fantasy-rpg-db -o jsonpath='{.status.currentPrimary}')
+kubectl --context admin@homelab -n fantasy-rpg exec $primary -c postgres -- \
   psql -U postgres -tAc \
   'select archived_count, failed_count, last_archived_time, last_failed_time from pg_stat_archiver'
 ```
@@ -558,7 +751,8 @@ never point it at the live one.
 
    ```sh
    for c in fantasy-rpg-db fantasy-rpg-db-restore; do
-     kubectl --context admin@homelab -n fantasy-rpg exec $c-1 -c postgres -- \
+     p=$(kubectl --context admin@homelab -n fantasy-rpg get cluster $c -o jsonpath='{.status.currentPrimary}')
+     kubectl --context admin@homelab -n fantasy-rpg exec $p -c postgres -- \
        psql -U postgres -d fantasy -tAc \
        'select (select count(*) from accounts), (select count(*) from characters), (select max(version_id) from goose_db_version)'
    done
@@ -639,8 +833,9 @@ instance-db: migrate
 - **`runs` and `run_results`.** When balance work needs the numbers. A NATS
   event at run end is one way to feed them without slowing the run end
   write.
-- **Read replica or a second instance.** When an outage that stops joins
-  costs more than the extra volume.
+- **Read replicas for the game.** The replica takes no reads today. Every
+  call goes to `-rw`. Reads from `-ro` would see lag, which the stash path
+  cannot take.
 
 ## Follow-up tickets
 

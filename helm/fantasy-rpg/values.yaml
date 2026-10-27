@@ -96,10 +96,15 @@ postgres:
   imageName: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
   database: fantasy
   owner: fantasy
-  # Longhorn grows a volume but never shrinks one, so start small.
+  # A primary and one streaming replica, on different nodes, so a restart or a
+  # node loss fails over. Postgres keeps the copies, so the volumes have one
+  # Longhorn replica each. With instances: 1, go back to `longhorn`.
+  instances: 2
+  # Longhorn grows a volume but never shrinks one, so start small. A new class
+  # only applies to volumes CNPG creates. See Persistence in the docs.
   storage:
     size: 2Gi
-    storageClass: longhorn
+    storageClass: longhorn-single-replica
   resources:
     requests:
       cpu: 100m
