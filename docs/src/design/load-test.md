@@ -101,11 +101,43 @@ sum of Errors by stage. Name the stages that had any.
 
 | Players | Town tick p99 | Cave tick p99 | World CPU | World memory | Cave CPU | Cave memory | Allocation p99 | Errors | Date, tag |
 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| 10 | | | | | | | | | |
+| 10 (town 7, caves 7 at peak) | 0.50 ms | 0.50 ms | 0.038 cores | 10.5 MiB | 0.047 cores | 10.4 MiB | 0.99 s | 115: `world_join` 92, `enter_saving` 15, `enter_full` 8 | 2026-10-27, 0.26.0 |
 | 25 | | | | | | | | | |
 | 50 | | | | | | | | | |
 | 100 | | | | | | | | | |
 | 100, public | | | | | | | | | |
+
+### 10 bots, 2026-10-27
+
+- 1 pod of 10 bots for 10 minutes, image 0.26.0, through the in-cluster
+  Traefik. Numbers are from 8 minutes of the run, not the last 5.
+- Peak players: 7 in town, 7 in caves. The bots move between the two. At
+  most 3 GameServers.
+- The tick is 20 Hz, 50 ms, the `TICK_RATE` default. Both tick p99s sit at
+  the lowest histogram bucket, 0.5 ms. The real value can be lower.
+- Snapshot gap p99 is 60 ms in town and in caves. That is the bucket just
+  above one 50 ms tick.
+- Bot join p99 is about 2.0 s and ticket p99 about 1.7 s. Those come from
+  coarse histogram buckets.
+- Average CPU in cores: inventory 0.014 over 2 pods, instance-manager
+  0.007, postgres 0.019, redpanda 0.011, Agones sidecar 0.009, bot 0.069.
+- Max memory: inventory 12.2 MiB, instance-manager 15.6 MiB, postgres
+  128 MiB, redpanda 204 MiB, bot 8.9 MiB.
+- Runs: 178 extracted, 0 died. `instance_dial` and `instance_join` had no
+  errors.
+- All `world_join` errors came in the last 3 minutes or so. The single
+  CNPG instance restarted then to add the barman-cloud backup sidecar
+  (FOM-255). They come from the DB restart, not from load.
+- `enter_full` comes from the Fleet buffer while bots enter fast.
+- `enter_saving` is a bot that tries to enter a cave while its last run
+  still saves.
+
+What it shows:
+
+- 10 bots is far below any limit. CPU and memory per pod are tiny.
+- Run 25, 50 and 100 before you set `TOWN_MAX_PLAYERS` or pod requests.
+- With one Postgres instance, a DB restart makes joins fail. That supports
+  FOM-254, a second Postgres instance.
 
 ## What the results set
 
