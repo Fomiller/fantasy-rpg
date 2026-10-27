@@ -1,0 +1,70 @@
+# One pod per completion index. Each pod runs BOTS bots, named
+# bot-<index>-<n>, so reruns reuse the same characters.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fantasy-rpg-bots
+  labels:
+    app.kubernetes.io/name: fantasy-rpg
+    app.kubernetes.io/component: bot
+spec:
+  completionMode: Indexed
+  completions: 1
+  parallelism: 1
+  backoffLimit: 3
+  # A cap for a run nobody stopped. Longer than any -duration a stage uses.
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fantasy-rpg
+        app.kubernetes.io/component: bot
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ecr-image-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: bot
+          image: fantasy-rpg
+          command: [/bot]
+          # The bot takes its name prefix from JOB_COMPLETION_INDEX, which
+          # the Job controller sets on every pod.
+          args:
+            - -url=$(URL)
+            - -via=$(VIA)
+            - -n=$(BOTS)
+            - -ramp=$(RAMP)
+            - -duration=$(DURATION)
+            - -metrics-addr=:9090
+          env:
+            - name: URL
+              value: wss://fantasy-rpg.fomiller.com/ws
+            # Traefik's in-cluster Service, the one the Cloudflare tunnel
+            # sends to. Ticket URLs are rewritten too, and keep their Host.
+            # Empty goes through the public host instead.
+            - name: VIA
+              value: http://traefik.traefik.svc.cluster.local
+            - name: BOTS
+              value: "10"
+            # Per pod. The whole Job starts pods times this per second.
+            - name: RAMP
+              value: "2"
+            - name: DURATION
+              value: 10m
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
