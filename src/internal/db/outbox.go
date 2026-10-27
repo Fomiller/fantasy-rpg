@@ -16,6 +16,9 @@ import (
 const (
 	relayBatch = 100
 	relayEvery = 500 * time.Millisecond
+	// relayLock is the advisory lock key every inventory replica's relay
+	// takes, so only one sends at a time.
+	relayLock int64 = 0x6f75_7462_6f78 // "outbox"
 )
 
 // writeOutbox queues msg in tx, so the event exists only if the write does.
@@ -29,7 +32,8 @@ func writeOutbox(ctx context.Context, tx pgx.Tx, topic, key string, msg proto.Me
 }
 
 // Relay produces outbox rows in id order and deletes each once the bus acks
-// it. Delivery is at least once.
+// it. Delivery is at least once. Any number can run on one database: one
+// sends each pass and the rest skip it.
 type Relay struct {
 	pool    *pgxpool.Pool
 	bus     events.Sender
@@ -90,13 +94,21 @@ type outboxRow struct {
 }
 
 // flush sends one batch and deletes the rows that were acked. It stops at the
-// first failure, so a row is never sent before the ones ahead of it.
+// first failure, so a row is never sent before the ones ahead of it. It sends
+// nothing if another relay holds the lock.
 func (r *Relay) flush(ctx context.Context) (int, error) {
 	var sent []int64
 	var sendErr error
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		// The lock keeps a second relay, say an old pod still stopping, off
-		// the rows this one is sending.
+		// Not SKIP LOCKED: a second relay would send rows past one the first
+		// is stuck on, and per-account order would break.
+		var locked bool
+		if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1)`, relayLock).Scan(&locked); err != nil {
+			return err
+		}
+		if !locked {
+			return nil
+		}
 		rows, err := tx.Query(ctx, `
 			SELECT id, topic, key, payload FROM outbox
 			ORDER BY id LIMIT $1

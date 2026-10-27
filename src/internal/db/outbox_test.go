@@ -3,8 +3,10 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -173,5 +175,116 @@ func TestRelayRunStopsWithTheContext(t *testing.T) {
 	<-done
 	if n := len(bus.Records(events.TopicInventoryApplied)); n != 1 {
 		t.Fatalf("relayed %d records, want 1", n)
+	}
+}
+
+// gate holds every send until open is closed. started closes on the first.
+type gate struct {
+	*events.Memory
+	started chan struct{}
+	open    chan struct{}
+	once    sync.Once
+}
+
+func (g *gate) Send(ctx context.Context, topic, key string, payload []byte) error {
+	g.once.Do(func() { close(g.started) })
+	select {
+	case <-g.open:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return g.Memory.Send(ctx, topic, key, payload)
+}
+
+func runIDs(from, to int) []string {
+	var out []string
+	for i := from; i <= to; i++ {
+		out = append(out, fmt.Sprintf("6f1c2b3a-0000-4000-8000-%012d", i))
+	}
+	return out
+}
+
+func sentRuns(t *testing.T, bus *events.Memory) []string {
+	t.Helper()
+	var out []string
+	for _, rec := range bus.Records(events.TopicInventoryApplied) {
+		var msg eventsv1.InventoryApplied
+		if err := proto.Unmarshal(rec.Payload, &msg); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, msg.GetRunId())
+	}
+	return out
+}
+
+// Two inventory replicas each run a relay on one outbox. Each row goes out
+// once, in id order.
+func TestTwoRelaysSendOnceInOrder(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	url := newDBURL(t, true)
+	runs := runIDs(1, 20)
+	s := endRuns(t, url, runs...)
+	bus := &gate{Memory: events.NewMemory(), started: make(chan struct{}), open: make(chan struct{})}
+	a, b := newRelay(t, url, bus), newRelay(t, url, bus)
+
+	type result struct {
+		n   int
+		err error
+	}
+	first := make(chan result, 1)
+	go func() {
+		n, err := a.flush(ctx)
+		first <- result{n, err}
+	}()
+	<-bus.started
+	// Without the lock, the second relay would wait on FOR UPDATE.
+	skipCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if n, err := b.flush(skipCtx); n != 0 || err != nil {
+		t.Fatalf("second relay flush = %d, %v, want a skip while the first holds the lock", n, err)
+	}
+	close(bus.open)
+	if r := <-first; r.n != len(runs) || r.err != nil {
+		t.Fatalf("first relay flush = %d, %v", r.n, r.err)
+	}
+
+	a.every, b.every = time.Millisecond, time.Millisecond
+	runCtx, stop := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	for _, r := range []*Relay{a, b} {
+		wg.Go(func() { r.Run(runCtx) })
+	}
+	more := runIDs(21, 60)
+	c := inventory.Character{Name: "ann", Class: "warrior", Stash: []items.Instance{sword()}}
+	for _, run := range more {
+		if _, err := s.StartRun(ctx, "ann", "warrior", run, "instance-0@3f9a1c"); err != nil {
+			t.Fatal(err)
+		}
+		c.XP += 10
+		if err := s.EndRun(ctx, run, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deadline := time.After(10 * time.Second)
+	for outboxRows(t, s) > 0 {
+		select {
+		case <-deadline:
+			t.Fatal("the relays did not empty the outbox")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	stop()
+	wg.Wait()
+
+	want := append(runs, more...)
+	got := sentRuns(t, bus.Memory)
+	if len(got) != len(want) {
+		t.Fatalf("sent %d records, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("record %d is run %s, want %s", i, got[i], want[i])
+		}
 	}
 }
