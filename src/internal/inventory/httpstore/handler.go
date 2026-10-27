@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 )
@@ -20,6 +21,9 @@ func Register(mux *http.ServeMux, store inventory.Store, log *slog.Logger) {
 	mux.HandleFunc("POST /v1/runs/start", h.startRun)
 	mux.HandleFunc("POST /v1/runs/end", h.endRun)
 	mux.HandleFunc("POST /v1/runs/clear", h.clearRun)
+	mux.HandleFunc("POST /v1/sessions/claim", h.claim)
+	mux.HandleFunc("POST /v1/sessions/release", h.release)
+	mux.HandleFunc("POST /v1/shards/heartbeat", h.heartbeat)
 }
 
 type handler struct {
@@ -64,7 +68,7 @@ func (h *handler) saveLobby(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
-	h.done(w, r, h.store.SaveLobby(r.Context(), in.Name, in.Class, c.Loadout, c.Stash))
+	h.done(w, r, h.store.SaveLobby(r.Context(), in.Name, in.Class, in.Session, c.Loadout, c.Stash))
 }
 
 func (h *handler) startRun(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +108,30 @@ func (h *handler) clearRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.done(w, r, h.store.ClearRun(r.Context(), in.Name, in.RunID))
+}
+
+func (h *handler) claim(w http.ResponseWriter, r *http.Request) {
+	var in session
+	if !decode(w, r, &in) {
+		return
+	}
+	h.done(w, r, h.store.Claim(r.Context(), in.session()))
+}
+
+func (h *handler) release(w http.ResponseWriter, r *http.Request) {
+	var in session
+	if !decode(w, r, &in) {
+		return
+	}
+	h.done(w, r, h.store.Release(r.Context(), in.session()))
+}
+
+func (h *handler) heartbeat(w http.ResponseWriter, r *http.Request) {
+	var in heartbeatRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	h.done(w, r, h.store.Heartbeat(r.Context(), in.Shard, in.Boot, time.Duration(in.TTL*float64(time.Second))))
 }
 
 func (h *handler) done(w http.ResponseWriter, r *http.Request, err error) {

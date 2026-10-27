@@ -27,7 +27,7 @@ func TestMeteredCountsErrors(t *testing.T) {
 	s := inventory.Metered(inventory.NewMemory(), reg)
 	ctx := context.Background()
 	s.Load(ctx, "ann", "warrior")
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); err == nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", "s1", inventory.Loadout{}, nil); err == nil {
 		t.Fatal("saved a lobby for a character that does not exist")
 	}
 	if n := testutil.CollectAndCount(reg, "store_duration_seconds"); n != 2 {

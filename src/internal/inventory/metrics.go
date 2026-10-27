@@ -51,9 +51,24 @@ func (m *metered) Create(ctx context.Context, c Character) (err error) {
 	return m.store.Create(ctx, c)
 }
 
-func (m *metered) SaveLobby(ctx context.Context, name, class string, l Loadout, stash []items.Instance) (err error) {
+func (m *metered) SaveLobby(ctx context.Context, name, class, session string, l Loadout, stash []items.Instance) (err error) {
 	defer m.observe("save_lobby", time.Now(), &err)
-	return m.store.SaveLobby(ctx, name, class, l, stash)
+	return m.store.SaveLobby(ctx, name, class, session, l, stash)
+}
+
+func (m *metered) Claim(ctx context.Context, s Session) (err error) {
+	defer m.observe("claim", time.Now(), &err)
+	return m.store.Claim(ctx, s)
+}
+
+func (m *metered) Release(ctx context.Context, s Session) (err error) {
+	defer m.observe("release", time.Now(), &err)
+	return m.store.Release(ctx, s)
+}
+
+func (m *metered) Heartbeat(ctx context.Context, shard, boot string, ttl time.Duration) (err error) {
+	defer m.observe("heartbeat", time.Now(), &err)
+	return m.store.Heartbeat(ctx, shard, boot, ttl)
 }
 
 func (m *metered) StartRun(ctx context.Context, name, class, runID, instance string) (c Character, err error) {

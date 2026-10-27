@@ -21,6 +21,8 @@ var (
 	ErrRunUsed     = errors.New("run id already ended")
 	ErrLeaseLost   = errors.New("run does not hold the lease")
 	ErrStashFull   = errors.New("stash is over its limit")
+	ErrPlaying     = errors.New("name is playing in another session")
+	ErrSessionLost = errors.New("session does not hold the name")
 )
 
 // Character is what the store keeps for one class of one account. Level is
@@ -47,6 +49,16 @@ type Lease struct {
 
 func (l Lease) Held() bool { return l.RunID != "" }
 
+// Session is one join's claim on a name. Only the session holding the claim
+// may save the lobby, so two sessions cannot save over each other's stash.
+type Session struct {
+	Name string
+	// ID is new on every join.
+	ID string
+	// Shard and Boot name the world server process, like world-0 and 3f9a1c.
+	Shard, Boot string
+}
+
 // Store keeps characters between connections. Each write is one call that
 // replaces whole values, so a crash never leaves the stash and the
 // character disagreeing.
@@ -58,9 +70,9 @@ type Store interface {
 	// character already exists, so two racing joins cannot both hand out a kit.
 	// A new account starts with c.Stash; an existing one keeps its own.
 	Create(ctx context.Context, c Character) error
-	// SaveLobby writes the loadout and stash after a lobby move. ErrInRun while
-	// a lease is held.
-	SaveLobby(ctx context.Context, name, class string, l Loadout, stash []items.Instance) error
+	// SaveLobby writes the loadout and stash after a lobby move. ErrSessionLost
+	// unless session holds the name. ErrInRun while a lease is held.
+	SaveLobby(ctx context.Context, name, class, session string, l Loadout, stash []items.Instance) error
 	// StartRun takes the run lease and returns the character and stash.
 	// ErrInRun if a lease is held. ErrRunUsed if runID is the character's last run.
 	StartRun(ctx context.Context, name, class, runID, instance string) (Character, error)
@@ -70,6 +82,15 @@ type Store interface {
 	EndRun(ctx context.Context, runID string, c Character) error
 	// ClearRun drops a dead lease. A no-op unless the lease is still runID's.
 	ClearRun(ctx context.Context, name, runID string) error
+	// Claim takes the name for s. It wins if no session holds the name, if
+	// s's shard and boot hold it already, or if the holder's shard missed its
+	// heartbeat. ErrPlaying otherwise.
+	Claim(ctx context.Context, s Session) error
+	// Release drops the claim. A no-op unless s holds it.
+	Release(ctx context.Context, s Session) error
+	// Heartbeat keeps the claims of shard at boot alive for ttl. A new boot
+	// ends the claims of the old one at once.
+	Heartbeat(ctx context.Context, shard, boot string, ttl time.Duration) error
 }
 
 // Memory is a Store that lasts as long as the process. db.Store is the
@@ -79,6 +100,13 @@ type Memory struct {
 	stashes    map[string][]items.Instance
 	leases     map[string]Lease
 	characters map[charKey]*saved
+	sessions   map[string]Session
+	shards     map[string]shardBeat
+}
+
+type shardBeat struct {
+	boot    string
+	expires time.Time
 }
 
 type charKey struct{ name, class string }
@@ -90,7 +118,7 @@ type saved struct {
 }
 
 func NewMemory() *Memory {
-	return &Memory{stashes: map[string][]items.Instance{}, leases: map[string]Lease{}, characters: map[charKey]*saved{}}
+	return &Memory{stashes: map[string][]items.Instance{}, leases: map[string]Lease{}, characters: map[charKey]*saved{}, sessions: map[string]Session{}, shards: map[string]shardBeat{}}
 }
 
 func (m *Memory) Load(_ context.Context, name, class string) (Character, bool, error) {
@@ -121,7 +149,7 @@ func (m *Memory) Create(_ context.Context, c Character) error {
 	return nil
 }
 
-func (m *Memory) SaveLobby(_ context.Context, name, class string, l Loadout, stash []items.Instance) error {
+func (m *Memory) SaveLobby(_ context.Context, name, class, session string, l Loadout, stash []items.Instance) error {
 	if err := checkStash(stash); err != nil {
 		return err
 	}
@@ -130,6 +158,9 @@ func (m *Memory) SaveLobby(_ context.Context, name, class string, l Loadout, sta
 	s, ok := m.characters[charKey{name, class}]
 	if !ok {
 		return fmt.Errorf("%w: %s %s", ErrNoCharacter, name, class)
+	}
+	if cur, ok := m.sessions[name]; !ok || cur.ID != session {
+		return ErrSessionLost
 	}
 	if m.leases[name].Held() {
 		return ErrInRun
@@ -190,6 +221,38 @@ func (m *Memory) ClearRun(_ context.Context, name, runID string) error {
 	if runID != "" && m.leases[name].RunID == runID {
 		delete(m.leases, name)
 	}
+	return nil
+}
+
+func (m *Memory) Claim(_ context.Context, s Session) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur, ok := m.sessions[s.Name]
+	if ok && cur.ID != s.ID && (cur.Shard != s.Shard || cur.Boot != s.Boot) && m.live(cur) {
+		return ErrPlaying
+	}
+	m.sessions[s.Name] = s
+	return nil
+}
+
+func (m *Memory) live(s Session) bool {
+	b, ok := m.shards[s.Shard]
+	return ok && b.boot == s.Boot && time.Now().Before(b.expires)
+}
+
+func (m *Memory) Release(_ context.Context, s Session) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sessions[s.Name].ID == s.ID {
+		delete(m.sessions, s.Name)
+	}
+	return nil
+}
+
+func (m *Memory) Heartbeat(_ context.Context, shard, boot string, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.shards[shard] = shardBeat{boot: boot, expires: time.Now().Add(ttl)}
 	return nil
 }
 

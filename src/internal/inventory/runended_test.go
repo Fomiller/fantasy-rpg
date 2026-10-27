@@ -82,7 +82,10 @@ func TestRunEndedHandlerIsIdempotent(t *testing.T) {
 	if err := handle(ctx, "run-1", b); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SaveLobby(ctx, "ann", "warrior", Loadout{}, nil); err != nil {
+	if err := m.Claim(ctx, Session{Name: "ann", ID: "s1", Shard: "world-0", Boot: "b1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SaveLobby(ctx, "ann", "warrior", "s1", Loadout{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := handle(ctx, "run-1", b); err != nil {

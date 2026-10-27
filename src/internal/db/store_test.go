@@ -3,9 +3,13 @@ package db
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -133,5 +137,39 @@ func TestOpenStoreFailsClosed(t *testing.T) {
 	}
 	if _, _, _, err := OpenStore(t.Context(), "", "disk", prometheus.NewRegistry()); err == nil {
 		t.Fatal("open with STORE=disk did not fail")
+	}
+}
+
+// Two inventory replicas are two pools on one database. Only one claim for a
+// name may win across them.
+func TestClaimAcrossReplicas(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	url := newDBURL(t, true)
+	replicas := []*Store{newStore(t, url), newStore(t, url)}
+	for i := range 2 {
+		if err := replicas[0].Heartbeat(ctx, fmt.Sprint("world-", i), "b0", time.Minute); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for round := range 20 {
+		name := fmt.Sprint("p", round)
+		var won atomic.Int32
+		var wg sync.WaitGroup
+		for i, s := range replicas {
+			wg.Go(func() {
+				err := s.Claim(ctx, inventory.Session{Name: name, ID: fmt.Sprint("s", i), Shard: fmt.Sprint("world-", i), Boot: "b0"})
+				switch {
+				case err == nil:
+					won.Add(1)
+				case !errors.Is(err, inventory.ErrPlaying):
+					t.Errorf("claim %s on replica %d = %v", name, i, err)
+				}
+			})
+		}
+		wg.Wait()
+		if won.Load() != 1 {
+			t.Fatalf("%s: %d claims won, want 1", name, won.Load())
+		}
 	}
 }

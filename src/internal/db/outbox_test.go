@@ -70,7 +70,13 @@ func TestEndRunWritesInventoryApplied(t *testing.T) {
 	if err := s.EndRun(ctx, run, inventory.Character{Name: "ann", Class: "warrior"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); err != nil {
+	if err := s.Heartbeat(ctx, "world-0", "b0", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Claim(ctx, inventory.Session{Name: "ann", ID: "s1", Shard: "world-0", Boot: "b0"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveLobby(ctx, "ann", "warrior", "s1", inventory.Loadout{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := outboxRows(t, s); n != 1 {
