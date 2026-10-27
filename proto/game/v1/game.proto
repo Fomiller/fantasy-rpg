@@ -70,6 +70,9 @@ message JoinRequest {
   // Set on the first join after a run, so the town spawns the player at
   // the cave entrance.
   bool returning = 3;
+  // Set by the headless bot. It only keeps the player out of the human
+  // count the bot director fills against, so a client gains nothing by it.
+  bool bot = 4;
 }
 
 // JoinAccepted is sent when the world server puts the player in the town,

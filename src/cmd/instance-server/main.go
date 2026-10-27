@@ -143,6 +143,7 @@ func run() error {
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /status", game.HandleStatus)
+	mux.HandleFunc("GET /v1/players", game.HandlePlayers)
 	// The public route is a path prefix per instance, so the socket lives
 	// under it and Traefik needs no rewrite.
 	mux.HandleFunc("GET /instances/"+game.ID+"/ws", game.HandleWS)

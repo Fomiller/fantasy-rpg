@@ -1,11 +1,11 @@
-package main
+package bot
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-type metrics struct {
+type Metrics struct {
 	active       prometheus.Gauge
 	connects     *prometheus.CounterVec
 	join         prometheus.Histogram
@@ -16,13 +16,20 @@ type metrics struct {
 	runs         *prometheus.CounterVec
 	errors       *prometheus.CounterVec
 	messages     *prometheus.CounterVec
+	// A worker's share from the bot director.
+	assigned         prometheus.Gauge
+	assignmentErrors prometheus.Counter
 }
 
-func newMetrics(reg prometheus.Registerer) *metrics {
+func NewMetrics(reg prometheus.Registerer) *Metrics {
 	f := promauto.With(reg)
 	latency := []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
-	return &metrics{
-		active: f.NewGauge(prometheus.GaugeOpts{Name: "bot_active", Help: "Bots running in this process."}),
+	return &Metrics{
+		active:   f.NewGauge(prometheus.GaugeOpts{Name: "bot_active", Help: "Bots running in this process."}),
+		assigned: f.NewGauge(prometheus.GaugeOpts{Name: "bot_assigned", Help: "Bots the bot director gave this worker."}),
+		assignmentErrors: f.NewCounter(prometheus.CounterOpts{
+			Name: "bot_assignment_errors_total", Help: "Polls of the bot director that failed.",
+		}),
 		connects: f.NewCounterVec(prometheus.CounterOpts{
 			Name: "bot_connects_total", Help: "WebSocket dials that connected, by where.",
 		}, []string{"where"}),

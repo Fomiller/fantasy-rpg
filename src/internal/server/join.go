@@ -95,8 +95,10 @@ type Lobby struct {
 }
 
 type client struct {
-	name   string
-	class  string
+	name  string
+	class string
+	// bot is set by the headless bot. It only changes how the player is counted.
+	bot    bool
 	out    chan []byte
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -140,7 +142,7 @@ type client struct {
 func NewLobby(town caves.Cave, cfg sim.Config, loot *items.Roller, log *slog.Logger) *Lobby {
 	s := newShared(town.NewWorld(cfg, nil), loot, log)
 	s.town = town
-	s.Metrics = newMetrics("town_players", "Players with a body in the town.")
+	s.Metrics = newMetrics("town", "Players with a body in the town.")
 	return s
 }
 
@@ -177,6 +179,7 @@ func (s *Lobby) Step(dt time.Duration) {
 	s.rules.Step(dt)
 	s.checkEntrance()
 	s.Metrics.Players.Set(float64(len(s.inTown)))
+	s.Metrics.Bots.Set(float64(s.townPlayers().Bots))
 	if len(s.inTown) == 0 {
 		return
 	}
@@ -289,6 +292,7 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 		class = classes.Starter
 	}
 	c := s.newClient(name, class, ctx, cancel)
+	c.bot = join.GetBot()
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and

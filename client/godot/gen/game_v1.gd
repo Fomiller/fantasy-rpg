@@ -2441,6 +2441,11 @@ class JoinRequest:
 		service.field = __returning
 		data[__returning.tag] = service
 		
+		__bot = PBField.new("bot", PB_DATA_TYPE.BOOL, PB_RULE.OPTIONAL, 4, true, DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL])
+		service = PBServiceField.new()
+		service.field = __bot
+		data[__bot.tag] = service
+		
 	var data = {}
 	
 	var __name: PBField
@@ -2481,6 +2486,19 @@ class JoinRequest:
 		__returning.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
 	func set_returning(value : bool) -> void:
 		__returning.value = value
+	
+	var __bot: PBField
+	func has_bot() -> bool:
+		if __bot.value != null:
+			return true
+		return false
+	func get_bot() -> bool:
+		return __bot.value
+	func clear_bot() -> void:
+		data[4].state = PB_SERVICE_STATE.UNFILLED
+		__bot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
+	func set_bot(value : bool) -> void:
+		__bot.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

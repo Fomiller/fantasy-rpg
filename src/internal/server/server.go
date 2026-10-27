@@ -13,7 +13,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -95,7 +94,7 @@ func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger
 		clients:    map[sim.EntityID]*client{},
 		sdk:        &sdkQueue{wake: make(chan struct{}, 1)},
 	}
-	s.Metrics = newMetrics("instance_players", "Players in the cave.")
+	s.Metrics = newMetrics("instance", "Players in the cave.")
 	s.GameServer = s.localGameServer()
 	s.released = s.release
 	go s.sdk.run(s.done)
@@ -134,6 +133,7 @@ func (s *Server) Step(dt time.Duration) {
 
 	events := s.world.Step(dt)
 	s.Metrics.Players.Set(float64(len(s.clients)))
+	s.Metrics.Bots.Set(float64(count(s.clients, func(*client) bool { return true }).Bots))
 
 	s.broadcast(protocol.Snapshot(s.world))
 	for _, ev := range events.Abilities {
@@ -259,6 +259,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	c := s.newClient(claims.Name, claims.Class, ctx, cancel)
 	c.runID = claims.Run
+	c.bot = claims.Bot
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		if s.draining {
@@ -450,23 +451,11 @@ func (s *Server) finish(id sim.EntityID) {
 // HandleStatus answers the world server's poll. It is on the internal port
 // only, never behind the public route.
 func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	st := make(chan InstanceStatus, 1)
-	if !s.enqueue(func() { st <- s.status() }) {
-		http.Error(w, "shutting down", http.StatusServiceUnavailable)
-		return
-	}
-	select {
-	case v := <-st:
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(v)
-	case <-r.Context().Done():
-	case <-s.done:
-		http.Error(w, "shutting down", http.StatusServiceUnavailable)
-	}
+	answer(s.Lobby, w, r, s.status)
 }
 
 func (s *Server) status() InstanceStatus {
-	st := InstanceStatus{ID: s.ID, Boot: s.boot, Players: s.players(), Capacity: s.MaxPlayers, Draining: s.draining, Runs: []string{}}
+	st := InstanceStatus{ID: s.ID, Boot: s.boot, Players: s.players(), Bots: s.cavePlayers().Bots, Capacity: s.MaxPlayers, Draining: s.draining, Runs: []string{}}
 	for _, c := range s.conns {
 		if c.runID != "" {
 			st.Runs = append(st.Runs, c.runID)

@@ -47,10 +47,15 @@ type Manager struct {
 	dynamic dynamic.Interface
 	log     *slog.Logger
 	metrics *Metrics
+	// instanceURL is where a GameServer's internal port is. Tests point it
+	// at a local server.
+	instanceURL func(*agonesv1.GameServer) string
 }
 
 func New(cfg Config, agones versioned.Interface, kube kubernetes.Interface, dyn dynamic.Interface, metrics *Metrics, log *slog.Logger) *Manager {
-	return &Manager{cfg: cfg, agones: agones, kube: kube, dynamic: dyn, metrics: metrics, log: log}
+	m := &Manager{cfg: cfg, agones: agones, kube: kube, dynamic: dyn, metrics: metrics, log: log}
+	m.instanceURL = m.internalURL
+	return m
 }
 
 // Instance is a GameServer as the world server sees it.

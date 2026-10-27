@@ -10,7 +10,7 @@ after changing `repo.nix`.
 | Path | What lives there |
 | --- | --- |
 | `client/godot/` | The 2D Godot client, in GDScript. |
-| `src/cmd/<binary>/` | One Go main package per server: `world-server`, `instance-server`, `instance-manager` and `inventory`. |
+| `src/cmd/<binary>/` | One Go main package per server: `world-server`, `instance-server`, `instance-manager`, `inventory`, `bot` and `bot-director`. |
 | `src/internal/` | Shared Go game code: world, combat, AI, inventory, loot. |
 | `proto/game/v1/` | Protobuf messages shared by the client and the servers. |
 | `deploy/` | Docker Compose for local runs, Kubernetes manifests for the homelab. |
@@ -118,6 +118,7 @@ The game runs in the homelab cluster. The world server is public at `wss://fanta
 - `argocd/redpanda` runs a one-broker Redpanda, its topics and the Console in `fantasy-rpg`. homelab's operator reconciles them. The Console is at redpanda-frpg-dev.fomiller.com, behind Cloudflare Access.
 - The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server. instance-manager makes a Service and an IngressRoute for each `/instances/<gameserver>/` prefix. Both are owned by the GameServer and go away with it.
 - `inventory` owns characters, stashes and the run lease. It is the only workload with `DATABASE_URL`. The world and instance servers call it over HTTP at `INVENTORY_URL`. It produces `inventory.applied` from an outbox table.
+- `bot-director` keeps a few bots playing in dev, in fill mode. `just bots-set` and `just bots-status` change and show it. See the Bots page in the docs.
 - The world and instance servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.
 
 - A buffer FleetAutoscaler keeps one Ready GameServer warm, from 1 to 8 in all. It owns the Fleet's replicas, so the chart never sets them.

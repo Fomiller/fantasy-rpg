@@ -86,3 +86,38 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       name: {{ include "chart.dbName" . }}-app
       key: uri
 {{- end -}}
+
+{{- define "chart.directorSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-bot-director
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "chart.directorName" -}}
+{{- printf "%s-bot-director" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "chart.botWorkerSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-bot-worker
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "chart.botWorkerName" -}}
+{{- printf "%s-bot-worker" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- /* Non-root and RuntimeDefault, as the load test Job runs. */ -}}
+{{- define "chart.restrictedPod" -}}
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+{{- end -}}
+
+{{- define "chart.restrictedContainer" -}}
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+{{- end -}}

@@ -92,6 +92,8 @@ Each bot loops:
   metrics.
 - One short run through the public host, with no `-via`, gives the
   Cloudflare tunnel's share of latency.
+- Always-on bots, and `fixed` mode for a load test from the chart, are the
+  bot director in [Bots](bots.md).
 
 ### Metrics
 
@@ -109,6 +111,7 @@ Today's metrics, and the few to add first.
 | CNPG, Agones controller, Redpanda | operators | Need scraping turned on |
 | `town_players` | world | Exists. Gauge, players with a body in the town |
 | `instance_players` | instance | Exists. Gauge, players in the cave |
+| `town_bots`, `instance_bots` | world, instance | Exists. The bots among the players, from FOM-263 |
 | `ws_sent_bytes_total`, `ws_received_bytes_total` | world, instance | Exists. Counters |
 | `ws_slow_kicks_total` | world, instance | Exists. Clients closed for a full outbox |
 | `inventory_consumer_lag` | inventory | Add with the `run.ended` consumer, as Instance manager says |
@@ -600,6 +603,8 @@ In build order. Each one merges on its own and leaves the game playable.
     - StatefulSet, per-shard Services and routes up to `world.maxShards`,
       PDB.
     - Drain on SIGTERM with `TownTicket`. Newest revision first. 2 replicas.
+    - The bot director's `PLAYER_URLS` lists each shard, since one Service
+      URL answers for one pod only.
 14. **homelab: install KEDA.**
     - Operator through Argo CD, like the other shared operators.
 15. **fantasy-rpg: ScaledObjects.**

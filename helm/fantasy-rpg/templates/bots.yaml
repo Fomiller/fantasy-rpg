@@ -1,0 +1,207 @@
+{{- /* Always-on bots. bot-director decides how many run and scales the worker
+       Deployment. Each worker pod asks the director for its share and runs
+       it. Needs the world server, since that is what the bots play. */ -}}
+{{- if and .Values.bots.enabled .Values.world.enabled }}
+{{- $name := include "chart.directorName" . -}}
+{{- $workers := include "chart.botWorkerName" . -}}
+{{- $target := printf "%s-target" $name -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.directorSelectorLabels" . | nindent 4 }}
+---
+{{- /* The target's ConfigMap is made by the director on its first set, not
+       by the chart, so Argo CD never puts the old target back. create cannot
+       be limited to one name, so it is a rule of its own. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.directorSelectorLabels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ $target }}]
+    verbs: [get, update]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [apps]
+    resources: [deployments/scale]
+    resourceNames: [{{ $workers }}]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.directorSelectorLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.directorSelectorLabels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  {{- /* The slot split lives in the director's memory. Two at once would
+         hand out the same slots. */}}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "chart.directorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.directorSelectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      {{- include "chart.restrictedPod" . | nindent 6 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bot-director
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [/bot-director]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: WORKER_DEPLOYMENT
+              value: {{ $workers }}
+            - name: TARGET_CONFIGMAP
+              value: {{ $target }}
+            - name: PLAYER_URLS
+              value: http://{{ include "chart.fullname" . }}-world:8080,http://{{ include "chart.managerName" . }}:8080
+            - name: DEFAULT_MODE
+              value: {{ .Values.bots.mode | quote }}
+            - name: DEFAULT_COUNT
+              value: {{ .Values.bots.count | quote }}
+            - name: BOTS_PER_POD
+              value: {{ .Values.bots.perPod | quote }}
+            - name: MAX_WORKERS
+              value: {{ .Values.bots.maxWorkers | quote }}
+            - name: FILL_MAX_BOTS
+              value: {{ .Values.bots.fill.maxBots | quote }}
+            - name: FILL_SLACK
+              value: {{ .Values.bots.fill.slack | quote }}
+            - name: FILL_STEP
+              value: {{ .Values.bots.fill.step | quote }}
+            - name: FILL_UP_DELAY
+              value: {{ .Values.bots.fill.upDelay | quote }}
+            - name: FILL_DOWN_DELAY
+              value: {{ .Values.bots.fill.downDelay | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          {{- include "chart.restrictedContainer" . | nindent 10 }}
+---
+{{- /* ClusterIP only. No IngressRoute points here. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.directorSelectorLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "chart.directorSelectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $workers }}
+  labels:
+    {{- include "chart.botWorkerSelectorLabels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  {{- /* No replicas: the director owns them through the scale subresource,
+         as the FleetAutoscaler owns the Fleet's, so Argo CD does not fight it. */}}
+  selector:
+    matchLabels:
+      {{- include "chart.botWorkerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.botWorkerSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "chart.restrictedPod" . | nindent 6 }}
+      {{- /* Long enough for every bot to close its socket. */}}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bot
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: [/bot]
+          args:
+            - -director=http://{{ $name }}:8080
+            - -url={{ .Values.bots.url | default (ternary (printf "wss://%s/ws" .Values.ingressRoute.host) (printf "ws://%s-world:8080/ws" (include "chart.fullname" .)) (ne .Values.ingressRoute.host "")) }}
+            - -via={{ .Values.bots.via }}
+            - -name-prefix={{ .Values.bots.namePrefix }}
+            - -town-time={{ .Values.bots.townTime }}
+            - -ramp={{ .Values.bots.ramp }}
+            - -metrics-addr=:9090
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          {{- include "chart.restrictedContainer" . | nindent 10 }}
+{{- end }}
