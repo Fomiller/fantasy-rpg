@@ -68,7 +68,7 @@ loadtest pods bots duration='10m' ramp='2' via='http://traefik.traefik.svc.clust
     resources:
       - ../loadtest
     images:
-      - name: fantasy-rpg
+      - name: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
         newTag: "$tag"
     patches:
       - target: {kind: Job, name: fantasy-rpg-bots}
