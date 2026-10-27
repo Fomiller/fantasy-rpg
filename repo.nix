@@ -74,6 +74,7 @@
     # INVENTORY_URL=http://localhost:8070 in their environment.
     "dev: migrate\n    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server"
     "instance id port:\n    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server"
+    "bots n:\n    go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091"
     "inventory: migrate\n    DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' PORT=8070 go run ./src/cmd/inventory"
     "migrate: deps\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate"
     "up: deps\n    {{compose}} --profile full up -d --build --wait"
