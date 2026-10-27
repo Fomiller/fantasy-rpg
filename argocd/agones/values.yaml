@@ -32,13 +32,24 @@ agones:
         cert-manager.io/inject-ca-from: agones-system/agones-cert
       disableCaBundle: true
 
+  # extensions serves GameServerAllocation, so a walk-in needs one up. The
+  # chart's default strategy is Recreate, which would stop both at once.
   extensions:
-    replicas: 1
-    # The chart always makes this PDB. minAvailable 1 on one replica would
-    # block every node drain.
+    replicas: 2
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
     pdb:
-      minAvailable: null
-      maxUnavailable: 1
+      minAvailable: 1
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            agones.dev/role: extensions
     resources:
       requests:
         cpu: 50m

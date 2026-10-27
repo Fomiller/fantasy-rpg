@@ -22,6 +22,8 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 )
 
+const drainDelay = 5 * time.Second
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("inventory stopped", "err", err)
@@ -107,6 +109,12 @@ func run() error {
 	case err := <-errc:
 		return err
 	}
+
+	// The Service drops a terminating pod a moment after SIGTERM. Keep
+	// answering until then, and close each connection after its reply so
+	// callers move to the other replica.
+	srv.SetKeepAlivesEnabled(false)
+	time.Sleep(drainDelay)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

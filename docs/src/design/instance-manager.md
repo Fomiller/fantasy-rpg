@@ -48,9 +48,9 @@ on [Instances](instances.md) and the cave entrance in
   instance are today. One Kargo promotion moves all of them.
 - inventory is the only one with `DATABASE_URL`. The migrate Job runs from
   its binary.
-- world, instance-manager and inventory are one replica each with
-  `Recreate`. Each one keeps state per process, like one connection per
-  name. Scaling them out is a later problem.
+- world is one replica with `Recreate`. It keeps state per process, like
+  one connection per name. inventory and instance-manager run two replicas
+  each. See [Scaling](scaling.md).
 
 ### Why split inventory out
 
@@ -457,7 +457,7 @@ In build order. Each one merges on its own and leaves the game playable.
 
 ## Later
 
-- More than one replica of world, manager or inventory.
+- More than one world replica. See [Scaling](scaling.md).
 - UDP or WebTransport, past Cloudflare. See Transport.
 - Reconnect into a run (FOM-217). An Allocated server with a held body
   keeps its run id in `runs`, so it stays up.

@@ -26,7 +26,9 @@ in Hub town.
 - `inventory` is two pods, `RollingUpdate`, with a PDB. It owns Postgres.
   Each pod runs the outbox relay, and an advisory lock lets one send at a
   time. Done in FOM-251.
-- `instance-manager` is one pod.
+- `instance-manager` is two pods, `RollingUpdate`, with a PDB. Both
+  allocate and both route, with no leader. Agones `extensions` is two pods
+  too. Done in FOM-252.
 - Postgres is CNPG with one instance. Redpanda is one broker, RF 1.
 - Public traffic is Cloudflare tunnel, then Traefik. WebSocket only. UDP is
   parked in FOM-232.
@@ -366,14 +368,26 @@ On SIGTERM a shard:
 - `GameServerAllocation` is atomic in Agones. Two managers cannot both give
   out one seat.
 - Route creation already treats `AlreadyExists` as done. Two informers
-  making the same Service is safe.
+  making the same Service is safe. A test races a walk-in on one manager
+  against the informer on the other.
+- The manager keeps no state of its own. Every answer reads Agones or the
+  API server, so either replica can answer any call.
+- The manager never updates or deletes a route. Owner references on the
+  GameServer let Kubernetes delete them.
+- Each pod observes `instance_startup_seconds` for every GameServer, so the
+  count is doubled. The dashboards only take quantiles of it, which do not
+  change. A failed informer route is counted by each pod that tried.
 - If the manager starts producing `instance.lifecycle` from the informer,
   both would send it. Produce it from the allocate path, or dedupe by name
   and state.
-- `RollingUpdate`, PDB `maxUnavailable: 1`.
-- Agones `extensions` serves `GameServerAllocation`. Set its replicas to 2
-  in `argocd/agones`. The controller stays at 1. A restart there does not
-  block a walk-in.
+- `RollingUpdate` with `maxUnavailable: 0`, `maxSurge: 1`. A PDB with
+  `minAvailable: 1`. On SIGTERM a pod keeps answering for 5 s with
+  keep-alives off, so the Service drops it before it stops.
+- Agones `extensions` serves `GameServerAllocation`. It runs 2 replicas in
+  `argocd/agones`, `RollingUpdate`, spread across nodes, with the chart's
+  PDB at `minAvailable: 1`. The chart's default strategy is `Recreate`,
+  which would stop both at once. The controller stays at 1. A restart
+  there does not block a walk-in.
 
 ### Postgres: a second CNPG instance
 
@@ -409,7 +423,8 @@ On SIGTERM a shard:
 | -- | -- | -- |
 | world shards | `maxUnavailable: 1` | A drain moves players. One shard at a time keeps room for them |
 | inventory | `minAvailable: 1` | The join path needs one |
-| instance-manager | `maxUnavailable: 1` | Same |
+| instance-manager | `minAvailable: 1` | Same |
+| Agones extensions | `minAvailable: 1` | It serves `GameServerAllocation` |
 | Postgres, Redpanda | The operators make their own | |
 | Caves | None | `eviction.safe: Always`. The drain is `DRAIN_TIMEOUT` |
 | Valkey | None | One pod. Losing it is safe |
@@ -514,7 +529,7 @@ In build order. Each one merges on its own and leaves the game playable.
 6. **fantasy-rpg: inventory with 2 replicas.** Done, FOM-251.
    - Advisory lock in the relay, with a test of two relays on one table.
    - `RollingUpdate`, 2 replicas, PDB.
-7. **fantasy-rpg: instance-manager with 2 replicas.**
+7. **fantasy-rpg: instance-manager with 2 replicas.** Done, FOM-252.
    - `RollingUpdate`, 2 replicas, PDB. A test of two managers routing one
      GameServer.
    - Agones `extensions` at 2 replicas.

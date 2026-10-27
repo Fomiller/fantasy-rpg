@@ -56,11 +56,14 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
-  replicas: 1
-  {{- /* One process holds the GameServer informer. Two would race to route
-         the same server. */}}
+  replicas: {{ .Values.instanceManager.replicas }}
+  {{- /* Replicas run active-active. Agones makes each allocation atomic, and
+         both informers treat a route that already exists as made. */}}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "chart.managerSelectorLabels" . | nindent 6 }}
@@ -70,6 +73,15 @@ spec:
         {{- include "chart.managerSelectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ $name }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "chart.managerSelectorLabels" . | nindent 20 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -118,4 +130,19 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+{{- if gt (int .Values.instanceManager.replicas) 1 }}
+---
+{{- /* A walk-in needs one manager up. */}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.managerSelectorLabels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chart.managerSelectorLabels" . | nindent 6 }}
+{{- end }}
 {{- end }}
