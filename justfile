@@ -9,6 +9,7 @@ import? 'just/base.just'
 project := "fantasy-rpg"
 compose := "docker compose -f deploy/compose/compose.yaml"
 kube := "kubectl --context k3d-fantasy-rpg"
+homelab := "kubectl --context admin@homelab"
 godot := "/Applications/Godot.app/Contents/MacOS/Godot"
 infraDir := "infra/live/dev"
 databaseUrl := "postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable"
@@ -53,6 +54,40 @@ instance id port:
 
 bots n:
     go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091
+
+loadtest pods bots duration='10m' ramp='2' via='http://traefik.traefik.svc.cluster.local' tag='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if {{homelab}} -n fantasy-rpg get job fantasy-rpg-bots >/dev/null 2>&1; then echo "A load test is still there. Run just loadtest-down first." >&2; exit 1; fi
+    tag='{{tag}}'
+    [ -n "$tag" ] || tag=$(awk '$1 == "tag:" {print $2}' argocd/overlays/dev/values.app.yaml | cut -d@ -f1)
+    # Beside the base, since kustomize takes no absolute path to it.
+    dir=$(mktemp -d deploy/kubernetes/loadtest-run.XXXXXX)
+    trap 'rm -rf "$dir"' EXIT
+    cat > "$dir/kustomization.yaml" <<EOF
+    resources:
+      - ../loadtest
+    images:
+      - name: fantasy-rpg
+        newTag: "$tag"
+    patches:
+      - target: {kind: Job, name: fantasy-rpg-bots}
+        patch: |
+          - {op: replace, path: /spec/completions, value: {{pods}}}
+          - {op: replace, path: /spec/parallelism, value: {{pods}}}
+          - {op: replace, path: /spec/template/spec/containers/0/env, value: [{name: URL, value: "wss://fantasy-rpg.fomiller.com/ws"}, {name: VIA, value: "{{via}}"}, {name: BOTS, value: "{{bots}}"}, {name: RAMP, value: "{{ramp}}"}, {name: DURATION, value: "{{duration}}"}]}
+    EOF
+    echo "{{pods}} pods x {{bots}} bots, image $tag, via '{{via}}', for {{duration}}"
+    kubectl kustomize "$dir" | {{homelab}} apply -f -
+
+loadtest-scale pods:
+    {{homelab}} -n fantasy-rpg patch job fantasy-rpg-bots --type merge -p '{"spec":{"completions":{{pods}},"parallelism":{{pods}}}}'
+
+loadtest-status:
+    {{homelab}} -n fantasy-rpg get job,pods -l app.kubernetes.io/component=bot
+
+loadtest-down:
+    {{homelab}} delete -k deploy/kubernetes/loadtest --ignore-not-found
 
 inventory: migrate
     DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' PORT=8070 go run ./src/cmd/inventory

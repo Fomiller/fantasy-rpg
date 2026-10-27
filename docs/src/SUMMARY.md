@@ -13,3 +13,4 @@
 - [Hub town](design/hub-town.md)
 - [Instance manager](design/instance-manager.md)
 - [Scaling](design/scaling.md)
+  - [Load test](design/load-test.md)

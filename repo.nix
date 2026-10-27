@@ -46,6 +46,8 @@
     { name = "compose"; value = "docker compose -f deploy/compose/compose.yaml"; }
     # Pinned so a recipe can never reach the homelab cluster by accident.
     { name = "kube"; value = "kubectl --context k3d-fantasy-rpg"; }
+    # The real cluster, for the load test only. Named so it is never the default.
+    { name = "homelab"; value = "kubectl --context admin@homelab"; }
     # Godot is not in the dev shell, so point at the installed app. Override with `just godot=<path> ...`.
     { name = "godot"; value = "/Applications/Godot.app/Contents/MacOS/Godot"; }
     # deploy-infra.yml runs `just infraDir=<dir> plan-all`, and setting this list
@@ -75,6 +77,13 @@
     "dev: migrate\n    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server"
     "instance id port:\n    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server"
     "bots n:\n    go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091"
+    # The bot Job in the homelab cluster, `pods` pods of `bots` bots each. The tag defaults to the one
+    # Kargo last promoted to dev. An empty via goes through the public host and the tunnel.
+    "loadtest pods bots duration='10m' ramp='2' via='http://traefik.traefik.svc.cluster.local' tag='':\n    #!/usr/bin/env bash\n    set -euo pipefail\n    if {{homelab}} -n fantasy-rpg get job fantasy-rpg-bots >/dev/null 2>&1; then echo \"A load test is still there. Run just loadtest-down first.\" >&2; exit 1; fi\n    tag='{{tag}}'\n    [ -n \"$tag\" ] || tag=$(awk '$1 == \"tag:\" {print $2}' argocd/overlays/dev/values.app.yaml | cut -d@ -f1)\n    # Beside the base, since kustomize takes no absolute path to it.\n    dir=$(mktemp -d deploy/kubernetes/loadtest-run.XXXXXX)\n    trap 'rm -rf \"$dir\"' EXIT\n    cat > \"$dir/kustomization.yaml\" <<EOF\n    resources:\n      - ../loadtest\n    images:\n      - name: fantasy-rpg\n        newTag: \"$tag\"\n    patches:\n      - target: {kind: Job, name: fantasy-rpg-bots}\n        patch: |\n          - {op: replace, path: /spec/completions, value: {{pods}}}\n          - {op: replace, path: /spec/parallelism, value: {{pods}}}\n          - {op: replace, path: /spec/template/spec/containers/0/env, value: [{name: URL, value: \"wss://fantasy-rpg.fomiller.com/ws\"}, {name: VIA, value: \"{{via}}\"}, {name: BOTS, value: \"{{bots}}\"}, {name: RAMP, value: \"{{ramp}}\"}, {name: DURATION, value: \"{{duration}}\"}]}\n    EOF\n    echo \"{{pods}} pods x {{bots}} bots, image $tag, via '{{via}}', for {{duration}}\"\n    kubectl kustomize \"$dir\" | {{homelab}} apply -f -"
+    # Adds or removes pods in a running test. New pods start their own -duration when they start.
+    "loadtest-scale pods:\n    {{homelab}} -n fantasy-rpg patch job fantasy-rpg-bots --type merge -p '{\"spec\":{\"completions\":{{pods}},\"parallelism\":{{pods}}}}'"
+    "loadtest-status:\n    {{homelab}} -n fantasy-rpg get job,pods -l app.kubernetes.io/component=bot"
+    "loadtest-down:\n    {{homelab}} delete -k deploy/kubernetes/loadtest --ignore-not-found"
     "inventory: migrate\n    DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' PORT=8070 go run ./src/cmd/inventory"
     "migrate: deps\n    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate"
     "up: deps\n    {{compose}} --profile full up -d --build --wait"

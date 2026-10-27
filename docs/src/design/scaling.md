@@ -80,7 +80,7 @@ Each bot loops:
 - **In the cluster:** an Indexed Job, `deploy/kubernetes/loadtest/bots.yaml`.
   `parallelism` pods, each with `-n` bots and `JOB_COMPLETION_INDEX` as the
   name prefix. Same image, `command: [/bot]`. `just loadtest <pods> <bots>`
-  runs `kubectl create` on it.
+  applies it. [Load test](load-test.md) is the runbook.
 - The Job is not in Argo CD. A load test runs on demand. An Argo CD Job
   needs hooks, and a sync could start one by surprise.
 - A PodMonitor on `app.kubernetes.io/component: bot` picks up the bots'
@@ -147,8 +147,9 @@ Both are kube-prometheus-stack values.
 - A town snapshot goes to every player. Bytes out grow with the square of
   the player count. At 64 players that is about 5 MB/s out of one pod. The
   tunnel may bend before the CPU does.
-- The first run's numbers go into this doc. They set `TOWN_MAX_PLAYERS`,
-  the shard soft cap, and every autoscaler threshold below.
+- The first run's numbers go into [Load test](load-test.md). They set
+  `TOWN_MAX_PLAYERS`, the shard soft cap, and every autoscaler threshold
+  below.
 
 ## 2. Town shards
 

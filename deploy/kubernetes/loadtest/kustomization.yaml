@@ -1,0 +1,17 @@
+# Applied by hand with `just loadtest`, never by Argo CD. Argo CD only reads
+# argocd/overlays/<env>, and nothing there points here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: fantasy-rpg
+
+resources:
+  - bots.yaml
+  - podmonitor.yaml
+
+# `just loadtest` sets the tag Kargo last promoted to dev, from
+# argocd/overlays/dev/values.app.yaml. This one is only a fallback.
+images:
+  - name: fantasy-rpg
+    newName: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
+    newTag: 0.23.0
