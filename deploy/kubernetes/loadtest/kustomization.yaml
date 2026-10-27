@@ -14,4 +14,4 @@ resources:
 images:
   - name: fantasy-rpg
     newName: 695434033664.dkr.ecr.us-east-1.amazonaws.com/fantasy-rpg
-    newTag: 0.23.0
+    newTag: 0.26.0
