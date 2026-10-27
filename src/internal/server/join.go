@@ -32,6 +32,12 @@ const (
 	// ticket or a run's end before closing itself. Closing at once can drop
 	// that last message: Godot empties its read buffer when the close lands.
 	closeGrace = 2 * time.Second
+	// A shard's claims live for shardTTL past its last heartbeat, so a
+	// crashed shard's players can join elsewhere after that.
+	shardBeat = 5 * time.Second
+	shardTTL  = 15 * time.Second
+	// reasonPlaying is a name claimed by a session on another shard.
+	reasonPlaying = "already playing"
 )
 
 // Lobby is the world server: join, character load and create, the town,
@@ -69,8 +75,11 @@ type Lobby struct {
 	// Events gets player.session from the world and instance.join from an
 	// instance. Set it before serving.
 	Events events.Producer
-	// WorldID names this world server in player.session.
+	// WorldID names this world server in player.session, and is the shard
+	// in its session claims.
 	WorldID string
+	// boot is new on every start, like 3f9a1c.
+	boot string
 
 	// released runs on the loop once a player's last write lands.
 	released func(*client)
@@ -92,7 +101,9 @@ type client struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	writes *writer
-	slow   prometheus.Counter
+	// session is the name's claim in the store, once the join has it.
+	session inventory.Session
+	slow    prometheus.Counter
 	// kick closes the connection once the outbox is written.
 	kick chan closeMsg
 	// gone is set once the connection has closed.
@@ -146,6 +157,7 @@ func newShared(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 		done:           make(chan struct{}),
 		conns:          map[string]*client{},
 		Events:         events.Nop{},
+		boot:           bootID(),
 
 		PendingSaves: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "store_pending_saves",
@@ -313,6 +325,19 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 		log.Info("player left")
 	}()
 
+	// Claim before the load, so the load sees every write the last session made.
+	sess := inventory.Session{Name: name, ID: items.NewID(), Shard: s.WorldID, Boot: s.boot}
+	if err := s.claim(ctx, sess); err != nil {
+		if errors.Is(err, inventory.ErrPlaying) {
+			conn.Close(websocket.StatusTryAgainLater, reasonPlaying)
+			return
+		}
+		log.Error("claim session", "err", err)
+		conn.Close(websocket.StatusTryAgainLater, "characters unavailable")
+		return
+	}
+	c.session = sess
+
 	ch, err := s.loadCharacter(ctx, name, class)
 	if err != nil {
 		log.Error("load character", "err", err)
@@ -357,10 +382,14 @@ func (s *Lobby) readLoop(ctx context.Context, conn *websocket.Conn, log *slog.Lo
 	}
 }
 
-// leave runs on the loop once the connection is gone.
+// leave runs on the loop once the connection is gone. The release is the
+// last write, so the next session's load sees every write before it.
 func (s *Lobby) leave(c *client) {
 	s.leaveTown(c)
 	c.gone = true
+	if c.session.ID != "" {
+		s.release(c)
+	}
 	c.writes.close()
 }
 

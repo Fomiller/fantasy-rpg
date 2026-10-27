@@ -55,12 +55,12 @@ func (c *Client) Create(ctx context.Context, ch inventory.Character) error {
 	return c.do(ctx, http.MethodPost, "/v1/characters", in, nil)
 }
 
-func (c *Client) SaveLobby(ctx context.Context, name, class string, l inventory.Loadout, stash []items.Instance) error {
+func (c *Client) SaveLobby(ctx context.Context, name, class, session string, l inventory.Loadout, stash []items.Instance) error {
 	enc, err := encodeCharacter(inventory.Character{Loadout: l, Stash: stash})
 	if err != nil {
 		return err
 	}
-	return c.do(ctx, http.MethodPost, "/v1/lobby", lobbyRequest{Name: name, Class: class, Equipment: enc.Equipment, Bag: enc.Bag, Stash: enc.Stash}, nil)
+	return c.do(ctx, http.MethodPost, "/v1/lobby", lobbyRequest{Name: name, Class: class, Session: session, Equipment: enc.Equipment, Bag: enc.Bag, Stash: enc.Stash}, nil)
 }
 
 func (c *Client) StartRun(ctx context.Context, name, class, runID, instance string) (inventory.Character, error) {
@@ -81,6 +81,18 @@ func (c *Client) EndRun(ctx context.Context, runID string, ch inventory.Characte
 
 func (c *Client) ClearRun(ctx context.Context, name, runID string) error {
 	return c.do(ctx, http.MethodPost, "/v1/runs/clear", clearRequest{Name: name, RunID: runID}, nil)
+}
+
+func (c *Client) Claim(ctx context.Context, s inventory.Session) error {
+	return c.do(ctx, http.MethodPost, "/v1/sessions/claim", wireSession(s), nil)
+}
+
+func (c *Client) Release(ctx context.Context, s inventory.Session) error {
+	return c.do(ctx, http.MethodPost, "/v1/sessions/release", wireSession(s), nil)
+}
+
+func (c *Client) Heartbeat(ctx context.Context, shard, boot string, ttl time.Duration) error {
+	return c.do(ctx, http.MethodPost, "/v1/shards/heartbeat", heartbeatRequest{Shard: shard, Boot: boot, TTL: ttl.Seconds()}, nil)
 }
 
 // do sends in as JSON, if it is set, and decodes a 200 body into out. Any

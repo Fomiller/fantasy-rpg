@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -37,6 +39,11 @@ func Run(t *testing.T, newStore func(*testing.T) inventory.Store) {
 		{"EndRunNeedsTheLease", endRunNeedsTheLease},
 		{"RunIDIsUsedOnce", runIDIsUsedOnce},
 		{"ClearRun", clearRun},
+		{"OneClaimWinsARace", oneClaimWinsARace},
+		{"ClaimTakenOverAfterExpiry", claimTakenOverAfterExpiry},
+		{"NewBootEndsOldClaims", newBootEndsOldClaims},
+		{"StaleSessionCannotSave", staleSessionCannotSave},
+		{"ReleaseThenReclaim", releaseThenReclaim},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) { tt.run(t, newStore(t)) })
@@ -101,6 +108,20 @@ func noLease(t *testing.T, s inventory.Store, name string) {
 	if c := mustLoad(t, s, name, "warrior"); c.Run.Held() {
 		t.Fatalf("%s still has a lease: %+v", name, c.Run)
 	}
+}
+
+// mustClaim claims name for a session on a live world-0 and returns the
+// session id that SaveLobby takes.
+func mustClaim(t *testing.T, s inventory.Store, name string) string {
+	t.Helper()
+	if err := s.Heartbeat(ctx, "world-0", "b0", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	sess := inventory.Session{Name: name, ID: name + "-session", Shard: "world-0", Boot: "b0"}
+	if err := s.Claim(ctx, sess); err != nil {
+		t.Fatalf("claim %s: %v", name, err)
+	}
+	return sess.ID
 }
 
 func mustCreate(t *testing.T, s inventory.Store, c inventory.Character) {
@@ -184,7 +205,7 @@ func classesShareTheStash(t *testing.T, s inventory.Store) {
 	}
 	sameItems(t, "rogue stash", got.Stash, []items.Instance{potions("ann-stashed", 4)})
 
-	if err := s.SaveLobby(ctx, "ann", "rogue", inventory.Loadout{}, nil); err != nil {
+	if err := s.SaveLobby(ctx, "ann", "rogue", mustClaim(t, s, "ann"), inventory.Loadout{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := mustLoad(t, s, "ann", "warrior"); len(got.Stash) != 0 || got.XP != 10 {
@@ -196,7 +217,7 @@ func saveLobby(t *testing.T, s inventory.Store) {
 	mustCreate(t, s, character("ann"))
 	l := inventory.Loadout{Items: []items.Instance{sword("ann-sword")}}
 	stash := []items.Instance{potions("ann-stashed", 4), potions("ann-potions", 2)}
-	if err := s.SaveLobby(ctx, "ann", "warrior", l, stash); err != nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", mustClaim(t, s, "ann"), l, stash); err != nil {
 		t.Fatal(err)
 	}
 	l.Items[0].Quantity = 99
@@ -213,7 +234,7 @@ func saveLobby(t *testing.T, s inventory.Store) {
 func saveLobbyEmpty(t *testing.T, s inventory.Store) {
 	mustCreate(t, s, character("ann"))
 	all := []items.Instance{potions("ann-stashed", 4), sword("ann-sword"), potions("ann-potions", 2)}
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, all); err != nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", mustClaim(t, s, "ann"), inventory.Loadout{}, all); err != nil {
 		t.Fatal(err)
 	}
 	if got := mustLoad(t, s, "ann", "warrior"); !got.Loadout.Empty() || len(got.Stash) != 3 {
@@ -253,7 +274,7 @@ func endRunSameID(t *testing.T, s inventory.Store) {
 		t.Fatal(err)
 	}
 	// A lobby move after the run, then a late retry of the same run.
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, []items.Instance{sword("ann-sword")}); err != nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", mustClaim(t, s, "ann"), inventory.Loadout{}, []items.Instance{sword("ann-sword")}); err != nil {
 		t.Fatal(err)
 	}
 	retry := first
@@ -279,7 +300,7 @@ func endRunSameID(t *testing.T, s inventory.Store) {
 }
 
 func writesNeedACharacter(t *testing.T, s inventory.Store) {
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); err == nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", mustClaim(t, s, "ann"), inventory.Loadout{}, nil); err == nil {
 		t.Fatal("saved a lobby for a character that does not exist")
 	}
 	if err := s.EndRun(ctx, "6f1c2b3a-0000-4000-8000-000000000004", character("ann")); err == nil {
@@ -302,15 +323,16 @@ func writesNeedACharacter(t *testing.T, s inventory.Store) {
 
 func stashLimit(t *testing.T, s inventory.Store) {
 	mustCreate(t, s, character("ann"))
+	sess := mustClaim(t, s, "ann")
 	var full []items.Instance
 	for i := range inventory.StashSize {
 		full = append(full, sword(fmt.Sprint("s", i)))
 	}
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, full); err != nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", sess, inventory.Loadout{}, full); err != nil {
 		t.Fatalf("a full stash: %v", err)
 	}
 	over := append(full, sword("one more"))
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, over); err == nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", sess, inventory.Loadout{}, over); err == nil {
 		t.Fatal("saved a stash over the limit")
 	}
 	c := character("ann")
@@ -353,6 +375,11 @@ func parallelPlayers(t *testing.T, s inventory.Store) {
 				t.Error(err)
 				return
 			}
+			sess := inventory.Session{Name: c.Name, ID: c.Name + "-session", Shard: "world-0", Boot: "b0"}
+			if err := s.Claim(ctx, sess); err != nil {
+				t.Error(err)
+				return
+			}
 			for run := range 5 {
 				c.XP++
 				id := fmt.Sprintf("6f1c2b3a-0000-4000-8000-%012d", run)
@@ -362,7 +389,7 @@ func parallelPlayers(t *testing.T, s inventory.Store) {
 				if err := s.EndRun(ctx, id, c); err != nil {
 					t.Error(err)
 				}
-				if err := s.SaveLobby(ctx, c.Name, c.Class, c.Loadout, c.Stash); err != nil {
+				if err := s.SaveLobby(ctx, c.Name, c.Class, sess.ID, c.Loadout, c.Stash); err != nil {
 					t.Error(err)
 				}
 			}
@@ -416,8 +443,9 @@ func oneRunPerAccount(t *testing.T, s inventory.Store) {
 
 func noLobbySaveInARun(t *testing.T, s inventory.Store) {
 	mustCreate(t, s, character("ann"))
+	sess := mustClaim(t, s, "ann")
 	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000013")
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); !errors.Is(err, inventory.ErrInRun) {
+	if err := s.SaveLobby(ctx, "ann", "warrior", sess, inventory.Loadout{}, nil); !errors.Is(err, inventory.ErrInRun) {
 		t.Fatalf("lobby save in a run = %v, want ErrInRun", err)
 	}
 	got := mustLoad(t, s, "ann", "warrior")
@@ -428,7 +456,7 @@ func noLobbySaveInARun(t *testing.T, s inventory.Store) {
 		t.Fatal(err)
 	}
 	noLease(t, s, "ann")
-	if err := s.SaveLobby(ctx, "ann", "warrior", inventory.Loadout{}, nil); err != nil {
+	if err := s.SaveLobby(ctx, "ann", "warrior", sess, inventory.Loadout{}, nil); err != nil {
 		t.Fatalf("lobby save after the run: %v", err)
 	}
 }
@@ -494,4 +522,145 @@ func clearRun(t *testing.T, s inventory.Store) {
 		t.Fatalf("clear for an unknown name: %v", err)
 	}
 	mustStart(t, s, "ann", "6f1c2b3a-0000-4000-8000-000000000019")
+}
+
+func session(shard, boot, id string) inventory.Session {
+	return inventory.Session{Name: "ann", ID: id, Shard: shard, Boot: boot}
+}
+
+func beat(t *testing.T, s inventory.Store, shard, boot string, ttl time.Duration) {
+	t.Helper()
+	if err := s.Heartbeat(ctx, shard, boot, ttl); err != nil {
+		t.Fatalf("heartbeat %s@%s: %v", shard, boot, err)
+	}
+}
+
+func saveWith(s inventory.Store, id string) error {
+	return s.SaveLobby(ctx, "ann", "warrior", id, inventory.Loadout{}, []items.Instance{sword(id)})
+}
+
+// Two tabs, or two shards, joining one name at once.
+func oneClaimWinsARace(t *testing.T, s inventory.Store) {
+	const n = 8
+	for i := range n {
+		beat(t, s, fmt.Sprint("world-", i), "b0", time.Minute)
+	}
+	var won atomic.Int32
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			err := s.Claim(ctx, session(fmt.Sprint("world-", i), "b0", fmt.Sprint("s", i)))
+			switch {
+			case err == nil:
+				won.Add(1)
+			case !errors.Is(err, inventory.ErrPlaying):
+				t.Errorf("claim %d = %v, want ErrPlaying", i, err)
+			}
+		})
+	}
+	wg.Wait()
+	if won.Load() != 1 {
+		t.Fatalf("%d claims won, want 1", won.Load())
+	}
+	if err := s.Claim(ctx, inventory.Session{Name: "bob", ID: "bob-1", Shard: "world-1", Boot: "b0"}); err != nil {
+		t.Fatalf("claim of another name: %v", err)
+	}
+}
+
+func claimTakenOverAfterExpiry(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	beat(t, s, "world-0", "b0", 200*time.Millisecond)
+	beat(t, s, "world-1", "b0", time.Minute)
+	if err := s.Claim(ctx, session("world-0", "b0", "s1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Claim(ctx, session("world-1", "b0", "s2")); !errors.Is(err, inventory.ErrPlaying) {
+		t.Fatalf("claim while world-0 is live = %v, want ErrPlaying", err)
+	}
+	time.Sleep(400 * time.Millisecond)
+	if err := s.Claim(ctx, session("world-1", "b0", "s2")); err != nil {
+		t.Fatalf("claim after world-0 missed its heartbeat: %v", err)
+	}
+	if err := saveWith(s, "s1"); !errors.Is(err, inventory.ErrSessionLost) {
+		t.Fatalf("save from the expired session = %v, want ErrSessionLost", err)
+	}
+	if err := saveWith(s, "s2"); err != nil {
+		t.Fatal(err)
+	}
+	// world-0 coming back does not take the name back.
+	beat(t, s, "world-0", "b0", time.Minute)
+	if err := s.Claim(ctx, session("world-0", "b0", "s3")); !errors.Is(err, inventory.ErrPlaying) {
+		t.Fatalf("claim back = %v, want ErrPlaying", err)
+	}
+}
+
+func newBootEndsOldClaims(t *testing.T, s inventory.Store) {
+	beat(t, s, "world-0", "b0", time.Minute)
+	beat(t, s, "world-1", "b0", time.Minute)
+	if err := s.Claim(ctx, session("world-0", "b0", "s1")); err != nil {
+		t.Fatal(err)
+	}
+	// world-0 restarted.
+	beat(t, s, "world-0", "b1", time.Minute)
+	if err := s.Claim(ctx, session("world-1", "b0", "s2")); err != nil {
+		t.Fatalf("claim after the holder's shard restarted: %v", err)
+	}
+}
+
+func staleSessionCannotSave(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	if err := saveWith(s, "s1"); !errors.Is(err, inventory.ErrSessionLost) {
+		t.Fatalf("save with no claim = %v, want ErrSessionLost", err)
+	}
+	beat(t, s, "world-0", "b0", time.Minute)
+	if err := s.Claim(ctx, session("world-0", "b0", "s1")); err != nil {
+		t.Fatal(err)
+	}
+	// The same shard and boot can take over its own claim. Its local check
+	// already made sure s1 is gone.
+	if err := s.Claim(ctx, session("world-0", "b0", "s2")); err != nil {
+		t.Fatalf("claim by the same shard: %v", err)
+	}
+	if err := saveWith(s, "s1"); !errors.Is(err, inventory.ErrSessionLost) {
+		t.Fatalf("save from the old session = %v, want ErrSessionLost", err)
+	}
+	if err := saveWith(s, "s2"); err != nil {
+		t.Fatal(err)
+	}
+	got := mustLoad(t, s, "ann", "warrior")
+	sameItems(t, "stash", got.Stash, []items.Instance{sword("s2")})
+}
+
+func releaseThenReclaim(t *testing.T, s inventory.Store) {
+	mustCreate(t, s, character("ann"))
+	beat(t, s, "world-0", "b0", time.Minute)
+	beat(t, s, "world-1", "b0", time.Minute)
+	first, second := session("world-0", "b0", "s1"), session("world-1", "b0", "s2")
+	if err := s.Claim(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Release(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Claim(ctx, second); !errors.Is(err, inventory.ErrPlaying) {
+		t.Fatalf("claim after a release by a non-holder = %v, want ErrPlaying", err)
+	}
+	if err := s.Release(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveWith(s, "s1"); !errors.Is(err, inventory.ErrSessionLost) {
+		t.Fatalf("save after release = %v, want ErrSessionLost", err)
+	}
+	if err := s.Claim(ctx, second); err != nil {
+		t.Fatalf("claim after release: %v", err)
+	}
+	if err := saveWith(s, "s2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Release(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Claim(ctx, first); err != nil {
+		t.Fatalf("reclaim by the first shard: %v", err)
+	}
 }

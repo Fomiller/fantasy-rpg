@@ -94,7 +94,7 @@ func (s *spyStore) Create(ctx context.Context, c inventory.Character) error {
 	return s.Memory.Create(ctx, c)
 }
 
-func (s *spyStore) SaveLobby(ctx context.Context, name, class string, l inventory.Loadout, stash []items.Instance) error {
+func (s *spyStore) SaveLobby(ctx context.Context, name, class, session string, l inventory.Loadout, stash []items.Instance) error {
 	s.record("save lobby")
 	s.mu.Lock()
 	fail := s.saveLobbyFails > 0
@@ -105,7 +105,7 @@ func (s *spyStore) SaveLobby(ctx context.Context, name, class string, l inventor
 	if fail {
 		return errDown
 	}
-	return s.Memory.SaveLobby(ctx, name, class, l, stash)
+	return s.Memory.SaveLobby(ctx, name, class, session, l, stash)
 }
 
 func (s *spyStore) StartRun(ctx context.Context, name, class, runID, instance string) (inventory.Character, error) {

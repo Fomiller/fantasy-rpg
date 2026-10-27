@@ -38,6 +38,7 @@ type loadReply struct {
 type lobbyRequest struct {
 	Name      string          `json:"name"`
 	Class     string          `json:"class"`
+	Session   string          `json:"session"`
 	Equipment json.RawMessage `json:"equipment"`
 	Bag       json.RawMessage `json:"bag"`
 	Stash     json.RawMessage `json:"stash"`
@@ -58,6 +59,27 @@ type endRequest struct {
 type clearRequest struct {
 	Name  string `json:"name"`
 	RunID string `json:"run_id"`
+}
+
+type session struct {
+	Name  string `json:"name"`
+	ID    string `json:"id"`
+	Shard string `json:"shard"`
+	Boot  string `json:"boot"`
+}
+
+func (s session) session() inventory.Session {
+	return inventory.Session{Name: s.Name, ID: s.ID, Shard: s.Shard, Boot: s.Boot}
+}
+
+func wireSession(s inventory.Session) session {
+	return session{Name: s.Name, ID: s.ID, Shard: s.Shard, Boot: s.Boot}
+}
+
+type heartbeatRequest struct {
+	Shard string  `json:"shard"`
+	Boot  string  `json:"boot"`
+	TTL   float64 `json:"ttl_seconds"`
 }
 
 type errorBody struct {
@@ -121,6 +143,8 @@ var codes = []struct {
 	{inventory.ErrInRun, "in_run", http.StatusConflict},
 	{inventory.ErrRunUsed, "run_used", http.StatusConflict},
 	{inventory.ErrLeaseLost, "lease_lost", http.StatusConflict},
+	{inventory.ErrPlaying, "playing", http.StatusConflict},
+	{inventory.ErrSessionLost, "session_lost", http.StatusConflict},
 }
 
 // remoteError is a store error from the service. It keeps the message and

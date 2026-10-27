@@ -76,8 +76,12 @@ func run() error {
 	}
 	defer bus.Close()
 	slog.Info("events", "producer", busName)
-	// The pod name in the cluster.
-	worldID, _ := os.Hostname()
+	// The pod name in the cluster. Two world servers on one host need their
+	// own WORLD_ID, since it is the shard in their session claims.
+	worldID := os.Getenv("WORLD_ID")
+	if worldID == "" {
+		worldID, _ = os.Hostname()
+	}
 
 	lobby := server.NewLobby(caves.Town(), sim.DefaultConfig(), items.NewRoller(items.Default(), rand.Uint64()), slog.Default())
 	lobby.TickRate = rate
@@ -118,6 +122,7 @@ func run() error {
 		}
 	}()
 	go func() { errc <- loop.Run(ctx) }()
+	go lobby.RunHeartbeat(ctx)
 	if busName == "kafka" {
 		applied, err := events.NewConsumer(events.ConsumerConfig{
 			Brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),

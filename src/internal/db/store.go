@@ -86,7 +86,7 @@ func (s *Store) Create(ctx context.Context, c inventory.Character) error {
 	})
 }
 
-func (s *Store) SaveLobby(ctx context.Context, name, class string, l inventory.Loadout, stash []items.Instance) error {
+func (s *Store) SaveLobby(ctx context.Context, name, class, session string, l inventory.Loadout, stash []items.Instance) error {
 	if err := checkStash(stash); err != nil {
 		return err
 	}
@@ -96,6 +96,16 @@ func (s *Store) SaveLobby(ctx context.Context, name, class string, l inventory.L
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		account, lease, err := lockAccount(ctx, tx, name, class)
+		if err != nil {
+			return err
+		}
+		// FOR SHARE makes a claim that would take the name wait for this save.
+		err = tx.QueryRow(ctx, `
+			SELECT 1 FROM sessions WHERE name = $1 AND session = $2
+			FOR SHARE`, name, session).Scan(new(int))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return inventory.ErrSessionLost
+		}
 		if err != nil {
 			return err
 		}
@@ -221,6 +231,38 @@ func (s *Store) ClearRun(ctx context.Context, name, runID string) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE accounts SET active_run_id = NULL, active_instance = NULL, active_since = NULL, updated_at = now()
 		WHERE name = $1 AND active_run_id = $2`, name, runID)
+	return err
+}
+
+// Claim is one statement, so two inventory replicas cannot both hand out a
+// name: the second insert waits on the first one's row and sees it.
+func (s *Store) Claim(ctx context.Context, sess inventory.Session) error {
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO sessions AS cur (name, session, shard, boot) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (name) DO UPDATE
+			SET session = EXCLUDED.session, shard = EXCLUDED.shard, boot = EXCLUDED.boot, claimed_at = now()
+			WHERE cur.session = EXCLUDED.session
+				OR (cur.shard = EXCLUDED.shard AND cur.boot = EXCLUDED.boot)
+				OR NOT EXISTS (
+					SELECT 1 FROM shards
+					WHERE shards.id = cur.shard AND shards.boot = cur.boot AND shards.expires_at > now())
+		RETURNING 1`, sess.Name, sess.ID, sess.Shard, sess.Boot).Scan(new(int))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return inventory.ErrPlaying
+	}
+	return err
+}
+
+func (s *Store) Release(ctx context.Context, sess inventory.Session) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE name = $1 AND session = $2`, sess.Name, sess.ID)
+	return err
+}
+
+func (s *Store) Heartbeat(ctx context.Context, shard, boot string, ttl time.Duration) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO shards (id, boot, seen_at, expires_at) VALUES ($1, $2, now(), now() + make_interval(secs => $3))
+		ON CONFLICT (id) DO UPDATE SET boot = EXCLUDED.boot, seen_at = EXCLUDED.seen_at, expires_at = EXCLUDED.expires_at`,
+		shard, boot, ttl.Seconds())
 	return err
 }
 

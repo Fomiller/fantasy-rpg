@@ -68,7 +68,6 @@ type Server struct {
 	GameServer gameserver.GameServer
 	// Results takes each run's result. Nil writes it to Store.
 	Results RunResults
-	boot    string
 	world   *sim.World
 	cave    caves.Cave
 	spawns  int
@@ -91,7 +90,6 @@ func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger
 		Lobby:      newShared(world, loot, log),
 		ID:         "instance-0",
 		MaxPlayers: 8,
-		boot:       bootID(),
 		world:      world,
 		cave:       cave,
 		clients:    map[sim.EntityID]*client{},

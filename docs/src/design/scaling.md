@@ -21,7 +21,8 @@ in Hub town.
 ## Today
 
 - `world-server` is one pod, `Recreate`, one town. `TOWN_MAX_PLAYERS` is
-  32. One connection per name is a map in that process.
+  32. One connection per name is a map in that process, and a session
+  claim in inventory across processes. Done in FOM-256.
 - Caves run on the Agones Fleet with a buffer FleetAutoscaler, max 8.
 - `inventory` is two pods, `RollingUpdate`, with a PDB. It owns Postgres.
   Each pod runs the outbox relay, and an advisory lock lets one send at a
@@ -231,32 +232,62 @@ The directory picks, in order:
 ### One session per name: in Postgres
 
 The global claim lives in inventory, beside the run lease. It cannot live
-in a store that can lose a key.
+in a store that can lose a key. Done in FOM-256.
 
 ```sql
 CREATE TABLE sessions (
-    account    bigint PRIMARY KEY REFERENCES accounts,
+    name       text PRIMARY KEY,
+    session    text NOT NULL,
     shard      text NOT NULL,
     boot       text NOT NULL,
     claimed_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE shards (
-    id      text PRIMARY KEY,
-    boot    text NOT NULL,
-    seen_at timestamptz NOT NULL
+    id         text PRIMARY KEY,
+    boot       text NOT NULL,
+    seen_at    timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL
 );
 ```
 
-- A shard writes its `shards` row every 5 s. One write per shard, not per
-  player.
+- `sessions` is keyed by name, not account id. A first join claims the
+  name before its account row exists.
+- `session` is new on every join. `shard` is `WorldID`, the pod name.
+  `WORLD_ID` overrides it, so two world servers on one host, as in
+  `just net-test`, do not share a shard. `boot` is new on every start of
+  the world process.
+- A shard writes its `shards` row every 5 s, with a 15 s TTL in
+  `expires_at`. One write per shard, not per player.
+  `POST /v1/shards/heartbeat`.
 - `POST /v1/sessions/claim` wins if there is no row, if the row is this
-  shard's boot, or if the row's shard boot is not seen for 15 s.
-- The shard releases the claim once the player's last lobby write lands.
-  That is when today's `conns` entry goes.
-- A lost claim closes 1013 `already playing`. The client retries every 2 s.
-  After a shard crash, its players are back within 15 s.
+  session's, if the row is this shard's boot, or if the row's shard and
+  boot have no live `shards` row. A restart with a new boot ends the old
+  boot's claims at once.
+- The claim is one `INSERT ... ON CONFLICT DO UPDATE ... WHERE`, so two
+  inventory replicas cannot both hand out a name.
+- The world claims after its local `conns` check and before `Load`, so the
+  load sees every write the last session made.
+- `SaveLobby` takes the session id. It locks the session row `FOR SHARE`
+  and fails with `session_lost` unless that session holds the name. A
+  claim that takes the name waits for a save in flight.
+- `POST /v1/sessions/release` is the last write on the player's writer, so
+  it lands after their last lobby write. That is when today's `conns`
+  entry goes. It only drops the row if it is still this session's.
+- A lost claim at join closes 1013 `already playing`. The client already
+  retries every 2 s. After a shard crash, its players are back within 15 s.
+- A lobby save that gets `session_lost` closes the player 1013
+  `already playing` too. Another shard took the name, so this lobby is
+  stale.
+- A release that fails holds the name on other shards until this shard's
+  boot stops beating. The same shard can still take it over.
 - The local `conns` map stays. It is the fast check inside one shard.
+- `EndRun` and `StartRun` do not check the claim. The run lease covers
+  them, and a player in a cave holds no claim.
+- The memory store has the same rules, so `STORE=memory` and `just dev`
+  work as before.
+- Rollout: an old world server sends no session id, so the new inventory
+  turns its lobby saves away until the world rolls too.
 
 ### Presence and the directory: Valkey
 
@@ -540,7 +571,7 @@ In build order. Each one merges on its own and leaves the game playable.
      game.
    - Moving the existing volume to the new class is a person's job. Write
      the steps in the PR.
-10. **fantasy-rpg: session claim in inventory.**
+10. **fantasy-rpg: session claim in inventory.** Done, FOM-256.
     - `sessions` and `shards` tables, claim, release, heartbeat.
     - World claims on join and releases after the last write. Still one
       shard.

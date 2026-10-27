@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coder/websocket"
+
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 )
@@ -18,6 +20,9 @@ const (
 	// every pendingRetry until it lands.
 	endRunPatience = 10 * time.Second
 	pendingRetry   = 5 * time.Second
+	// releasePatience is how long a release retries. A release that never
+	// lands holds the name on other shards until this one stops.
+	releasePatience = 5 * time.Second
 )
 
 var errShuttingDown = errors.New("server shutting down")
@@ -238,13 +243,21 @@ func (s *Lobby) loadCharacter(ctx context.Context, name, class string) (inventor
 // saveLobby queues the lobby as it is now. If the write fails and no newer
 // one is queued, the lobby goes back to what the store has.
 func (s *Lobby) saveLobby(c *client, itemID string) {
-	name, class, l, stash := c.name, c.class, c.lobby.loadout(), slices.Clone(c.lobby.stash.Items)
+	name, class, session, l, stash := c.name, c.class, c.session.ID, c.lobby.loadout(), slices.Clone(c.lobby.stash.Items)
 	c.lobbySeq++
 	seq := c.lobbySeq
 	c.writes.push(storeWrite{op: "save lobby", lobby: true, call: func(ctx context.Context) error {
-		return s.Store.SaveLobby(ctx, name, class, l, stash)
+		return s.Store.SaveLobby(ctx, name, class, session, l, stash)
 	}, done: func(owner *client, err error) {
 		if owner != c {
+			return
+		}
+		if errors.Is(err, inventory.ErrSessionLost) {
+			// Another shard took the name, so nothing this session holds is
+			// the latest any more.
+			c.writes.dropLobby()
+			c.lobby = nil
+			c.close(websocket.StatusTryAgainLater, reasonPlaying)
 			return
 		}
 		if err == nil {
@@ -319,9 +332,43 @@ func (s *Lobby) clearRun(c *client, runID string) {
 	}})
 }
 
+// claim takes the name for sess on the connection goroutine.
+func (s *Lobby) claim(ctx context.Context, sess inventory.Session) error {
+	ctx, cancel := context.WithTimeout(ctx, storeTimeout)
+	defer cancel()
+	return s.Store.Claim(ctx, sess)
+}
+
+// release queues the claim's release behind the player's other writes.
+func (s *Lobby) release(c *client) {
+	sess := c.session
+	c.writes.push(storeWrite{op: "release session", patience: releasePatience, call: func(ctx context.Context) error {
+		return s.Store.Release(ctx, sess)
+	}})
+}
+
+// RunHeartbeat keeps this shard's session claims alive until ctx ends.
+func (s *Lobby) RunHeartbeat(ctx context.Context) {
+	tick := time.NewTicker(shardBeat)
+	defer tick.Stop()
+	for {
+		hctx, cancel := context.WithTimeout(ctx, storeTimeout)
+		if err := s.Store.Heartbeat(hctx, s.WorldID, s.boot, shardTTL); err != nil && ctx.Err() == nil {
+			s.log.Warn("shard heartbeat", "err", err)
+		}
+		cancel()
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
+}
+
 // final errors never get better with a retry.
 func final(err error) bool {
-	return errors.Is(err, inventory.ErrInRun) || errors.Is(err, inventory.ErrRunUsed) || errors.Is(err, inventory.ErrLeaseLost)
+	return errors.Is(err, inventory.ErrInRun) || errors.Is(err, inventory.ErrRunUsed) || errors.Is(err, inventory.ErrLeaseLost) ||
+		errors.Is(err, inventory.ErrSessionLost) || errors.Is(err, inventory.ErrPlaying)
 }
 
 func cloneCharacter(ch inventory.Character) inventory.Character {
