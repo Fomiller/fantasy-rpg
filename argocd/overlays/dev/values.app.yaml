@@ -24,7 +24,9 @@ events:
   brokers: redpanda.fantasy-rpg.svc:9093
 
 # kube-prometheus-stack only picks up monitors labelled with its release.
+# Its Grafana sidecar loads the dashboards from every namespace.
 metrics:
   podMonitors: true
+  dashboards: true
   labels:
     release: prometheus

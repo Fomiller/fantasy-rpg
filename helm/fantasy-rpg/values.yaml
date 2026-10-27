@@ -52,8 +52,10 @@ events:
 
 # PodMonitors for every server's /metrics. Needs the Prometheus operator's
 # CRDs. labels go on each PodMonitor, for a Prometheus that selects by label.
+# dashboards renders the Grafana dashboards in dashboards/ as ConfigMaps.
 metrics:
   podMonitors: false
+  dashboards: false
   interval: 15s
   labels: {}
 

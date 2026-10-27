@@ -1,0 +1,17 @@
+{{- /* One ConfigMap per dashboard. The kube-prometheus-stack Grafana sidecar
+       loads any ConfigMap with this label, in any namespace. */ -}}
+{{- if .Values.metrics.dashboards }}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "chart.fullname" $ }}-dashboard-{{ base $path | trimSuffix ".json" }}
+  labels:
+    {{- include "chart.selectorLabels" $ | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{ base $path }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+{{- end }}
+{{- end }}
