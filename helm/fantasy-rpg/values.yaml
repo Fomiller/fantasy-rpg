@@ -106,3 +106,13 @@ postgres:
       memory: 128Mi
     limits:
       memory: 512Mi
+  # barman-cloud base backups and continuous WAL archiving to S3. Off by
+  # default, since a plain render should not need the plugin's CRDs. The
+  # credentials are IRSA: roleArn goes on the Cluster's ServiceAccount.
+  backup:
+    enabled: false
+    destinationPath: ""
+    roleArn: ""
+    # Six fields, because CNPG counts seconds. 03:00, clear of attic at 02:30.
+    schedule: "0 0 3 * * *"
+    retentionPolicy: 30d

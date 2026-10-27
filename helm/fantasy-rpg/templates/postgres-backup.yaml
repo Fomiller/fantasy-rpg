@@ -1,0 +1,39 @@
+{{- /* barman-cloud base backups and WAL for the game's Cluster. Retention is
+       enforced by barman, not an S3 lifecycle rule, which could expire WAL a
+       base backup still needs. */ -}}
+{{- if and .Values.postgres.enabled .Values.postgres.backup.enabled }}
+{{- $db := include "chart.dbName" . }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $db }}-backup
+  labels:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  configuration:
+    destinationPath: {{ required "postgres.backup.destinationPath is required" .Values.postgres.backup.destinationPath }}
+    s3Credentials:
+      inheritFromIAMRole: true
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: {{ .Values.postgres.backup.retentionPolicy }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $db }}-nightly
+  labels:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.postgres.backup.schedule | quote }}
+  backupOwnerReference: self
+  cluster:
+    name: {{ $db }}
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

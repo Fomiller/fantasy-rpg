@@ -331,12 +331,10 @@ namespaced kind, so no homelab change is needed.
 | -- | -- | -- |
 | CNPG `Cluster` | `fantasy-rpg-db` | `postgres.enabled` |
 | `Job`, Argo CD Sync hook | `fantasy-rpg-migrate` | `postgres.enabled` |
-| `ExternalSecret` (existing template) | `fantasy-rpg-db-backup` | an entry in `externalSecrets`. Not built yet |
-| barman-cloud `ObjectStore` | `fantasy-rpg-db-backup` | `postgres.backup.enabled`. Not built yet |
-| `ScheduledBackup` | `fantasy-rpg-db-nightly` | `postgres.backup.enabled`. Not built yet |
+| barman-cloud `ObjectStore` | `fantasy-rpg-db-backup` | `postgres.backup.enabled` |
+| `ScheduledBackup` | `fantasy-rpg-db-nightly` | `postgres.backup.enabled` |
 
-FOM-221 builds the Cluster and the migrate Job. The backup rows wait for
-FOM-222.
+FOM-221 built the Cluster and the migrate Job. FOM-255 built the backups.
 
 `postgres.enabled` is false in the chart's `values.yaml` and true in
 `argocd/overlays/dev/values.app.yaml`. That follows the chart's rule that a
@@ -369,8 +367,7 @@ The Cluster follows `attic-db-cnpg` in the homelab:
 - The server uses Postgres when `DATABASE_URL` is set. The chart sets it
   only when `postgres.enabled` is true. The memory store is used only with
   `STORE=memory`. Otherwise a server with no store configured exits.
-- Backup credentials come through the chart's existing `externalSecrets`
-  map. See Backups.
+- Backups need no secret. They use IRSA, like attic. See Backups.
 
 ### Sync waves
 
@@ -415,8 +412,8 @@ slower but does not fail.
 
 ### Runbook
 
-There are no backups until FOM-222. The Longhorn volume is the only copy
-of the data. Do not delete the Cluster or its PVC.
+Do not delete the Cluster or its PVC. To get data back, restore from
+the backups into a new Cluster. See Backups.
 
 Check the database:
 
@@ -457,26 +454,127 @@ kubectl --context admin@homelab -n fantasy-rpg get secret fantasy-rpg-db-app -o 
 
 ### Backups
 
-Off by default. When turned on, they follow `attic-db-cnpg`:
+`postgres.backup.enabled` is false in the chart and true in dev. They
+follow `attic-db-cnpg` in the homelab:
 
 - The Cluster gets the `barman-cloud.cloudnative-pg.io` plugin with
-  `isWALArchiver: true` and `barmanObjectName: fantasy-rpg-db-backup`.
+  `isWALArchiver: true`. WAL goes to S3 all the time, so a restore can reach
+  any point in time, not only the last base backup.
 - The `ObjectStore` writes to
   `s3://fomiller-dev-homelab-cnpg-backups/fantasy-rpg-db`, gzip for WAL and
-  data, `retentionPolicy: 30d`.
-- `ScheduledBackup` runs at `0 0 3 * * *`, 03:00. The cron has six fields
-  because CNPG counts seconds. 03:00 keeps it clear of attic at 02:30.
-- Credentials are an access key, not IRSA. The homelab's IRSA role pins
-  each cluster's ServiceAccount in its trust policy, and changing that is a
-  homelab change. Instead an IAM user in this repo's `infra/` gets write
-  access to the `fantasy-rpg-db/` prefix only. Its key goes into AWS Secrets
-  Manager at `dev/fomiller/homelab/fantasy-rpg-db-backup`. The overlay adds
-  that as an `externalSecrets` entry, and `ObjectStore.s3Credentials` reads
-  `ACCESS_KEY_ID` and `ACCESS_SECRET_KEY` from it.
-- A long-lived key is the cost. Rotate it by making a new key in `infra/`.
-  The ExternalSecret picks it up within an hour.
-- A backup that was never restored is not a backup. The backup ticket ends
-  with a restore into a scratch Cluster, as in the attic README.
+  data. Barman deletes backups older than 30 days. The bucket has no
+  lifecycle rule on purpose: one could delete WAL that a base backup needs.
+- `ScheduledBackup` takes a base backup at `0 0 3 * * *`, 03:00. The cron
+  has six fields because CNPG counts seconds. 03:00 keeps it clear of attic
+  at 02:30.
+- Credentials are IRSA, the homelab role `FomillerCnpgBackupS3Access`. The
+  chart puts its ARN on the Cluster's ServiceAccount. CNPG names that
+  ServiceAccount after the Cluster, and the role's trust policy pins
+  `system:serviceaccount:fantasy-rpg:fantasy-rpg-db`. **Renaming the Cluster
+  breaks backups.** The trust policy also allows `fantasy-rpg-db-restore`,
+  for the restore below.
+
+Check that WAL archiving works and a base backup exists:
+
+```sh
+kubectl --context admin@homelab -n fantasy-rpg get objectstore,scheduledbackup,backup
+kubectl --context admin@homelab -n fantasy-rpg exec fantasy-rpg-db-1 -c postgres -- \
+  psql -U postgres -tAc \
+  'select archived_count, failed_count, last_archived_time, last_failed_time from pg_stat_archiver'
+```
+
+`last_archived_time` should be newer than `last_failed_time`. The first
+base backup comes at 03:00 after the first sync. To take one now:
+
+```sh
+kubectl --context admin@homelab apply -f - <<EOF
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: fantasy-rpg-db-manual-1
+  namespace: fantasy-rpg
+spec:
+  cluster:
+    name: fantasy-rpg-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+EOF
+```
+
+Argo CD prunes that `Backup` object later. The backup in S3 stays.
+
+#### Restore
+
+Always restore into a new Cluster. Recovery builds an empty cluster, so
+never point it at the live one.
+
+1. Apply a Cluster named `fantasy-rpg-db-restore`. Use that name: the
+   role's trust policy allows only it and `fantasy-rpg-db`.
+
+   ```sh
+   kubectl --context admin@homelab apply -f - <<EOF
+   apiVersion: postgresql.cnpg.io/v1
+   kind: Cluster
+   metadata:
+     name: fantasy-rpg-db-restore
+     namespace: fantasy-rpg
+   spec:
+     instances: 1
+     imageName: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+     storage:
+       size: 2Gi
+       storageClass: longhorn
+     serviceAccountTemplate:
+       metadata:
+         annotations:
+           eks.amazonaws.com/role-arn: arn:aws:iam::695434033664:role/FomillerCnpgBackupS3Access
+     bootstrap:
+       recovery:
+         source: fantasy-rpg-db
+         # For a point in time, add: recoveryTarget: {targetTime: "2026-10-27 12:00:00+00"}
+     externalClusters:
+       - name: fantasy-rpg-db
+         plugin:
+           name: barman-cloud.cloudnative-pg.io
+           parameters:
+             barmanObjectName: fantasy-rpg-db-backup
+             serverName: fantasy-rpg-db
+   EOF
+   ```
+
+   It has no `plugins` entry on purpose. It reads the backups but never
+   writes to them, so it cannot mix its WAL into the live cluster's.
+
+2. Wait for it to be healthy:
+
+   ```sh
+   kubectl --context admin@homelab -n fantasy-rpg get cluster fantasy-rpg-db-restore -w
+   ```
+
+   `STATUS` should read `Cluster in healthy state`.
+
+3. Check the data came back. Compare the counts with the live cluster:
+
+   ```sh
+   for c in fantasy-rpg-db fantasy-rpg-db-restore; do
+     kubectl --context admin@homelab -n fantasy-rpg exec $c-1 -c postgres -- \
+       psql -U postgres -d fantasy -tAc \
+       'select (select count(*) from accounts), (select count(*) from characters), (select max(version_id) from goose_db_version)'
+   done
+   ```
+
+4. Use it or remove it. For a drill, delete it:
+
+   ```sh
+   kubectl --context admin@homelab -n fantasy-rpg delete cluster fantasy-rpg-db-restore
+   ```
+
+   Making it the live database is not covered here. The chart names the
+   Cluster `fantasy-rpg-db`, so it needs a chart change, not a hand edit.
+
+> This restore is written from the plugin's API, not from a drill. Run it
+> once after the first base backup, before you need it.
 
 ## Local dev and tests
 

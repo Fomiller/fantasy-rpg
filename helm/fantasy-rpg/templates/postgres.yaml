@@ -18,6 +18,23 @@ spec:
   {{- /* Pinned: CNPG never does an implicit major upgrade, so a floating tag
          can strand the cluster on an operator bump. */}}
   imageName: {{ .Values.postgres.imageName }}
+  {{- with .Values.postgres.backup }}
+  {{- if .enabled }}
+  {{- /* isWALArchiver is what makes recovery continuous. Without it a restore
+         only reaches the last base backup. */}}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ include "chart.dbName" $ }}-backup
+  {{- /* CNPG names the ServiceAccount after the Cluster, and the role's trust
+         policy pins that name. Renaming the Cluster breaks backups. */}}
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        eks.amazonaws.com/role-arn: {{ required "postgres.backup.roleArn is required" .roleArn }}
+  {{- end }}
+  {{- end }}
   bootstrap:
     initdb:
       database: {{ .Values.postgres.database }}
