@@ -18,6 +18,12 @@ ingressRoute:
 # Secret CNPG makes, so nothing else here changes.
 postgres:
   enabled: true
+  # The homelab's shared CNPG backup bucket, one prefix per cluster. The role
+  # trusts system:serviceaccount:fantasy-rpg:fantasy-rpg-db.
+  backup:
+    enabled: true
+    destinationPath: s3://fomiller-dev-homelab-cnpg-backups/fantasy-rpg-db
+    roleArn: arn:aws:iam::695434033664:role/FomillerCnpgBackupS3Access
 
 # The in-cluster Redpanda from argocd/redpanda. No TLS or SASL.
 events:
