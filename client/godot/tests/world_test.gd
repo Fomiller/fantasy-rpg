@@ -180,9 +180,9 @@ func _window_button(window: Control, item_name: String, text: String) -> Button:
 		var button := node as Button
 		if button.text != text or button.is_queued_for_deletion():
 			continue
-		var label := button.get_parent().get_child(0)
-		if label is RichTextLabel and item_name in (label as RichTextLabel).get_parsed_text():
-			return button
+		for sibling in button.get_parent().get_children():
+			if sibling is RichTextLabel and item_name in (sibling as RichTextLabel).get_parsed_text():
+				return button
 	return null
 
 
