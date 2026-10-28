@@ -1,0 +1,77 @@
+{{- /* Valkey for the town directory. One pod, no persistence: every key is
+       rebuilt within one heartbeat, so a restart costs a worse pick only. */ -}}
+{{- if .Values.valkey.enabled }}
+{{- $name := include "chart.valkeyName" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.valkeySelectorLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "chart.valkeySelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.valkeySelectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "chart.restrictedPod" . | nindent 6 }}
+      containers:
+        - name: valkey
+          image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
+          args:
+            - valkey-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 64mb
+            - --maxmemory-policy
+            - allkeys-lru
+            {{- /* No password, so protected mode would turn away every pod. */}}
+            - --protected-mode
+            - "no"
+          ports:
+            - name: valkey
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: [valkey-cli, ping]
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.valkey.resources | nindent 12 }}
+          {{- include "chart.restrictedContainer" . | nindent 10 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        {{- /* The working dir. Nothing is saved there, but the root is read-only. */}}
+        - name: data
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "chart.valkeySelectorLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "chart.valkeySelectorLabels" . | nindent 4 }}
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: 6379
+{{- end }}

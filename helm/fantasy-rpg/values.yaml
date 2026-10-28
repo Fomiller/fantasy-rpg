@@ -104,6 +104,22 @@ joinKey:
 events:
   brokers: ""
 
+# One Valkey for the town directory: each town shard's URL and head count,
+# and each player's last shard. No persistence, since every key is rebuilt
+# within one heartbeat. Off, the world server runs with no directory and
+# takes every player itself.
+valkey:
+  enabled: false
+  image:
+    repository: valkey/valkey
+    tag: 8.1.11-alpine
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
+
 # PodMonitors for every server's /metrics. Needs the Prometheus operator's
 # CRDs. labels go on each PodMonitor, for a Prometheus that selects by label.
 # dashboards renders the Grafana dashboards in dashboards/ as ConfigMaps.

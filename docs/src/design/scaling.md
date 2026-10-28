@@ -23,6 +23,9 @@ in Hub town.
 - `world-server` is one pod, `Recreate`, one town. `TOWN_MAX_PLAYERS` is
   32. One connection per name is a map in that process, and a session
   claim in inventory across processes. Done in FOM-256.
+- The world publishes itself to the town directory in Valkey every 2 s,
+  and remembers each player's last shard. Nothing routes on it yet. The
+  front door is FOM-258. Done in FOM-257.
 - Caves run on the Agones Fleet with a buffer FleetAutoscaler, max 8.
 - `inventory` is two pods, `RollingUpdate`, with a PDB. It owns Postgres.
   Each pod runs the outbox relay, and an advisory lock lets one send at a
@@ -308,6 +311,24 @@ worse pick, not an item.
 - One Valkey pod, no persistence, `maxmemory 64mb`. Every key is rebuilt
   within one heartbeat. Client is `valkey-go`.
 
+Done in FOM-257:
+
+- `internal/towns` has the directory and the pick order. `Choose` is a
+  pure function over the towns, so the order is tested without Valkey.
+- A set, `towns`, indexes the shard ids. A read is `SMEMBERS` and one
+  `MGET`. A `SCAN` would also walk every `player:` key. A read drops ids
+  whose town key expired.
+- "Newest revision" is the revision of the latest started shard that is
+  not draining. Revisions are hashes, so they do not sort.
+- `VALKEY_ADDR` turns it on. Empty means no directory, and every pick is
+  this shard. `TOWN_URL` is what the shard publishes. `TOWN_REVISION` is
+  the image tag for now. `TOWN_SOFT_CAP_PERCENT` is 75.
+- On SIGTERM the world publishes itself as draining once, then stops.
+  Moving players off comes with the StatefulSet.
+- `towns_errors_total`, by `call`, counts failed Valkey calls.
+- The chart's Valkey is behind `valkey.enabled`, on in dev. `just deps`
+  starts one in Compose, and `just dev` uses it.
+
 **Why not NATS for presence:** the homelab NATS is core NATS. It holds no
 state. A front door that just started must read every shard's count at
 once, not wait for the next heartbeat. NATS KV would work, but needs
@@ -591,7 +612,7 @@ In build order. Each one merges on its own and leaves the game playable.
     - `sessions` and `shards` tables, claim, release, heartbeat.
     - World claims on join and releases after the last write. Still one
       shard.
-11. **fantasy-rpg: Valkey and the directory.**
+11. **fantasy-rpg: Valkey and the directory.** Done, FOM-257.
     - Valkey in the chart and in Compose.
     - `internal/towns`: shard heartbeat and the pick order. Fail open when
       Valkey is down.

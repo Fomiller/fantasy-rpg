@@ -50,6 +50,9 @@ spec:
             {{- end }}
             {{- include "chart.inventoryEnv" . | nindent 12 }}
             {{- include "chart.loggingEnv" . | nindent 12 }}
+            {{- if .Values.valkey.enabled }}
+            {{- include "chart.townEnv" . | nindent 12 }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /healthz

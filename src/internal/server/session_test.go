@@ -12,6 +12,7 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
+	"github.com/Fomiller/fantasy-rpg/src/internal/towns"
 )
 
 // elsewhere is ann's session on another live shard.
@@ -85,5 +86,40 @@ func TestWorldLostClaimClosesThePlayer(t *testing.T) {
 	wantClose(t, conn, websocket.StatusTryAgainLater, reasonPlaying)
 	if c, _, err := h.store.Load(context.Background(), "ann", classes.Starter); err != nil || len(c.Stash) != 0 {
 		t.Fatalf("stash = %v, %v, want the stale save turned away", c.Stash, err)
+	}
+}
+
+// rememberDir records what the shard remembers.
+type rememberDir struct {
+	towns.Off
+	got chan [2]string
+}
+
+func (d rememberDir) Remember(_ context.Context, name, shard string) error {
+	d.got <- [2]string{name, shard}
+	return nil
+}
+
+func TestWorldJoinRemembersTheShard(t *testing.T) {
+	dir := rememberDir{got: make(chan [2]string, 1)}
+	h := serveWorld(t, asShard, func(l *Lobby) {
+		l.Towns = &towns.Shard{Dir: dir, ID: l.WorldID, Players: l.TownPlayers, Log: quiet()}
+	})
+	conn := dial(t, h.url)
+	lobbyAs(t, conn, "ann")
+	select {
+	case got := <-dir.got:
+		if got != [2]string{"ann", "world-0"} {
+			t.Fatalf("remembered %v, want ann on world-0", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the join was never remembered")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for h.lobby.TownPlayers() != 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("TownPlayers = %d, want 1", h.lobby.TownPlayers())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

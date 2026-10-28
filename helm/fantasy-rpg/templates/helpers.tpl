@@ -82,6 +82,30 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.logging.format | quote }}
 {{- end -}}
 
+{{- define "chart.valkeySelectorLabels" -}}
+app.kubernetes.io/name: {{ include "chart.name" . }}-valkey
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "chart.valkeyName" -}}
+{{- printf "%s-valkey" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- /* The town directory. TOWN_URL is the public /ws while there is one
+       world pod. Per-shard routes come with the StatefulSet. */ -}}
+{{- define "chart.townEnv" -}}
+- name: VALKEY_ADDR
+  value: {{ include "chart.valkeyName" . }}:6379
+- name: TOWN_URL
+  {{- if .Values.ingressRoute.host }}
+  value: wss://{{ .Values.ingressRoute.host }}/ws
+  {{- else }}
+  value: ws://{{ include "chart.fullname" . }}-world:8080/ws
+  {{- end }}
+- name: TOWN_REVISION
+  value: {{ .Values.image.tag | toString | splitList "@" | first | quote }}
+{{- end -}}
+
 {{- define "chart.dbName" -}}
 {{- printf "%s-db" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
