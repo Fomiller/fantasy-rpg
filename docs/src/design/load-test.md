@@ -140,6 +140,33 @@ What it shows:
 - With one Postgres instance, a DB restart makes joins fail. That supports
   FOM-254, a second Postgres instance.
 
+### Shard autoscaling, 2026-10-28
+
+- The bot director in `fixed` mode, `just bots-set fixed 40`, then back to
+  `just bots-set fill 6`. Image 0.32.0, chart 0.20.0. KEDA threshold 24
+  players per shard, `world.maxShards` 4.
+- Bots went from 6 to 40 in about 40 s. Town players peaked at 32 and KEDA
+  started `world-1` about 20 s later.
+- With 2 shards the town held 12 to 17 players per shard. KEDA did not ask
+  for a third. Part of the bots are in caves at any time.
+- Both shards seated bots. `world-1` took 24 joins in 3 minutes.
+- Inventory stayed at 2 pods. Store calls peaked near 5 per second against
+  a threshold of 50. `run.ended` lag stayed 0.
+- After the drop to 6 bots, KEDA held 2 shards for 10 minutes, then
+  removed `world-1`. No bot warnings or errors.
+- Not seen: a drain that moves live players. In fill mode the front door
+  seats the bots on `world-0` first, so `world-1` was likely empty when it
+  stopped. The front door tests cover the drain. To see it live, run 40
+  bots and delete the `world-1` pod.
+
+What it shows:
+
+- Scale-up and scale-down work end to end.
+- 40 bots never put more than 32 players in town. A test of 3 or 4 shards
+  needs more bots, or a higher `TOWN_MAX_PLAYERS` and threshold.
+- The inventory thresholds are still guesses. 40 bots used a tenth of the
+  store call threshold.
+
 ## What the results set
 
 - **`TOWN_MAX_PLAYERS`:** the most players in town where Town tick p99
