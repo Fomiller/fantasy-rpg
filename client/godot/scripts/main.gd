@@ -81,7 +81,6 @@ func _ready() -> void:
 	_connection.level_up.connect(_on_level_up)
 	_connection.run_ended.connect(_on_run_ended)
 	_connection.equipment_received.connect(_on_equipment)
-	_connection.equipment_received.connect(_inventory.show_equipment)
 	_connection.inventory_received.connect(_inventory.show_inventory)
 	_inventory.connection = _connection
 	_connection.equipment_received.connect(_character.show_equipment)
@@ -94,12 +93,11 @@ func _ready() -> void:
 	_loot.send_pickup = _connection.send_pickup
 	_connection.town_state_changed.connect(_on_town_state)
 	_connection.left.connect(_on_left)
-	_connection.equipment_received.connect(_stash.show_equipment)
-	_connection.inventory_received.connect(_stash.show_inventory)
 	_connection.stash_received.connect(_stash.show_stash)
 	_connection.stash_move_rejected.connect(_stash.show_rejected)
 	_connection.enter_instance_rejected.connect(_on_enter_rejected)
 	_stash.send_move = _connection.send_stash_move
+	_stash.visibility_changed.connect(func() -> void: _inventory.set_stash_open(_stash.visible))
 	_connection.chat_received.connect(_chat.add_message)
 	_connection.chat_channels_changed.connect(_chat.apply_left_channels)
 	_chat.send_chat = _connection.send_chat
@@ -133,6 +131,7 @@ func _physics_process(_delta: float) -> void:
 	if _connection.in_town:
 		if Input.is_action_just_pressed("interact") and near_stash(_ghost.position):
 			_stash.open()
+			_inventory.visible = true
 		if _stash.visible and not near_stash(_ghost.position):
 			_stash.visible = false
 		_watch_entrance()

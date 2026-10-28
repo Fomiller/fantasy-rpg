@@ -19,9 +19,6 @@ var message := ""
 # Moves are turned away until the server says the last run is saved.
 var saving := false
 
-var _gear: Array[GameV1.Item] = []
-var _bag: Array[GameV1.Item] = []
-var _bag_capacity := 0
 var _stash: Array[GameV1.Item] = []
 var _stash_capacity := 0
 
@@ -41,17 +38,6 @@ func open() -> void:
 
 func set_saving(is_saving: bool) -> void:
 	saving = is_saving
-	_rebuild()
-
-
-func show_equipment(items: Array[GameV1.Item]) -> void:
-	_gear = items
-	_rebuild()
-
-
-func show_inventory(items: Array[GameV1.Item], capacity: int) -> void:
-	_bag = items
-	_bag_capacity = capacity
 	_rebuild()
 
 
@@ -83,12 +69,6 @@ func _rebuild() -> void:
 	if saving:
 		_label("Saving...")
 
-	_label("Gear")
-	for item in _gear:
-		_row(item, {"To bag": GameV1.ItemPlace.BAG, "To stash": GameV1.ItemPlace.STASH})
-	_label("Bag %d/%d" % [_bag.size(), _bag_capacity])
-	for item in _bag:
-		_row(item, _equip_or({"To stash": GameV1.ItemPlace.STASH}, item))
 	_label("Stash %d/%d" % [_stash.size(), _stash_capacity])
 	for item in _stash:
 		_row(item, _equip_or({"To bag": GameV1.ItemPlace.BAG}, item))

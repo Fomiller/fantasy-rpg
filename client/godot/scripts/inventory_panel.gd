@@ -2,10 +2,10 @@ class_name InventoryPanel
 extends PanelContainer
 
 # Every button sends a request. The panel only changes when the server
-# answers with new equipment or inventory.
+# answers with a new inventory.
 var connection: ServerConnection
 
-var _equipment: Array[GameV1.Item] = []
+var _stash_open := false
 var _items: Array[GameV1.Item] = []
 var _capacity := 0
 
@@ -16,8 +16,8 @@ func _ready() -> void:
 	add_to_group("windows")
 
 
-func show_equipment(items: Array[GameV1.Item]) -> void:
-	_equipment = items
+func set_stash_open(is_open: bool) -> void:
+	_stash_open = is_open
 	_rebuild()
 
 
@@ -28,7 +28,6 @@ func show_inventory(items: Array[GameV1.Item], capacity: int) -> void:
 
 
 func clear() -> void:
-	_equipment = []
 	_items = []
 	_capacity = 0
 	_rebuild()
@@ -38,10 +37,6 @@ func _rebuild() -> void:
 	for child in _list.get_children():
 		_list.remove_child(child)
 		child.queue_free()
-
-	_heading("Equipped")
-	for item in _equipment:
-		_row(item, {"Unequip": connection.send_unequip.bind(item.get_slot())})
 
 	# A potion is for a run, and nothing can be dropped in the town.
 	var in_run := not connection.in_town
@@ -55,6 +50,8 @@ func _rebuild() -> void:
 			actions["Equip"] = connection.send_equip.bind(item.get_id())
 		if in_run:
 			actions["Drop"] = connection.send_drop.bind(item.get_id())
+		if _stash_open:
+			actions["To stash"] = connection.send_stash_move.bind(item.get_id(), GameV1.ItemPlace.STASH)
 		_row(item, actions)
 
 

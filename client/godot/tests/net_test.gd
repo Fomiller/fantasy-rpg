@@ -85,6 +85,8 @@ func _run() -> void:
 # sword and equip it again from the stash.
 func _test_stash(main: Node, connection: ServerConnection, latest: Dictionary) -> void:
 	var stash: StashWindow = main.get_node("HUD/Windows/Right/Column/Stash")
+	var character: CharacterScreen = main.get_node("HUD/Windows/Left/Character")
+	var inventory: InventoryPanel = main.get_node("HUD/Windows/Right/Column/Inventory")
 	var chest: Vector2 = main.get_node("Cave").stash
 	var server_pos := func() -> Vector2: return _server_pos(latest.snapshot, connection.player_id)
 	await _press("interact")
@@ -92,15 +94,16 @@ func _test_stash(main: Node, connection: ServerConnection, latest: Dictionary) -
 	await _walk(main, "move_left", func() -> bool: return server_pos.call().x < chest.x + 40.0)
 	await _press("interact")
 	_check(await _until(func() -> bool: return stash.visible), "interact at the chest opens the stash")
-	_check(await _until(func() -> bool: return _window_button(stash, "Rusty Sword", "To stash") != null), "the stash window lists the starter sword as gear")
-	var to_stash := _window_button(stash, "Rusty Sword", "To stash")
-	if to_stash:
-		to_stash.pressed.emit()
+	_check(inventory.visible, "the stash opens the inventory too")
+	_check(await _until(func() -> bool: return _window_button(character, "Rusty Sword", "Unequip") != null), "the character screen lists the starter sword")
+	_window_button(character, "Rusty Sword", "Unequip").pressed.emit()
+	_check(await _until(func() -> bool: return _window_button(inventory, "Rusty Sword", "To stash") != null), "the sword is in the bag with a To stash button")
+	_window_button(inventory, "Rusty Sword", "To stash").pressed.emit()
 	_check(await _until(func() -> bool: return _window_button(stash, "Rusty Sword", "Equip") != null), "the server moves the sword to the stash")
 	var equip := _window_button(stash, "Rusty Sword", "Equip")
 	if equip:
 		equip.pressed.emit()
-	_check(await _until(func() -> bool: return _window_button(stash, "Rusty Sword", "To stash") != null), "the sword is equipped again from the stash")
+	_check(await _until(func() -> bool: return _window_button(character, "Rusty Sword", "Unequip") != null), "the sword is equipped again from the stash")
 
 
 # From the chest, walk right under the corridor and up into the entrance.
@@ -247,8 +250,9 @@ func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
 	Input.action_release("inventory")
 	_check(panel.visible, "inventory key opens the panel")
 
-	var unequip := _button(panel, "Rusty Sword", "Unequip")
-	_check(unequip != null, "panel lists the equipped sword")
+	var character: CharacterScreen = main.get_node("HUD/Windows/Left/Character")
+	var unequip := _window_button(character, "Rusty Sword", "Unequip")
+	_check(unequip != null, "character screen lists the equipped sword")
 	if unequip == null:
 		return
 	unequip.pressed.emit()
@@ -271,7 +275,7 @@ func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
 
 	_button(panel, "Rusty Sword", "Equip").pressed.emit()
 	_check(await _until(func() -> bool: return "Rusty Sword" in hud.text), "equipped the looted sword")
-	_check(_button(panel, "Rusty Sword", "Unequip") != null and _button(panel, "Rusty Sword", "Equip") == null, "panel shows the sword equipped, not in the bag")
+	_check(_window_button(character, "Rusty Sword", "Unequip") != null and _button(panel, "Rusty Sword", "Equip") == null, "the sword is equipped, not in the bag")
 
 
 func _button(panel: InventoryPanel, item_name: String, text: String) -> Button:
