@@ -15,7 +15,7 @@ import (
 
 const (
 	dialPatience = 15 * time.Second
-	whisperWait  = 2 * time.Second
+	whisperWait  = 1500 * time.Millisecond
 )
 
 var (
@@ -96,6 +96,9 @@ func (n *NATS) Whisper(ctx context.Context, name string, m *gamev1.ChatMessage) 
 	reply, err := n.nc.RequestWithContext(ctx, PlayerSubject(name), b)
 	switch {
 	case errors.Is(err, nats.ErrNoResponders):
+		return ErrNotOnline
+	// A listener that stopped with the request in flight never answers.
+	case errors.Is(err, context.DeadlineExceeded) && n.nc.IsConnected():
 		return ErrNotOnline
 	case err != nil:
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)

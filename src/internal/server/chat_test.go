@@ -286,7 +286,8 @@ func TestWhisperAcrossTownAndCave(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		line(t, ann, "/w bob are you there")
-		if got := hearOne(t, ann); got.GetText() == "bob is not online." {
+		got := hearOne(t, ann)
+		if got.GetText() == "bob is not online." {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -321,8 +322,12 @@ func TestWhisperBetweenTwoTownShards(t *testing.T) {
 	want(t, hearOne(t, bob), chat.WhisperFrom, "ann", "across the shards")
 	line(t, ann, "/y only mine")
 	line(t, bob, "/1 everyone")
-	// The whisper's echo waits for the other shard, so it can come after the yell.
-	got := texts(hear(t, ann, "everyone"))
+	// The whisper's echo waits for the other shard's reply, so it can come after
+	// both of the others. Read until all three are in.
+	var got []string
+	for len(got) < 3 {
+		got = append(got, texts([]*gamev1.ChatMessage{hearOne(t, ann)})...)
+	}
 	slices.Sort(got)
 	if !slices.Equal(got, []string{"general:everyone", "whisper_to:across the shards", "yell:only mine"}) {
 		t.Fatalf("ann heard %v", got)
