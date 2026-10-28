@@ -20,9 +20,11 @@ in Hub town.
 
 ## Today
 
-- `world-server` is one pod, `Recreate`, one town. `TOWN_MAX_PLAYERS` is
-  32. One connection per name is a map in that process, and a session
-  claim in inventory across processes. Done in FOM-256.
+- `world-server` is a StatefulSet of town shards, `world-0` and up, with a
+  PDB. Done in FOM-259. KEDA runs 1 to 4 shards, one per 24 players in
+  town. Done in FOM-261. `TOWN_MAX_PLAYERS` is 32. One connection per name
+  is a map in each process, and a session claim in inventory across
+  processes. Done in FOM-256.
 - The world publishes itself to the town directory in Valkey every 2 s,
   and remembers each player's last shard. Done in FOM-257.
 - Every world pod is a front door at `/ws`. It asks the directory, then
@@ -33,7 +35,8 @@ in Hub town.
   players with `TownTicket`, 4 every 250 ms. It stops when empty, when the
   directory has nowhere to send them, or at 30 s. Done in FOM-258.
 - Caves run on the Agones Fleet with a buffer FleetAutoscaler, max 8.
-- `inventory` is two pods, `RollingUpdate`, with a PDB. It owns Postgres.
+- `inventory` is two or three pods, `RollingUpdate`, with a PDB. KEDA
+  scales it on store calls and `run.ended` lag. It owns Postgres.
   Each pod runs the outbox relay, and an advisory lock lets one send at a
   time. Done in FOM-251.
 - `instance-manager` is two pods, `RollingUpdate`, with a PDB. Both
