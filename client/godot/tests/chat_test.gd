@@ -128,8 +128,8 @@ func _sticky_checks(chat: ChatBox, input: LineEdit, mode_label: Label, connectio
 	_check(_sent == ["plain"], "Say sends the line as typed")
 	_sent.clear()
 
-	_send(chat, input, "/r nobody yet")
-	_check(mode_label.text == "Say:" and _sent == ["/r nobody yet"], "/r with no whisper leaves the mode")
+	_send(chat, input, "/r hi dan")
+	_check(mode_label.text == "To dan:" and _sent == ["/r hi dan"], "/r whispers whoever whispered last")
 	_sent.clear()
 	chat.add_message(_chat_message("whisper_from", "zed", "psst"))
 	_send(chat, input, "/r back")
