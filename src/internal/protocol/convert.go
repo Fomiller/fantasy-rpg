@@ -158,6 +158,7 @@ func Snapshot(w *sim.World) *gamev1.ServerMessage {
 	for _, p := range w.Players() {
 		snap.Entities = append(snap.Entities, &gamev1.EntityState{
 			Id:              uint64(p.ID),
+			Name:            p.Name,
 			Kind:            gamev1.EntityKind_ENTITY_KIND_PLAYER,
 			Position:        vec(p.Pos),
 			Velocity:        vec(p.Vel),

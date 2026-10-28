@@ -158,6 +158,7 @@ client-test:
     {{godot}} --headless --path client/godot --script res://tests/progression_test.gd
     {{godot}} --headless --path client/godot --script res://tests/town_test.gd
     {{godot}} --headless --path client/godot --script res://tests/chat_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/settings_test.gd
 
 net-test: build
     #!/usr/bin/env bash

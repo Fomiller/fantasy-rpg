@@ -41,6 +41,7 @@ var _no_walls: Array[Rect2] = []
 var _rooted := 0.0
 var _last_move := Vector2.ZERO
 
+@onready var overhead: Overhead = $Overhead
 @onready var _interact_area: Area2D = $InteractArea
 @onready var _sprite: CharacterSprite = $Body
 @onready var _marker: Node2D = $FacingMarker

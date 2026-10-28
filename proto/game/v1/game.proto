@@ -290,6 +290,8 @@ message EntityState {
   // Players only, so other players' levels can be shown too. The client
   // compares its own to AbilityInfo.unlock_level.
   uint32 level = 17;
+  // Players only. The character name.
+  string name = 18;
 }
 
 message WorldSnapshot {

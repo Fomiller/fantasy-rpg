@@ -393,6 +393,7 @@ func (s *Server) spawn(c *client, ch inventory.Character) {
 		s.saveRun(c, ch, inventory.Disconnect)
 		return
 	}
+	s.world.SetName(id, c.name)
 	if err := s.world.Restore(id, ch.Loadout); err != nil {
 		s.log.Error("restore loadout", "player", id, "err", err)
 	}

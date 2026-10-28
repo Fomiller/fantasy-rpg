@@ -36,6 +36,9 @@ func _run() -> void:
 	var popups: Array[Node] = main.xp_popups()
 	_check(popups.size() == 2 and (popups[0] as Label).text == "+10 XP" and (popups[1] as Label).text == "+5 XP", "each XpGained shows a +N XP popup")
 	_check((popups[0] as Control).position != (popups[1] as Control).position, "popups stack instead of overlapping")
+	var name_top: float = main._player.overhead.get_node("Name").position.y
+	var low := popups[0] as Control
+	_check(low.position.y + low.get_combined_minimum_size().y <= name_top, "popups sit above the name label")
 	await _seconds(XpPopup.SECONDS + 0.3)
 	_check(main.xp_popups().is_empty(), "popups go away on their own")
 
