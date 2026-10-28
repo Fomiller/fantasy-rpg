@@ -36,3 +36,10 @@ metrics:
   dashboards: true
   labels:
     release: prometheus
+
+# A few always-on bots, so the town is never empty. fill keeps humans plus
+# bots at 6. `just bots-set` changes it without a commit.
+bots:
+  enabled: true
+  mode: fill
+  count: 6

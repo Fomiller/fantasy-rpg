@@ -49,6 +49,44 @@ inventory:
 instanceManager:
   replicas: 2
 
+# Always-on bots, off by default. bot-director decides how many run and sets
+# the worker Deployment's replicas, ceil(bots / perPod). Each worker pod runs
+# its share. Needs world.enabled. The target set with `just bots-set` lives
+# in a ConfigMap the director makes, and wins over mode and count here once
+# it exists. docs/src/design/bots.md has the rules.
+bots:
+  enabled: false
+  # off, fill or fixed. fill keeps humans plus bots at count. fixed runs
+  # count bots. Quoted, since YAML reads a bare off as false.
+  mode: "off"
+  count: 0
+  perPod: 25
+  # No mode runs more than maxWorkers * perPod bots.
+  maxWorkers: 4
+  fill:
+    # Keep under TOWN_MAX_PLAYERS (32) and the Fleet's seats
+    # (instances.autoscaler.maxReplicas * instances.maxPlayers), so bots
+    # alone never fill the town or the caves.
+    maxBots: 16
+    # Bots over the wanted count that may wait out downDelay. Past it they
+    # leave at once.
+    slack: 2
+    # Bots added or removed per round, every 5s.
+    step: 2
+    upDelay: 10s
+    downDelay: 60s
+  # What the bots dial. Empty is wss://<ingressRoute.host>/ws, or the world
+  # Service with no host. via is Traefik's in-cluster Service, as in the
+  # load test, so ticket URLs resolve too. Empty dials the URLs as they are.
+  url: ""
+  via: http://traefik.traefik.svc.cluster.local
+  # Names are bot-<namePrefix>-<slot>, so the director's bots reuse a few
+  # characters and never clash with the load test's bot-<index>-<n>.
+  namePrefix: fill
+  townTime: 30s
+  # Bots a worker starts per second.
+  ramp: 2
+
 # The Secret the world and instance servers read JOIN_TOKEN_KEY from. Empty
 # means neither gets one, which only the http-echo default can run without. Point it at a Secret
 # from externalSecrets below.

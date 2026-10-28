@@ -1,4 +1,4 @@
-package main
+package bot
 
 import (
 	"context"
@@ -18,13 +18,13 @@ import (
 type conn struct {
 	ws    *websocket.Conn
 	where string
-	m     *metrics
+	m     *Metrics
 	msgs  chan *gamev1.ServerMessage
 	// err is why msgs closed. Read it only after msgs is drained.
 	err error
 }
 
-func dial(ctx context.Context, rawURL, via, where string, m *metrics) (*conn, error) {
+func dial(ctx context.Context, rawURL, via, where string, m *Metrics) (*conn, error) {
 	u, host, err := rewrite(rawURL, via)
 	if err != nil {
 		return nil, err

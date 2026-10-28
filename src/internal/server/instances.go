@@ -24,10 +24,12 @@ const (
 
 // InstanceStatus is what an instance server's /status says.
 type InstanceStatus struct {
-	ID       string `json:"id"`
-	Boot     string `json:"boot"`
-	Players  int    `json:"players"`
-	Capacity int    `json:"capacity"`
+	ID      string `json:"id"`
+	Boot    string `json:"boot"`
+	Players int    `json:"players"`
+	// Bots is how many of Players are bots.
+	Bots     int `json:"bots"`
+	Capacity int `json:"capacity"`
 	// Draining is set once the instance got SIGTERM. It takes no one new.
 	Draining bool `json:"draining"`
 	// Runs is every run the process still has, including run ends that have

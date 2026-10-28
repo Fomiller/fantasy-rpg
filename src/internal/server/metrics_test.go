@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -9,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 )
 
@@ -38,6 +43,53 @@ func TestTownPlayersAndBytes(t *testing.T) {
 
 	conn.Close(websocket.StatusNormalClosure, "")
 	waitMetric(t, m.Players, is(0))
+}
+
+func botAs(t *testing.T, conn *websocket.Conn, name string) {
+	t.Helper()
+	send(t, conn, &gamev1.ClientMessage{ProtocolVersion: protocol.Version, Payload: &gamev1.ClientMessage_Join{
+		Join: &gamev1.JoinRequest{Name: name, Bot: true},
+	}})
+	townLobby(t, conn)
+}
+
+func players(t *testing.T, handle http.HandlerFunc) Players {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handle(rec, httptest.NewRequest("GET", "/v1/players", nil))
+	var p Players
+	if err := json.NewDecoder(rec.Body).Decode(&p); err != nil {
+		t.Fatalf("players: %v, %q", err, rec.Body)
+	}
+	return p
+}
+
+// The bot flag rides in the join token, so the cave counts a bot as the
+// town did.
+func TestBotsCountApart(t *testing.T) {
+	h := start(t)
+	ann := dial(t, h.url)
+	lobbyAs(t, ann, "ann")
+	bot := dial(t, h.url)
+	botAs(t, bot, "bot-0")
+	waitMetric(t, h.world.Metrics.Players, is(2))
+	waitMetric(t, h.world.Metrics.Bots, is(1))
+	if got := players(t, h.world.HandlePlayers); got != (Players{Humans: 1, Bots: 1}) {
+		t.Fatalf("town players = %+v", got)
+	}
+
+	enterInstance(t, bot)
+	waitMetric(t, h.srv.Metrics.Bots, is(1))
+	waitMetric(t, h.world.Metrics.Bots, is(0))
+	if got := players(t, h.srv.HandlePlayers); got != (Players{Bots: 1}) {
+		t.Fatalf("cave players = %+v", got)
+	}
+	if st := instanceStatus(t, h); st.Players != 1 || st.Bots != 1 {
+		t.Fatalf("status = %+v", st)
+	}
+	if got := players(t, h.world.HandlePlayers); got != (Players{Humans: 1}) {
+		t.Fatalf("town players = %+v", got)
+	}
 }
 
 func TestInstancePlayers(t *testing.T) {

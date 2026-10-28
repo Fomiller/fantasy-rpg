@@ -1,4 +1,4 @@
-package main
+package bot
 
 import (
 	"context"
@@ -73,14 +73,14 @@ func wsURL(u string) string { return "ws" + strings.TrimPrefix(u, "http") }
 // exit, and back to a town whose stash has the loot.
 func TestBotPlaysTheLoop(t *testing.T) {
 	url := serveGame(t)
-	m := newMetrics(prometheus.NewRegistry())
-	b := newBot("bot-test-0", config{url: url, townTime: 500 * time.Millisecond, fight: true, runTimeout: 20 * time.Second}, m)
+	m := NewMetrics(prometheus.NewRegistry())
+	b := New("bot-test-0", Config{URL: url, TownTime: 500 * time.Millisecond, Fight: true, RunTimeout: 20 * time.Second}, m)
 	b.log = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		b.run(ctx)
+		b.Run(ctx)
 		close(done)
 	}()
 	defer func() {
@@ -108,7 +108,7 @@ func TestBotPlaysTheLoop(t *testing.T) {
 	}
 }
 
-func errorCounts(m *metrics) string {
+func errorCounts(m *Metrics) string {
 	var b strings.Builder
 	for _, stage := range []string{"world_dial", "world_join", "town", "instance_dial", "instance_join", "run", "enter_full", "enter_saving", "enter_in_run"} {
 		if v := testutil.ToFloat64(m.errors.WithLabelValues(stage)); v > 0 {

@@ -55,6 +55,12 @@ instance id port:
 bots n:
     go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091
 
+bots-set mode count='0':
+    {{homelab}} -n fantasy-rpg exec deploy/fantasy-rpg-bot-director -- /bot-director set {{mode}} {{count}}
+
+bots-status:
+    {{homelab}} -n fantasy-rpg exec deploy/fantasy-rpg-bot-director -- /bot-director status
+
 loadtest pods bots duration='10m' ramp='2' via='http://traefik.traefik.svc.cluster.local' tag='':
     #!/usr/bin/env bash
     set -euo pipefail

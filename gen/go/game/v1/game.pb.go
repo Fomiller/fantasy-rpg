@@ -978,7 +978,10 @@ type JoinRequest struct {
 	ClassId string `protobuf:"bytes,2,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
 	// Set on the first join after a run, so the town spawns the player at
 	// the cave entrance.
-	Returning     bool `protobuf:"varint,3,opt,name=returning,proto3" json:"returning,omitempty"`
+	Returning bool `protobuf:"varint,3,opt,name=returning,proto3" json:"returning,omitempty"`
+	// Set by the headless bot. It only keeps the player out of the human
+	// count the bot director fills against, so a client gains nothing by it.
+	Bot           bool `protobuf:"varint,4,opt,name=bot,proto3" json:"bot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1030,6 +1033,13 @@ func (x *JoinRequest) GetClassId() string {
 func (x *JoinRequest) GetReturning() bool {
 	if x != nil {
 		return x.Returning
+	}
+	return false
+}
+
+func (x *JoinRequest) GetBot() bool {
+	if x != nil {
+		return x.Bot
 	}
 	return false
 }
@@ -3639,11 +3649,12 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x01y\x18\x02 \x01(\x02R\x01y\"H\n" +
 	"\x04Rect\x12\x1f\n" +
 	"\x03min\x18\x01 \x01(\v2\r.game.v1.Vec2R\x03min\x12\x1f\n" +
-	"\x03max\x18\x02 \x01(\v2\r.game.v1.Vec2R\x03max\"Z\n" +
+	"\x03max\x18\x02 \x01(\v2\r.game.v1.Vec2R\x03max\"l\n" +
 	"\vJoinRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bclass_id\x18\x02 \x01(\tR\aclassId\x12\x1c\n" +
-	"\treturning\x18\x03 \x01(\bR\treturning\"\x9b\x02\n" +
+	"\treturning\x18\x03 \x01(\bR\treturning\x12\x10\n" +
+	"\x03bot\x18\x04 \x01(\bR\x03bot\"\x9b\x02\n" +
 	"\fJoinAccepted\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\x12/\n" +
 	"\x06layout\x18\x02 \x01(\v2\x17.game.v1.InstanceLayoutR\x06layout\x12#\n" +

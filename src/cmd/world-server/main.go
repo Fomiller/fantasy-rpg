@@ -107,6 +107,8 @@ func run() error {
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /ws", lobby.HandleWS)
+	// For the bot director. The public route is /ws only.
+	mux.HandleFunc("GET /v1/players", lobby.HandlePlayers)
 	srv := &http.Server{
 		Addr:    ":" + port(),
 		Handler: mux,

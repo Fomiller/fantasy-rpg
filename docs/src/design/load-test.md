@@ -2,7 +2,8 @@
 
 How to run the bots in the homelab cluster and write down what they show.
 The plan behind it is in [Scaling](scaling.md). FOM-250 is the Job and this
-page. The bot is `src/cmd/bot`, from FOM-249.
+page. The bot is `src/cmd/bot`, from FOM-249. The bot director's `fixed`
+mode, in [Bots](bots.md), replaces this Job later.
 
 ## What runs
 

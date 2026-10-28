@@ -365,7 +365,7 @@ func (s *Lobby) ticket(c *client, runID string, p Placement, err error) {
 		return
 	}
 	now := time.Now()
-	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: p.ID + "@" + p.Boot, Run: runID}, now)
+	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: p.ID + "@" + p.Boot, Run: runID, Bot: c.bot}, now)
 	if err != nil {
 		s.log.Error("sign join token", "name", c.name, "err", err)
 		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))

@@ -1,4 +1,7 @@
-package main
+// Package bot plays the game headless over the real protocol. A Bot joins
+// the town, walks into the entrance, plays a run in the cave and comes back,
+// over and over. A Worker runs as many bots as the bot director asks for.
+package bot
 
 import (
 	"context"
@@ -13,20 +16,29 @@ import (
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 )
 
-type config struct {
-	url      string
-	via      string
-	townTime time.Duration
-	fight    bool
-	// runTimeout gives up on a cave the bot cannot finish, like one it is
+type Config struct {
+	// URL is the world server's WebSocket URL.
+	URL string
+	// Via is dialed instead of every URL's scheme and host, keeping the Host
+	// header. Empty dials the URLs as they are.
+	Via      string
+	TownTime time.Duration
+	Fight    bool
+	// RunTimeout gives up on a cave the bot cannot finish, like one it is
 	// stuck in.
-	runTimeout time.Duration
+	RunTimeout time.Duration
+	// Human joins without the bot flag, as a stand-in player in tests.
+	Human bool
 }
 
-type bot struct {
+func New(name string, cfg Config, m *Metrics) *Bot {
+	return &Bot{name: name, cfg: cfg, m: m, log: slog.Default(), rng: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
+}
+
+type Bot struct {
 	name string
-	cfg  config
-	m    *metrics
+	cfg  Config
+	m    *Metrics
 	log  *slog.Logger
 	rng  *rand.Rand
 
@@ -48,7 +60,11 @@ func (e *stageError) Error() string { return e.stage + ": " + e.err.Error() }
 
 func fail(stage string, err error) error { return &stageError{stage, err} }
 
-func (b *bot) run(ctx context.Context) {
+// Run plays until ctx is done. A cancel closes the socket the bot is on, so
+// a bot in a cave abandons the run as a disconnect does.
+func (b *Bot) Run(ctx context.Context) {
+	b.m.active.Inc()
+	defer b.m.active.Dec()
 	returning := false
 	for ctx.Err() == nil {
 		err := b.cycle(ctx, &returning)
@@ -70,7 +86,7 @@ func (b *bot) run(ctx context.Context) {
 }
 
 // cycle is one loop: the town, a ticket, the cave, and back.
-func (b *bot) cycle(ctx context.Context, returning *bool) error {
+func (b *Bot) cycle(ctx context.Context, returning *bool) error {
 	ticket, err := b.town(ctx, *returning)
 	if err != nil {
 		return err
@@ -92,7 +108,7 @@ type player struct {
 	lastSnap time.Time
 }
 
-func (b *bot) joined(j *gamev1.JoinAccepted) *player {
+func (b *Bot) joined(j *gamev1.JoinAccepted) *player {
 	return &player{
 		id:       j.GetPlayerId(),
 		grid:     newGrid(j.GetLayout()),
@@ -102,7 +118,7 @@ func (b *bot) joined(j *gamev1.JoinAccepted) *player {
 	}
 }
 
-func (b *bot) snapshot(p *player, s *gamev1.WorldSnapshot, where string) {
+func (b *Bot) snapshot(p *player, s *gamev1.WorldSnapshot, where string) {
 	now := time.Now()
 	if !p.lastSnap.IsZero() {
 		b.m.snapshotGap.WithLabelValues(where).Observe(now.Sub(p.lastSnap).Seconds())
@@ -117,7 +133,7 @@ func (b *bot) snapshot(p *player, s *gamev1.WorldSnapshot, where string) {
 	}
 }
 
-func (b *bot) move(ctx context.Context, c *conn, d point) error {
+func (b *Bot) move(ctx context.Context, c *conn, d point) error {
 	b.seq++
 	return c.send(ctx, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Move{Move: &gamev1.MoveInput{
 		Seq: b.seq, Direction: &gamev1.Vec2{X: float32(d.x), Y: float32(d.y)},
@@ -160,15 +176,15 @@ func (s *stuck) check(pos point, now time.Time) bool {
 
 // town joins the world, walks around for townTime, then walks into the
 // entrance until a ticket comes.
-func (b *bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket, error) {
+func (b *Bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket, error) {
 	start := time.Now()
-	c, err := dial(ctx, b.cfg.url, b.cfg.via, "town", b.m)
+	c, err := dial(ctx, b.cfg.URL, b.cfg.Via, "town", b.m)
 	if err != nil {
 		return nil, fail("world_dial", err)
 	}
 	defer c.close("bot leaving")
 	if err := c.send(ctx, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{
-		Name: b.name, Returning: returning,
+		Name: b.name, Returning: returning, Bot: !b.cfg.Human,
 	}}}); err != nil {
 		return nil, fail("world_join", err)
 	}
@@ -202,7 +218,7 @@ func (b *bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket,
 				p = b.joined(msg.GetJoined())
 				joinedAt = time.Now()
 				b.m.join.Observe(joinedAt.Sub(start).Seconds())
-				wanderUntil = joinedAt.Add(b.cfg.townTime)
+				wanderUntil = joinedAt.Add(b.cfg.TownTime)
 				tick.Reset(time.Second / time.Duration(p.tickRate))
 			case msg.GetLobby() != nil:
 				was := saving
@@ -265,7 +281,7 @@ func (b *bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket,
 }
 
 // randomTile is anywhere but the entrance.
-func (b *bot) randomTile(g *grid, entrance *gamev1.Rect) tile {
+func (b *Bot) randomTile(g *grid, entrance *gamev1.Rect) tile {
 	fl := g.floors(nil)
 	for {
 		t := fl[b.rng.IntN(len(fl))]
@@ -277,9 +293,9 @@ func (b *bot) randomTile(g *grid, entrance *gamev1.Rect) tile {
 
 // cave follows the ticket, walks to a chest and loots it, then walks to the
 // exit. With fight on it swings at anything in reach on the way.
-func (b *bot) cave(ctx context.Context, ticket *gamev1.InstanceTicket) error {
+func (b *Bot) cave(ctx context.Context, ticket *gamev1.InstanceTicket) error {
 	start := time.Now()
-	c, err := dial(ctx, ticket.GetUrl(), b.cfg.via, "cave", b.m)
+	c, err := dial(ctx, ticket.GetUrl(), b.cfg.Via, "cave", b.m)
 	if err != nil {
 		return fail("instance_dial", err)
 	}
@@ -297,7 +313,7 @@ func (b *bot) cave(ctx context.Context, ticket *gamev1.InstanceTicket) error {
 	var route []point
 	var looted bool
 	var st stuck
-	deadline := time.NewTimer(b.cfg.runTimeout)
+	deadline := time.NewTimer(b.cfg.RunTimeout)
 	defer deadline.Stop()
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
@@ -307,7 +323,7 @@ func (b *bot) cave(ctx context.Context, ticket *gamev1.InstanceTicket) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-deadline.C:
-			return fail("run", fmt.Errorf("no extraction in %s", b.cfg.runTimeout))
+			return fail("run", fmt.Errorf("no extraction in %s", b.cfg.RunTimeout))
 		case msg, ok := <-c.msgs:
 			if !ok {
 				stage := "run"
@@ -345,7 +361,7 @@ func (b *bot) cave(ctx context.Context, ticket *gamev1.InstanceTicket) error {
 			if p == nil || !p.seen {
 				continue
 			}
-			if b.cfg.fight && now.Sub(lastSwing) >= cooldown {
+			if b.cfg.Fight && now.Sub(lastSwing) >= cooldown {
 				if e := nearest(p, gamev1.EntityKind_ENTITY_KIND_ENEMY, 64); e != nil {
 					lastSwing = now
 					b.attackSeq++
@@ -383,7 +399,7 @@ func (b *bot) cave(ctx context.Context, ticket *gamev1.InstanceTicket) error {
 
 // caveRoute is to the nearest chest with items, until one is looted, then
 // to the exit.
-func (b *bot) caveRoute(p *player, looted bool) []point {
+func (b *Bot) caveRoute(p *player, looted bool) []point {
 	if !looted && p.snapshot != nil {
 		var chests []tile
 		for _, e := range p.snapshot.GetEntities() {

@@ -19,6 +19,17 @@ type errorBody struct {
 func (m *Manager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/allocate", m.handleAllocate)
 	mux.HandleFunc("GET /v1/instances/{id}", m.handleInstance)
+	mux.HandleFunc("GET /v1/players", m.handlePlayers)
+}
+
+func (m *Manager) handlePlayers(w http.ResponseWriter, r *http.Request) {
+	p, err := m.Players(r.Context())
+	if err != nil {
+		m.log.Error("players", "err", err)
+		reply(w, http.StatusServiceUnavailable, errorBody{"unavailable"})
+		return
+	}
+	reply(w, http.StatusOK, p)
 }
 
 func (m *Manager) handleAllocate(w http.ResponseWriter, r *http.Request) {

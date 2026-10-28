@@ -7,6 +7,10 @@
 {{- $monitors = append $monitors (dict "name" "world" "selector" (include "chart.worldSelectorLabels" .)) }}
 {{- $monitors = append $monitors (dict "name" "instance-manager" "selector" (include "chart.managerSelectorLabels" .)) }}
 {{- $monitors = append $monitors (dict "name" "inventory" "selector" (include "chart.inventorySelectorLabels" .)) }}
+{{- if .Values.bots.enabled }}
+{{- $monitors = append $monitors (dict "name" "bot-director" "selector" (include "chart.directorSelectorLabels" .)) }}
+{{- $monitors = append $monitors (dict "name" "bot-worker" "selector" (include "chart.botWorkerSelectorLabels" .)) }}
+{{- end }}
 {{- end }}
 {{- range $monitors }}
 ---
