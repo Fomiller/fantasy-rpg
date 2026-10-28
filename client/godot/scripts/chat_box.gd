@@ -48,12 +48,16 @@ var _target := ""
 var _last_whisperer := ""
 
 @onready var _log: RichTextLabel = $List/Log
-@onready var _mode_label: Label = $List/Row/Mode
-@onready var _line: LineEdit = $List/Row/Input
+@onready var _row: PanelContainer = $List/Row
+@onready var _mode_label: Label = $List/Row/Fields/Mode
+@onready var _line: LineEdit = $List/Row/Fields/Input
 
 
 func _ready() -> void:
 	_line.max_length = MAX_LINE
+	_row.add_theme_stylebox_override("panel", _line.get_theme_stylebox("normal").duplicate())
+	for style in ["normal", "focus", "read_only"]:
+		_line.add_theme_stylebox_override(style, StyleBoxEmpty.new())
 	_line.visible = false
 	_mode_label.visible = false
 	_refresh_mode()
@@ -72,6 +76,7 @@ func _input(event: InputEvent) -> void:
 
 func open(prefill := "") -> void:
 	var was_typing := typing
+	_row.visible = true
 	_line.visible = true
 	_mode_label.visible = true
 	_line.text = prefill
@@ -85,6 +90,7 @@ func close() -> void:
 	if not typing:
 		return
 	_line.text = ""
+	_row.visible = false
 	_line.visible = false
 	_mode_label.visible = false
 	_line.release_focus()
