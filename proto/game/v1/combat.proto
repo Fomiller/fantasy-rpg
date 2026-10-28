@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package game.v1;
+
+import "game/v1/common.proto";
+
+// AttackRequest asks for any ability, not just the basic attack.
+message AttackRequest {
+  uint32 seq = 1;
+  // Only used to aim when aim is zero.
+  uint64 target_id = 2;
+  // An ability id, or "basic" for the class's basic attack.
+  string ability_id = 3;
+  // Direction to use the ability in, like toward the mouse.
+  Vec2 aim = 4;
+}
+
+// AbilityUsed is sent to everyone when an ability's windup starts. The hits
+// come later as DamageEvents.
+message AbilityUsed {
+  uint64 source_id = 1;
+  string ability_id = 2;
+  Vec2 aim = 3;
+  uint32 windup_ms = 4;
+  // Can be shorter than AbilityInfo says, from attack_speed.
+  uint32 cooldown_ms = 5;
+}
+
+// AbilityRejected is sent to the caster only.
+message AbilityRejected {
+  uint32 seq = 1;
+  string ability_id = 2;
+  // One of unknown, locked, busy, cooldown, resource, aim.
+  string reason = 3;
+}
+
+message DamageEvent {
+  uint64 source_id = 1;
+  uint64 target_id = 2;
+  int32 amount = 3;
+  int32 target_health = 4;
+  bool killed = 5;
+}

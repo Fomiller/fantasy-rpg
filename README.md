@@ -129,7 +129,7 @@ A cave lives in its pod's memory, so a crashed instance ends its runs. Players k
 
 ## Protocol
 
-Client and servers talk in protobuf. The messages live in `proto/game/v1/game.proto`. Every WebSocket frame is one `ClientMessage` or one `ServerMessage`. Client commands (`MoveInput`, `AttackRequest`) and server results (`WorldSnapshot`, `DamageEvent`, `InventoryUpdated`) are kept apart. Never trust IDs or damage values sent by the client.
+Client and servers talk in protobuf. The messages live in `proto/game/v1/`. `game.proto` holds the two envelopes. Every WebSocket frame is one `ClientMessage` or one `ServerMessage`. Client commands (`MoveInput`, `AttackRequest`) and server results (`WorldSnapshot`, `DamageEvent`, `InventoryUpdated`) are kept apart. Never trust IDs or damage values sent by the client.
 
 ```sh
 just proto            # lint, then generate Go and GDScript code
