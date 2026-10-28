@@ -107,6 +107,9 @@ func run() error {
 		return errors.New("PLAYER_URLS must list the world server and instance manager, like http://world:8080,http://instance-manager:8080")
 	}
 
+	players := director.NewEndpoints(urls)
+	players.Optional = strings.FieldsFunc(os.Getenv("OPTIONAL_PLAYER_URLS"), func(r rune) bool { return r == ',' })
+
 	namespace := cmp.Or(os.Getenv("NAMESPACE"), "fantasy-rpg")
 	var store director.Store = &director.Memory{}
 	var scaler director.Scaler = director.NoScaler{}
@@ -131,7 +134,7 @@ func run() error {
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	d := director.New(cfg, store, scaler, director.NewEndpoints(urls), director.NewMetrics(reg), slog.Default())
+	d := director.New(cfg, store, scaler, players, director.NewMetrics(reg), slog.Default())
 	if err := d.Load(ctx); err != nil {
 		return fmt.Errorf("load target: %w", err)
 	}

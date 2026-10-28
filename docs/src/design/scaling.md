@@ -644,9 +644,20 @@ In build order. Each one merges on its own and leaves the game playable.
       URL answers for one pod only.
 14. **homelab: install KEDA.**
     - Operator through Argo CD, like the other shared operators.
-15. **fantasy-rpg: ScaledObjects.**
+15. **fantasy-rpg: ScaledObjects.** Done, FOM-261. The bot run is left.
     - World shards on `sum(town_players)`. inventory on store calls and
       `run.ended` lag.
+    - Values `world.autoscaling` and `inventory.autoscaling`, on in dev.
+      The workload leaves `replicas` off while one is on.
+    - World threshold is 24, the soft cap (32 at 75%). Max is
+      `world.maxShards`, and the chart fails if it is set higher. A
+      scale-down removes one shard per 300 s after a 600 s window.
+    - inventory is 2 to 3. 50 store calls per second per replica and 100
+      records of `run.ended` lag per replica. Both are guesses until the
+      load test measures inventory headroom.
+    - With autoscaling on, the bot director's `PLAYER_URLS` lists world-0.
+      `OPTIONAL_PLAYER_URLS` lists the other shards up to `maxShards`, and
+      a shard that does not answer counts as empty.
     - Bot run that scales shards up and back down.
 16. **fantasy-rpg: cross-shard chat on NATS (stretch).**
     - Global and party subjects, rate limit per player.

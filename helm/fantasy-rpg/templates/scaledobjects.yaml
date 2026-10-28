@@ -1,0 +1,73 @@
+{{- /* KEDA ScaledObjects. A ScaledObject owns its workload's replicas, so the
+       workload leaves replicas off while autoscaling is on. Caves keep the
+       Agones FleetAutoscaler. */ -}}
+{{- if .Values.world.enabled }}
+{{- $world := .Values.world.autoscaling }}
+{{- if $world.enabled }}
+{{- $max := int (default .Values.world.maxShards $world.maxReplicas) }}
+{{- if gt $max (int .Values.world.maxShards) }}
+{{- fail "world.autoscaling.maxReplicas cannot be more than world.maxShards" }}
+{{- end }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "chart.fullname" . }}-world
+  labels:
+    {{- include "chart.worldSelectorLabels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: {{ include "chart.fullname" . }}-world
+  minReplicaCount: {{ $world.minReplicas }}
+  maxReplicaCount: {{ $max }}
+  cooldownPeriod: 600
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ $world.scaleDownWindow }}
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: {{ $world.scaleDownPeriod }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ $world.prometheusAddress }}
+        query: sum(town_players)
+        threshold: {{ $world.threshold | quote }}
+{{- end }}
+{{- $inv := .Values.inventory.autoscaling }}
+{{- if $inv.enabled }}
+{{- if $world.enabled }}
+---
+{{- end }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "chart.inventoryName" . }}
+  labels:
+    {{- include "chart.inventorySelectorLabels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "chart.inventoryName" . }}
+  minReplicaCount: {{ $inv.minReplicas }}
+  maxReplicaCount: {{ $inv.maxReplicas }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ $inv.prometheusAddress }}
+        query: sum(rate(store_duration_seconds_count[2m]))
+        threshold: {{ $inv.callsPerSecond | quote }}
+    {{- if .Values.events.brokers }}
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.events.brokers | quote }}
+        consumerGroup: inventory
+        topic: run.ended
+        lagThreshold: {{ $inv.lagThreshold | quote }}
+        offsetResetPolicy: earliest
+    {{- end }}
+{{- end }}
+{{- end }}

@@ -13,7 +13,10 @@ metadata:
     {{- /* After the migrate Job (0), so it never starts on an older schema. */}}
     argocd.argoproj.io/sync-wave: "1"
 spec:
+  {{- /* With autoscaling on, KEDA owns the replicas. */}}
+  {{- if not .Values.inventory.autoscaling.enabled }}
   replicas: {{ .Values.inventory.replicas }}
+  {{- end }}
   {{- /* Replicas share the outbox relay through an advisory lock, so a new pod
          can start before the old one stops. */}}
   strategy:
@@ -81,7 +84,7 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
-{{- if gt (int .Values.inventory.replicas) 1 }}
+{{- if or .Values.inventory.autoscaling.enabled (gt (int .Values.inventory.replicas) 1) }}
 ---
 {{- /* The join path needs one inventory pod up. */}}
 apiVersion: policy/v1
