@@ -294,7 +294,7 @@ the other two.
 
 ## What the client gets
 
-`EntityState` in `proto/game/v1/game.proto` carries, for enemies:
+`EntityState` in `proto/game/v1/world.proto` carries, for enemies:
 
 | Field | Type | For |
 | -- | -- | -- |

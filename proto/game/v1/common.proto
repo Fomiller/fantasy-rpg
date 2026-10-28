@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package game.v1;
+
+message Vec2 {
+  float x = 1;
+  float y = 2;
+}
+
+message Rect {
+  Vec2 min = 1;
+  Vec2 max = 2;
+}

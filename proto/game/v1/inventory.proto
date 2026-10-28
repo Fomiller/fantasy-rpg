@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package game.v1;
+
+enum Rarity {
+  RARITY_UNSPECIFIED = 0;
+  RARITY_COMMON = 1;
+  RARITY_UNCOMMON = 2;
+  RARITY_RARE = 3;
+  RARITY_EPIC = 4;
+  RARITY_UNIQUE = 5;
+}
+
+// Item carries everything the client shows. The client has no item data
+// files, so names and stats always come from the server.
+message Item {
+  string id = 1;
+  string item_def_id = 2;
+  uint32 quantity = 3;
+  string name = 4;
+  string slot = 5;
+  Rarity rarity = 6;
+  uint32 level = 7;
+  repeated ItemStat base = 8;
+  repeated ItemAffix affixes = 9;
+}
+
+message ItemStat {
+  string stat = 1;
+  int32 value = 2;
+}
+
+message ItemAffix {
+  string name = 1;
+  string stat = 2;
+  int32 value = 3;
+  uint32 tier = 4;
+}
+
+// EquipmentUpdated is the full set of equipped items, sent to that player
+// whenever it changes.
+message EquipmentUpdated {
+  repeated Item items = 1;
+  // Class base plus gear, as the server uses them. Unarmed damage and the
+  // move_speed cap are already applied. Gear is the only thing that changes them.
+  repeated ItemStat stats = 2;
+}
+
+// InventoryUpdated is everything in the player's bag, sent to that player
+// whenever it changes.
+message InventoryUpdated {
+  repeated Item items = 1;
+  uint32 capacity = 2;
+}
+
+// Item requests. The server ignores one it cannot do, like an equip of an
+// item the player does not have, and the next InventoryUpdated shows what
+// really happened. A pickup it cannot do gets a PickupRejected.
+
+// PickupRequest takes one item from a chest or loot entity, or everything
+// that fits.
+message PickupRequest {
+  uint64 target_id = 1;
+  // An item id from LootContents. Empty takes everything that fits.
+  string item_id = 2;
+}
+
+// PickupRejected is sent to the player whose pickup took nothing.
+message PickupRejected {
+  uint64 target_id = 1;
+  string item_id = 2;
+  // One of range, gone, bag_full.
+  string reason = 3;
+}
+
+// LootOpenRequest opens a loot window on a chest or loot entity. The server
+// answers with LootContents, and sends it again whenever the contents change,
+// until the window closes.
+message LootOpenRequest {
+  uint64 target_id = 1;
+}
+
+// LootCloseRequest stops the LootContents for that window.
+message LootCloseRequest {
+  uint64 target_id = 1;
+}
+
+// LootContents is what a loot window shows. Only the player who has the
+// window open gets it.
+message LootContents {
+  uint64 target_id = 1;
+  repeated Item items = 2;
+  // The server closed the window: the player walked out of range or died, or
+  // the pile is empty or gone. An open request from too far away gets this.
+  bool closed = 3;
+}
+
+// EquipRequest moves an item from the bag to its slot. Whatever was in the
+// slot goes back to the bag.
+message EquipRequest {
+  string item_id = 1;
+}
+
+message UnequipRequest {
+  string slot = 1;
+}
+
+// DropRequest puts a whole bag entry on the ground at the player's feet.
+message DropRequest {
+  string item_id = 1;
+}
+
+// UseRequest uses one of a consumable, like drinking a potion.
+message UseRequest {
+  string item_id = 1;
+}
+
+// StashContents is everything in the player's stash. It is sent in the town
+// whenever it changes.
+message StashContents {
+  repeated Item items = 1;
+  uint32 capacity = 2;
+}
+
+enum ItemPlace {
+  ITEM_PLACE_UNSPECIFIED = 0;
+  ITEM_PLACE_STASH = 1;
+  ITEM_PLACE_BAG = 2;
+  ITEM_PLACE_GEAR = 3;
+}
+
+// StashMoveRequest moves a whole item to the stash, the bag or its gear slot.
+// Town only, and a move from or to the stash needs the stash chest in range.
+// Gear already in the slot goes where the item came from. A stack that only
+// partly fits leaves the rest where it was. In the town, EquipRequest and
+// UnequipRequest are moves like this one.
+message StashMoveRequest {
+  string item_id = 1;
+  ItemPlace to = 2;
+}
+
+// StashMoveRejected is sent to the player whose move did nothing.
+message StashMoveRejected {
+  string item_id = 1;
+  // One of not_in_lobby, unknown_item, full, cannot_equip, saving, in_run,
+  // far. far is the stash chest out of range.
+  string reason = 2;
+}

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package game.v1;
+
+// ChatSend is one line the player typed, slash command and all. The server
+// reads the command, so the client does not need to know them. It is
+// accepted in the town and in a cave.
+//
+// /s or no command says it to players nearby. /y yells to the whole town
+// shard or cave. /1, /2 and /3 speak in General, Trade and LookingForGroup,
+// to every shard and cave. /w name text whispers to one player anywhere. /r
+// text answers the last player who whispered. /join and /leave take a
+// channel name: general, trade or lfg.
+message ChatSend {
+  // At most 255 characters. The server cuts the rest, and drops the line if
+  // nothing is left once control characters are removed.
+  string text = 1;
+}
+
+// ChatMessage is one line for the chat box. The server sets sender, from
+// the connection. A message is sent once and kept nowhere.
+message ChatMessage {
+  // One of say, yell, general, trade, lfg, whisper_from, whisper_to, system.
+  string channel = 1;
+  // Who said it. For whisper_to, the player it went to. Empty for system.
+  string sender = 2;
+  string text = 3;
+}
+
+// ChatChannels is the channels the player has joined. It follows
+// JoinAccepted, and comes again after /join and /leave. Names are general,
+// trade and lfg.
+message ChatChannels {
+  repeated string joined = 1;
+}

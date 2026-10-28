@@ -33,6 +33,7 @@ extends Node
 
 const PROTO_VERSION_CONST : String = "const PROTO_VERSION = "
 const PROTO_VERSION_DEFAULT : String = PROTO_VERSION_CONST + "0"
+const WARNING_IGNORE_ANNOTATIONS : String = "@warning_ignore_start(\"untyped_declaration\")\n@warning_ignore_start(\"inferred_declaration\")\n@warning_ignore_start(\"unsafe_call_argument\")\n@warning_ignore_start(\"unsafe_method_access\")\n@warning_ignore_start(\"return_value_discarded\")\n\n"
 
 const ONE_OF_CASE_FUNCTION_SUFFIX : String = "_case"
 const ONE_OF_CASE_ENUM_FIELD_SUFFIX : String = "Case"
@@ -50,14 +51,16 @@ class Document:
 
 class PrefixOptions:
 
-	func _init(pre : String, spe : bool = false, cn : String = ""):
+	func _init(pre : String, spe : bool = false, cn : String = "", sawia : bool = false):
 		prefix = pre
 		should_prefix_enums = spe
 		custom_class_name = cn
+		should_add_warning_ignore_annotations = sawia
 
 	var prefix: String = ""
 	var should_prefix_enums : bool
 	var custom_class_name: String = ""
+	var should_add_warning_ignore_annotations : bool = false
 
 
 class TokenPosition:
@@ -133,12 +136,14 @@ class AnalyzeResult:
 
 class Analysis:
 	
-	func _init(path : String, doc : Document):
+	func _init(path : String, doc : Document, proto_dir : String = ""):
 		path_dir = path
 		document = doc
+		proto_path = proto_dir
 	
 	var document : Document
 	var path_dir : String
+	var proto_path : String
 	
 	const LEX = {
 		LETTER = "[A-Za-z]",
@@ -1197,6 +1202,8 @@ class Analysis:
 			offset += 1
 		var import_name : String = get_text_from_token(indexed_tokens[offset].token)
 		var candidate_paths : Array = [path_dir + import_name]
+		if proto_path != "":
+			candidate_paths.append(proto_path + import_name)
 		if import_name.contains("/"):
 			var slash_pos = import_name.find("/")
 			if slash_pos >= 0 and slash_pos + 1 < import_name.length():
@@ -2070,6 +2077,7 @@ class Translator:
 			elif class_table[class_index].type == Analysis.CLASS_TYPE.MAP:
 				cls_pref += tabulate("class " + class_table[class_index].name + ":\n", nesting)
 			nesting += 1
+			cls_pref += tabulate("extends RefCounted\n", nesting)
 			cls_pref += tabulate("func _init():\n", nesting)
 			text += cls_pref
 			nesting += 1
@@ -2185,6 +2193,8 @@ class Translator:
 		var text : String = ""
 		var nesting : int = 0
 		core_text = core_text.replace(PROTO_VERSION_DEFAULT, PROTO_VERSION_CONST + str(proto_version))
+		if prefix_options.should_add_warning_ignore_annotations:
+			core_text = core_text.replace(PROTO_VERSION_CONST, WARNING_IGNORE_ANNOTATIONS + PROTO_VERSION_CONST)
 		if prefix_options.custom_class_name != "":
 			text += "class_name " + prefix_options.custom_class_name + "\n\n"
 		text += core_text + "\n\n\n"
@@ -2220,7 +2230,7 @@ class ImportFile:
 	var path : String
 	var parent_index : int
 
-func parse_all(analyzes : Dictionary, imports : Array, path : String, full_name : String, parent_index : int) -> bool:
+func parse_all(analyzes : Dictionary, imports : Array, path : String, full_name : String, parent_index : int, proto_path : String = "") -> bool:
 	
 	if !FileAccess.file_exists(full_name):
 		printerr(full_name, ": not found.")
@@ -2236,14 +2246,14 @@ func parse_all(analyzes : Dictionary, imports : Array, path : String, full_name 
 	
 	if !analyzes.has(sha):
 		print(full_name, ": parsing.")
-		var analysis : Analysis = Analysis.new(path, doc)
+		var analysis : Analysis = Analysis.new(path, doc, proto_path)
 		var an_result : AnalyzeResult = analysis.analyze()
 		if an_result.state:
 			analyzes[sha] = an_result
 			var parent : int = imports.size()
 			imports.append(ImportFile.new(sha, doc.name, parent_index))
 			for im in an_result.imports:
-				if !parse_all(analyzes, imports, path, im.path, parent):
+				if !parse_all(analyzes, imports, path, im.path, parent, proto_path):
 					return false
 		else:
 			printerr(doc.name + ": parsing error.")
@@ -2333,16 +2343,18 @@ func work(
 	custom_prefix : String = "",
 	should_prefix_enums : bool = false,
 	custom_class_name : String = "",
+	should_add_warning_ignore_annotations : bool = false,
+	proto_path : String = "",
 ) -> bool:
 
 	var in_full_name : String = path + in_file
 	var imports : Array = []
 	var analyzes : Dictionary = {}
-	var prefix_options : PrefixOptions = PrefixOptions.new(custom_prefix, should_prefix_enums, custom_class_name)
+	var prefix_options : PrefixOptions = PrefixOptions.new(custom_prefix, should_prefix_enums, custom_class_name, should_add_warning_ignore_annotations)
 	
 	print("Compiling source: '", in_full_name, "', output: '", out_file, "'.")
 	print("\n1. Parsing:")
-	if parse_all(analyzes, imports, path, in_full_name, -1):
+	if parse_all(analyzes, imports, path, in_full_name, -1, proto_path):
 		print("* Parsing completed successfully. *")
 	else:
 		return false
@@ -2394,6 +2406,7 @@ func work_directory(
 	custom_prefix : String = "",
 	should_prefix_enums : bool = false,
 	custom_class_name : String = "",
+	should_add_warning_ignore_annotations : bool = false,
 ) -> bool:
 	var normalized_input_dir = _normalize_dir_path(input_dir)
 	var normalized_output_dir = _normalize_dir_path(output_dir)
@@ -2420,7 +2433,8 @@ func work_directory(
 			core_file,
 			custom_prefix,
 			should_prefix_enums,
-			custom_class_name
+			custom_class_name,
+			should_add_warning_ignore_annotations
 		):
 			return false
 

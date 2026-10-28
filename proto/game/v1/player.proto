@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package game.v1;
+
+import "game/v1/common.proto";
+import "game/v1/inventory.proto";
+import "game/v1/world.proto";
+
+// JoinRequest puts the player in the world server's town. It is the first
+// message on the world server. An instance server closes on it.
+message JoinRequest {
+  string name = 1;
+  // Empty means warrior. An unknown class closes the connection.
+  string class_id = 2;
+  // Set on the first join after a run, so the town spawns the player at
+  // the cave entrance.
+  bool returning = 3;
+  // Set by the headless bot. It only keeps the player out of the human
+  // count the bot director fills against, so a client gains nothing by it.
+  bool bot = 4;
+  // Chat channels the player left, as the last ChatChannels showed them.
+  // General, trade and lfg are all joined when this is empty, so a new
+  // session and a client that never heard of chat get the defaults. The
+  // client sends it again on every join, so leaving a channel survives a
+  // move to another town shard and the trip back from a cave.
+  repeated string chat_left = 5;
+}
+
+// JoinAccepted is sent when the world server puts the player in the town,
+// and when an instance server lets them into the cave. A town over
+// TOWN_MAX_PLAYERS closes with 1013 "town full" instead.
+message JoinAccepted {
+  uint64 player_id = 1;
+  InstanceLayout layout = 2;
+  Vec2 spawn = 3;
+  // The client predicts its own movement one step per server tick.
+  uint32 tick_rate = 4;
+  // Named class_info because Godobuf would make get_class(), which Godot
+  // already has on every Object.
+  ClassInfo class_info = 5;
+  CharacterInfo character = 6;
+  // The world server's town. Moves only: no abilities, pickups, drops or
+  // potions.
+  bool town = 7;
+}
+
+// CharacterInfo is the player's own level and XP, and the name the server
+// keeps their character under.
+message CharacterInfo {
+  string name = 1;
+  string class_id = 2;
+  uint32 level = 3;
+  // Banked XP in total.
+  uint32 xp = 4;
+  // Banked XP past the start of this level.
+  uint32 level_xp = 5;
+  // XP from this level to the next. 0 at the level cap.
+  uint32 xp_to_next = 6;
+  // Earned this run and not banked yet. The level does not move until the run ends.
+  uint32 run_xp = 7;
+}
+
+// ClassInfo is the player's own class. The client has no class data files,
+// so it builds its ability bar from this.
+message ClassInfo {
+  string id = 1;
+  string name = 2;
+  // What the resource is called, like rage.
+  string resource = 3;
+  int32 max_resource = 4;
+  // The id the basic attack has. AttackRequest can also send "basic".
+  string basic = 5;
+  repeated AbilityInfo abilities = 6;
+}
+
+message AbilityInfo {
+  string id = 1;
+  string name = 2;
+  int32 cost = 3;
+  uint32 cooldown_ms = 4;
+  uint32 windup_ms = 5;
+  // The caster cannot move during the windup.
+  bool root = 6;
+  // Below this character level the server rejects it as locked.
+  uint32 unlock_level = 7;
+}
+
+// Extracted is sent to everyone in the cave. The instance server closes the
+// extracting player's socket right after, with reason "run over".
+message Extracted {
+  uint64 player_id = 1;
+  // Only in the copy sent to the player who extracted.
+  RunSummary summary = 2;
+}
+
+// RunEnded is sent to a player who died. The instance server closes their
+// socket right after, with reason "run over".
+message RunEnded {
+  RunSummary summary = 1;
+}
+
+// RunSummary is how a run ended for one player. Any LevelUp is sent just before it.
+message RunSummary {
+  bool extracted = 1;
+  // Run XP earned before the run ended.
+  uint32 run_xp = 2;
+  // What went into banked XP: all of it plus a bonus on extraction, a share on death.
+  uint32 banked_xp = 3;
+  uint32 levels_gained = 4;
+  // The character after banking. run_xp is 0.
+  CharacterInfo character = 5;
+  // The bag the player left with. Empty on death, since it all drops.
+  repeated Item kept = 6;
+  // Kept items the stash had no room for. They stay in the bag.
+  repeated Item overflow = 7;
+}
+
+// XpGained is sent to the player who earned it.
+message XpGained {
+  uint32 amount = 1;
+  // One of kill, chest.
+  string source = 2;
+  // The run total after this.
+  uint32 run_xp = 3;
+}
+
+// LevelUp is sent to that player when banked XP at the end of a run gives a level.
+message LevelUp {
+  uint32 level = 1;
+  ClassInfo class_info = 2;
+}
+
+// MoveInput is sent once per tick. The server uses one per tick, in seq order.
+message MoveInput {
+  uint32 seq = 1;
+  Vec2 direction = 2;
+}
+
+// Lobby says the town state changed: the character, the class, or saving.
+// The world server sends it after JoinAccepted, and again when the last run
+// lands. EquipmentUpdated, InventoryUpdated and StashContents follow it.
+message Lobby {
+  CharacterInfo character = 1;
+  ClassInfo class_info = 2;
+  // True while the last run's result is not in the database yet. Stash and
+  // gear moves and the entrance are rejected until a Lobby comes with it
+  // false.
+  bool saving = 3;
+}

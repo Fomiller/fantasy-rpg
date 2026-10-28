@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package game.v1;
+
+import "game/v1/common.proto";
+
+enum EntityKind {
+  ENTITY_KIND_UNSPECIFIED = 0;
+  ENTITY_KIND_PLAYER = 1;
+  ENTITY_KIND_ENEMY = 2;
+  ENTITY_KIND_CHEST = 3;
+  // Loot on the ground. It goes away once someone picks all of it up.
+  ENTITY_KIND_LOOT = 4;
+  // An enemy's shot. The client moves it by velocity between snapshots.
+  ENTITY_KIND_PROJECTILE = 5;
+}
+
+enum EnemyState {
+  ENEMY_STATE_UNSPECIFIED = 0;
+  ENEMY_STATE_IDLE = 1;
+  ENEMY_STATE_PATROL = 2;
+  ENEMY_STATE_DETECT = 3;
+  ENEMY_STATE_CHASE = 4;
+  ENEMY_STATE_ATTACK = 5;
+  ENEMY_STATE_SEARCH = 6;
+  ENEMY_STATE_RETREAT = 7;
+  ENEMY_STATE_RETURN = 8;
+  ENEMY_STATE_CHARGE = 9;
+  ENEMY_STATE_DEAD = 10;
+}
+
+message EntityState {
+  uint64 id = 1;
+  EntityKind kind = 2;
+  Vec2 position = 3;
+  Vec2 velocity = 4;
+  int32 health = 5;
+  // 0 to 1 while a player stands in the extraction zone.
+  float extract_progress = 6;
+  int32 max_health = 7;
+  // Players only. The last MoveInput seq the server applied, so the client
+  // knows which of its predicted inputs to replay.
+  uint32 last_input_seq = 8;
+  float max_speed = 9;
+  // Chests and loot only.
+  uint32 item_count = 10;
+  // Enemies only. archetype is data, like an item def id, so it is a string.
+  string archetype = 11;
+  EnemyState enemy_state = 12;
+  // Where the enemy faces during detect, attack and charge. The client draws
+  // the telegraph from it.
+  Vec2 aim = 13;
+  // Players only.
+  string class_id = 14;
+  int32 resource = 15;
+  int32 max_resource = 16;
+  // Players only, so other players' levels can be shown too. The client
+  // compares its own to AbilityInfo.unlock_level.
+  uint32 level = 17;
+  // Players only. The character name.
+  string name = 18;
+}
+
+message WorldSnapshot {
+  uint64 tick = 1;
+  repeated EntityState entities = 2;
+}
+
+// InstanceLayout is everything the client needs to draw the instance. Bounds
+// is the whole map, and anything outside a wall inside bounds is floor.
+message InstanceLayout {
+  string name = 1;
+  Rect bounds = 2;
+  repeated Rect walls = 3;
+  // Empty in the town.
+  Rect extraction = 4;
+  // Town only. Walking in sends the player to an instance.
+  Rect entrance = 5;
+  // Town only. Where the stash chest stands.
+  Vec2 stash = 6;
+}
+
+// EnterInstanceRejected is sent when the player walks into the town's
+// entrance and stays in the town.
+message EnterInstanceRejected {
+  // saving: the last run is still being saved. in_run: a run elsewhere holds
+  // the account. full: no instance has room.
+  string reason = 1;
+}
+
+// InstanceTicket is sent when the player walks into the town's entrance. The
+// world server closes the socket right after it, with reason
+// "entering instance".
+message InstanceTicket {
+  // The instance server's WebSocket URL, like
+  // wss://fantasy-rpg.fomiller.com/instances/fantasy-rpg-instance-0/ws.
+  string url = 1;
+  string token = 2;
+  // Not instance_id, since Godobuf would make get_instance_id(), which Godot
+  // already has on every Object.
+  string instance = 3;
+  // How long the token is good for, from when it was sent.
+  uint32 expires_in_ms = 4;
+}
+
+// TownTicket sends the player to another town shard. The front door at /ws
+// sends it when the directory picks another shard, and a draining shard
+// sends it to move its players. The server closes the socket right after
+// it, with 1000 "changing town". The client dials url and sends the same
+// JoinRequest.
+message TownTicket {
+  // The shard's WebSocket URL, like
+  // wss://fantasy-rpg.fomiller.com/towns/fantasy-rpg-world-1/ws.
+  string url = 1;
+}
+
+// InstanceJoinRequest is the first message on an instance server. It is the
+// only one an instance server takes before JoinAccepted.
+message InstanceJoinRequest {
+  string token = 1;
+}

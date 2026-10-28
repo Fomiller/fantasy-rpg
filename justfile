@@ -205,7 +205,7 @@ net-test: build
 proto:
     buf lint
     buf generate
-    {{godot}} --headless --path client/godot -s res://addons/godobuf/godobuf_cmdln.gd --input={{justfile_directory()}}/proto/game/v1/game.proto --output={{justfile_directory()}}/client/godot/gen/game_v1.gd --class_name=GameV1
+    {{godot}} --headless --path client/godot -s res://addons/godobuf/godobuf_cmdln.gd --proto_path={{justfile_directory()}}/proto --input={{justfile_directory()}}/proto/game/v1/game.proto --output={{justfile_directory()}}/client/godot/gen/game_v1.gd --class_name=GameV1
 
 proto-fixtures:
     go test ./src/internal/protocol -run TestServerSnapshotFixture -update

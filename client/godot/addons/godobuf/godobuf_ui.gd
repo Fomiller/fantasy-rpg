@@ -37,7 +37,17 @@ var dock
 func _enter_tree():
 	# Initialization of the plugin goes here
 	# First load the dock scene and instance it:
-	dock = preload("res://addons/godobuf/godobuf_ui_dock.tscn").instantiate()
+	var content = preload("res://addons/godobuf/godobuf_ui_dock.tscn").instantiate()
+	# The dock content is a tall stack of controls: its minimum height would
+	# become the dock's minimum height and block vertical resizing. A
+	# ScrollContainer does not propagate the child's minimum height, so the
+	# splitter stays free and the content scrolls instead.
+	dock = ScrollContainer.new()
+	dock.name = "Godobuf"
+	dock.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	dock.add_child(content)
 
 	# Add the loaded scene to the docks:
 	add_control_to_dock(DOCK_SLOT_LEFT_BR, dock)

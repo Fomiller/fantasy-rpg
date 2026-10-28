@@ -3,11 +3,6 @@
 [ext_resource type="Script" path="res://addons/godobuf/godobuf_ui_dock.gd" id="1"]
 
 [node name="Godobuf" type="VBoxContainer"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_right = -731.0
-offset_bottom = -374.0
 size_flags_horizontal = 3
 script = ExtResource("1")
 
@@ -158,6 +153,11 @@ text = "Class name:"
 [node name="ClassNameEdit" type="LineEdit" parent="HBoxContainer4"]
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="WarningIgnoreAnnotationsCheckButton" type="CheckButton" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Add warning ignore annotations?"
 
 [node name="HSeparator3" type="HSeparator" parent="."]
 layout_mode = 2
