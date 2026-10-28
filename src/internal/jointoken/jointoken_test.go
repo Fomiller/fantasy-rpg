@@ -3,6 +3,7 @@ package jointoken
 import (
 	"encoding/base64"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ func TestSignThenCheck(t *testing.T) {
 	}
 	want := claims()
 	want.V, want.Iat, want.Exp = Version, now.Unix(), now.Add(Lifetime).Unix()
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("claims = %+v, want %+v", got, want)
 	}
 }
@@ -138,5 +139,17 @@ func TestSeenRunsAreForgottenAfterExpiry(t *testing.T) {
 func TestKeyIsRequired(t *testing.T) {
 	if _, err := Key(""); err == nil {
 		t.Fatal("empty key accepted")
+	}
+}
+
+func TestChatLeftRidesInTheToken(t *testing.T) {
+	c := claims()
+	c.ChatLeft = []string{"general", "trade"}
+	got, err := NewVerifier(key).Check(sign(t, c, now), inst, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.ChatLeft, c.ChatLeft) {
+		t.Fatalf("ChatLeft = %v, want %v", got.ChatLeft, c.ChatLeft)
 	}
 }

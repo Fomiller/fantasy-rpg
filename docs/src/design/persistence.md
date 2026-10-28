@@ -37,9 +37,9 @@ It builds on the save model in [Progression](progression.md). FOM-114
 - Redis and NATS only make sense once there are two processes to share
   state between. Today the lobby and the cave live in one instance-server, and
   `Server.conns` already does what presence would.
-- NATS is in `deploy/compose/compose.yaml` already. Leave it there, but
-  nothing connects to it for MVP. When it is used, it carries events, never
-  the truth. A consumer that misses an event reads Postgres.
+- NATS is in `deploy/compose/compose.yaml`, as core NATS. Only chat
+  connects to it, see [Chat](chat.md). It carries messages, never the
+  truth.
 - Backups go to the homelab's S3 bucket, not MinIO. See Backups.
 - Each of the later systems gets its own design note when a feature needs
   it. This page does not size or deploy them.

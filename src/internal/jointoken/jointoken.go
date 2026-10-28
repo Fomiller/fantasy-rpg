@@ -43,9 +43,11 @@ type Claims struct {
 	Run string `json:"run"`
 	// Bot is the player's JoinRequest.bot, so the instance counts it the
 	// same way the world did.
-	Bot bool  `json:"bot,omitempty"`
-	Iat int64 `json:"iat"`
-	Exp int64 `json:"exp"`
+	Bot bool `json:"bot,omitempty"`
+	// ChatLeft keeps the channels the player left in the town left in the cave.
+	ChatLeft []string `json:"chat_left,omitempty"`
+	Iat      int64    `json:"iat"`
+	Exp      int64    `json:"exp"`
 }
 
 // Key reads JOIN_TOKEN_KEY's value. Both servers refuse to start without one.

@@ -763,6 +763,12 @@ class ClientMessage:
 		service.func_ref = Callable(self, "new_instance_join")
 		data[__instance_join.tag] = service
 		
+		__chat = PBField.new("chat", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 23, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __chat
+		service.func_ref = Callable(self, "new_chat")
+		data[__chat.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -779,6 +785,7 @@ class ClientMessage:
 		LOOT_CLOSE = 19,
 		STASH_MOVE = 21,
 		INSTANCE_JOIN = 22,
+		CHAT = 23,
 	}
 	var _payload_case: int = 0
 
@@ -828,6 +835,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__join.value = JoinRequest.new()
 		return __join.value
 	
@@ -864,6 +873,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__move.value = MoveInput.new()
 		return __move.value
 	
@@ -900,6 +911,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__attack.value = AttackRequest.new()
 		return __attack.value
 	
@@ -936,6 +949,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__pickup.value = PickupRequest.new()
 		return __pickup.value
 	
@@ -972,6 +987,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__equip.value = EquipRequest.new()
 		return __equip.value
 	
@@ -1008,6 +1025,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__unequip.value = UnequipRequest.new()
 		return __unequip.value
 	
@@ -1044,6 +1063,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__drop.value = DropRequest.new()
 		return __drop.value
 	
@@ -1080,6 +1101,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__use.value = UseRequest.new()
 		return __use.value
 	
@@ -1116,6 +1139,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__loot_open.value = LootOpenRequest.new()
 		return __loot_open.value
 	
@@ -1152,6 +1177,8 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__loot_close.value = LootCloseRequest.new()
 		return __loot_close.value
 	
@@ -1188,6 +1215,8 @@ class ClientMessage:
 		_payload_case = 21
 		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move.value = StashMoveRequest.new()
 		return __stash_move.value
 	
@@ -1224,8 +1253,48 @@ class ClientMessage:
 		data[21].state = PB_SERVICE_STATE.UNFILLED
 		data[22].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 22
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
 		__instance_join.value = InstanceJoinRequest.new()
 		return __instance_join.value
+	
+	var __chat: PBField
+	func has_chat() -> bool:
+		return data[23].state == PB_SERVICE_STATE.FILLED
+	func get_chat() -> ChatSend:
+		return __chat.value
+	func clear_chat() -> void:
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_chat() -> ChatSend:
+		__join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__attack.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__pickup.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__equip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__unequip.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__drop.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__use.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot_open.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__loot_close.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__instance_join.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		data[23].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 23
+		__chat.value = ChatSend.new()
+		return __chat.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -1373,6 +1442,18 @@ class ServerMessage:
 		service.func_ref = Callable(self, "new_town_ticket")
 		data[__town_ticket.tag] = service
 		
+		__chat = PBField.new("chat", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 29, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __chat
+		service.func_ref = Callable(self, "new_chat")
+		data[__chat.tag] = service
+		
+		__chat_channels = PBField.new("chat_channels", PB_DATA_TYPE.MESSAGE, PB_RULE.OPTIONAL, 30, true, DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE])
+		service = PBServiceField.new()
+		service.field = __chat_channels
+		service.func_ref = Callable(self, "new_chat_channels")
+		data[__chat_channels.tag] = service
+		
 	var data = {}
 	
 	enum PayloadCase {
@@ -1396,6 +1477,8 @@ class ServerMessage:
 		ENTER_INSTANCE_REJECTED = 26,
 		TICKET = 27,
 		TOWN_TICKET = 28,
+		CHAT = 29,
+		CHAT_CHANNELS = 30,
 	}
 	var _payload_case: int = 0
 
@@ -1459,6 +1542,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__joined.value = JoinAccepted.new()
 		return __joined.value
 	
@@ -1509,6 +1596,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__snapshot.value = WorldSnapshot.new()
 		return __snapshot.value
 	
@@ -1559,6 +1650,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__damage.value = DamageEvent.new()
 		return __damage.value
 	
@@ -1609,6 +1704,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__inventory.value = InventoryUpdated.new()
 		return __inventory.value
 	
@@ -1659,6 +1758,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__extracted.value = Extracted.new()
 		return __extracted.value
 	
@@ -1709,6 +1812,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__equipment.value = EquipmentUpdated.new()
 		return __equipment.value
 	
@@ -1759,6 +1866,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__ability_used.value = AbilityUsed.new()
 		return __ability_used.value
 	
@@ -1809,6 +1920,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__ability_rejected.value = AbilityRejected.new()
 		return __ability_rejected.value
 	
@@ -1859,6 +1974,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__loot.value = LootContents.new()
 		return __loot.value
 	
@@ -1909,6 +2028,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__pickup_rejected.value = PickupRejected.new()
 		return __pickup_rejected.value
 	
@@ -1959,6 +2082,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__xp_gained.value = XpGained.new()
 		return __xp_gained.value
 	
@@ -2009,6 +2136,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__level_up.value = LevelUp.new()
 		return __level_up.value
 	
@@ -2059,6 +2190,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__run_ended.value = RunEnded.new()
 		return __run_ended.value
 	
@@ -2109,6 +2244,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__lobby.value = Lobby.new()
 		return __lobby.value
 	
@@ -2159,6 +2298,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__stash.value = StashContents.new()
 		return __stash.value
 	
@@ -2209,6 +2352,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__stash_move_rejected.value = StashMoveRejected.new()
 		return __stash_move_rejected.value
 	
@@ -2259,6 +2406,10 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__enter_instance_rejected.value = EnterInstanceRejected.new()
 		return __enter_instance_rejected.value
 	
@@ -2309,6 +2460,10 @@ class ServerMessage:
 		_payload_case = 27
 		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
 		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__ticket.value = InstanceTicket.new()
 		return __ticket.value
 	
@@ -2359,8 +2514,120 @@ class ServerMessage:
 		data[27].state = PB_SERVICE_STATE.UNFILLED
 		data[28].state = PB_SERVICE_STATE.FILLED
 		_payload_case = 28
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
 		__town_ticket.value = TownTicket.new()
 		return __town_ticket.value
+	
+	var __chat: PBField
+	func has_chat() -> bool:
+		return data[29].state == PB_SERVICE_STATE.FILLED
+	func get_chat() -> ChatMessage:
+		return __chat.value
+	func clear_chat() -> void:
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_chat() -> ChatMessage:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
+		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[28].state = PB_SERVICE_STATE.UNFILLED
+		data[29].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 29
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[30].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = ChatMessage.new()
+		return __chat.value
+	
+	var __chat_channels: PBField
+	func has_chat_channels() -> bool:
+		return data[30].state == PB_SERVICE_STATE.FILLED
+	func get_chat_channels() -> ChatChannels:
+		return __chat_channels.value
+	func clear_chat_channels() -> void:
+		data[30].state = PB_SERVICE_STATE.UNFILLED
+		__chat_channels.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+	func new_chat_channels() -> ChatChannels:
+		__joined.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[10].state = PB_SERVICE_STATE.UNFILLED
+		__snapshot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[11].state = PB_SERVICE_STATE.UNFILLED
+		__damage.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[12].state = PB_SERVICE_STATE.UNFILLED
+		__inventory.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[13].state = PB_SERVICE_STATE.UNFILLED
+		__extracted.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[14].state = PB_SERVICE_STATE.UNFILLED
+		__equipment.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[15].state = PB_SERVICE_STATE.UNFILLED
+		__ability_used.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[16].state = PB_SERVICE_STATE.UNFILLED
+		__ability_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[17].state = PB_SERVICE_STATE.UNFILLED
+		__loot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__pickup_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[19].state = PB_SERVICE_STATE.UNFILLED
+		__xp_gained.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[20].state = PB_SERVICE_STATE.UNFILLED
+		__level_up.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[21].state = PB_SERVICE_STATE.UNFILLED
+		__run_ended.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[22].state = PB_SERVICE_STATE.UNFILLED
+		__lobby.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[23].state = PB_SERVICE_STATE.UNFILLED
+		__stash.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[24].state = PB_SERVICE_STATE.UNFILLED
+		__stash_move_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[25].state = PB_SERVICE_STATE.UNFILLED
+		__enter_instance_rejected.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[26].state = PB_SERVICE_STATE.UNFILLED
+		__ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[27].state = PB_SERVICE_STATE.UNFILLED
+		__town_ticket.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[28].state = PB_SERVICE_STATE.UNFILLED
+		__chat.value = DEFAULT_VALUES_3[PB_DATA_TYPE.MESSAGE]
+		data[29].state = PB_SERVICE_STATE.UNFILLED
+		data[30].state = PB_SERVICE_STATE.FILLED
+		_payload_case = 30
+		__chat_channels.value = ChatChannels.new()
+		return __chat_channels.value
 	
 	func get_payload_case() -> int:
 		return _payload_case
@@ -2539,6 +2806,12 @@ class JoinRequest:
 		service.field = __bot
 		data[__bot.tag] = service
 		
+		var __chat_left_default: Array[String] = []
+		__chat_left = PBField.new("chat_left", PB_DATA_TYPE.STRING, PB_RULE.REPEATED, 5, true, __chat_left_default)
+		service = PBServiceField.new()
+		service.field = __chat_left
+		data[__chat_left.tag] = service
+		
 	var data = {}
 	
 	var __name: PBField
@@ -2592,6 +2865,15 @@ class JoinRequest:
 		__bot.value = DEFAULT_VALUES_3[PB_DATA_TYPE.BOOL]
 	func set_bot(value : bool) -> void:
 		__bot.value = value
+	
+	var __chat_left: PBField
+	func get_chat_left() -> Array[String]:
+		return __chat_left.value
+	func clear_chat_left() -> void:
+		data[5].state = PB_SERVICE_STATE.UNFILLED
+		__chat_left.value.clear()
+	func add_chat_left(value : String) -> void:
+		__chat_left.value.append(value)
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)
@@ -6154,6 +6436,174 @@ class InstanceJoinRequest:
 		__token.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
 	func set_token(value : String) -> void:
 		__token.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class ChatSend:
+	func _init():
+		var service
+		
+		__text = PBField.new("text", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __text
+		data[__text.tag] = service
+		
+	var data = {}
+	
+	var __text: PBField
+	func has_text() -> bool:
+		if __text.value != null:
+			return true
+		return false
+	func get_text() -> String:
+		return __text.value
+	func clear_text() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__text.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_text(value : String) -> void:
+		__text.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class ChatMessage:
+	func _init():
+		var service
+		
+		__channel = PBField.new("channel", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 1, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __channel
+		data[__channel.tag] = service
+		
+		__sender = PBField.new("sender", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 2, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __sender
+		data[__sender.tag] = service
+		
+		__text = PBField.new("text", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 3, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __text
+		data[__text.tag] = service
+		
+	var data = {}
+	
+	var __channel: PBField
+	func has_channel() -> bool:
+		if __channel.value != null:
+			return true
+		return false
+	func get_channel() -> String:
+		return __channel.value
+	func clear_channel() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__channel.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_channel(value : String) -> void:
+		__channel.value = value
+	
+	var __sender: PBField
+	func has_sender() -> bool:
+		if __sender.value != null:
+			return true
+		return false
+	func get_sender() -> String:
+		return __sender.value
+	func clear_sender() -> void:
+		data[2].state = PB_SERVICE_STATE.UNFILLED
+		__sender.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_sender(value : String) -> void:
+		__sender.value = value
+	
+	var __text: PBField
+	func has_text() -> bool:
+		if __text.value != null:
+			return true
+		return false
+	func get_text() -> String:
+		return __text.value
+	func clear_text() -> void:
+		data[3].state = PB_SERVICE_STATE.UNFILLED
+		__text.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_text(value : String) -> void:
+		__text.value = value
+	
+	func _to_string() -> String:
+		return PBPacker.message_to_string(data)
+		
+	func to_bytes() -> PackedByteArray:
+		return PBPacker.pack_message(data)
+		
+	func from_bytes(bytes : PackedByteArray, offset : int = 0, limit : int = -1) -> int:
+		var cur_limit = bytes.size()
+		if limit != -1:
+			cur_limit = limit
+		var result = PBPacker.unpack_message(data, bytes, offset, cur_limit)
+		if result == cur_limit:
+			if PBPacker.check_required(data):
+				if limit == -1:
+					return PB_ERR.NO_ERRORS
+			else:
+				return PB_ERR.REQUIRED_FIELDS
+		elif limit == -1 && result > 0:
+			return PB_ERR.PARSE_INCOMPLETE
+		return result
+	
+class ChatChannels:
+	func _init():
+		var service
+		
+		var __joined_default: Array[String] = []
+		__joined = PBField.new("joined", PB_DATA_TYPE.STRING, PB_RULE.REPEATED, 1, true, __joined_default)
+		service = PBServiceField.new()
+		service.field = __joined
+		data[__joined.tag] = service
+		
+	var data = {}
+	
+	var __joined: PBField
+	func get_joined() -> Array[String]:
+		return __joined.value
+	func clear_joined() -> void:
+		data[1].state = PB_SERVICE_STATE.UNFILLED
+		__joined.value.clear()
+	func add_joined(value : String) -> void:
+		__joined.value.append(value)
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

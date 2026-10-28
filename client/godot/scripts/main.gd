@@ -46,6 +46,7 @@ const TOAST_SECONDS := 4.0
 @onready var _summary: RunSummaryWindow = $HUD/RunSummary
 @onready var _stash: StashWindow = $HUD/Stash
 @onready var _toast: Label = $HUD/Toast
+@onready var _chat: ChatBox = $HUD/Chat
 
 # Set by main. Tests swap it for a fake.
 var send_attack: Callable
@@ -99,6 +100,9 @@ func _ready() -> void:
 	_connection.stash_move_rejected.connect(_stash.show_rejected)
 	_connection.enter_instance_rejected.connect(_on_enter_rejected)
 	_stash.send_move = _connection.send_stash_move
+	_connection.chat_received.connect(_chat.add_message)
+	_chat.send_chat = _connection.send_chat
+	_chat.typing_changed.connect(_on_typing_changed)
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	send_attack = _connection.send_attack
@@ -114,10 +118,13 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if Input.is_action_just_pressed("debug_overlay"):
-		set_debug(not debug)
 	if Input.is_action_just_pressed("close_window"):
 		close_top_window()
+	# These keys are polled, so a focused text box does not keep them from firing.
+	if _chat.typing:
+		return
+	if Input.is_action_just_pressed("debug_overlay"):
+		set_debug(not debug)
 	if Input.is_action_just_pressed("inventory"):
 		_inventory.visible = not _inventory.visible
 	if Input.is_action_just_pressed("character"):
@@ -151,6 +158,10 @@ func _watch_entrance() -> void:
 	_in_entrance = inside
 
 
+func _on_typing_changed(on: bool) -> void:
+	_player.input_blocked = on
+
+
 func show_toast(text: String) -> void:
 	_toast.text = text
 	_toast.visible = true
@@ -167,7 +178,7 @@ func _on_enter_rejected(event: GameV1.EnterInstanceRejected) -> void:
 # keys and clicks outside a window still attack. The town has no abilities,
 # so a windup there would never be answered.
 func _unhandled_input(event: InputEvent) -> void:
-	if _connection.in_town:
+	if _connection.in_town or _chat.typing:
 		return
 	for i in ABILITY_ACTIONS.size():
 		if event.is_action_pressed(ABILITY_ACTIONS[i]):
@@ -196,6 +207,9 @@ func debug_text() -> String:
 
 # Closes one window per press, the one drawn on top. Does nothing when none is open.
 func close_top_window() -> void:
+	if _chat.typing:
+		_chat.close()
+		return
 	var window := _top_window()
 	if window:
 		window.visible = false
@@ -288,6 +302,7 @@ func _on_town_state() -> void:
 
 # The town clears when its socket closes, and the cave draws on JoinAccepted.
 func _on_left() -> void:
+	_chat.close()
 	_clear_cave()
 	_cave.clear()
 	_player.visible = false
@@ -297,6 +312,7 @@ func _on_left() -> void:
 
 
 func _on_disconnected() -> void:
+	_chat.close()
 	_clear_cave()
 	_character.clear()
 	_xp_bar.clear()

@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/gameserver"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
@@ -118,7 +119,19 @@ func run() error {
 	}
 	reg.MustRegister(game.PendingSaves)
 	reg.MustRegister(game.Metrics.Collectors()...)
+	reg.MustRegister(game.ChatMetrics.Collectors()...)
 	defer game.Close()
+
+	chatBus, chatName, err := chat.Open(ctx, os.Getenv("NATS_URL"), os.Getenv("CHAT"), reg)
+	if err != nil {
+		return err
+	}
+	defer chatBus.Close()
+	game.Chat = chatBus
+	if err := game.StartChat(); err != nil {
+		return err
+	}
+	slog.Info("chat", "bus", chatName)
 
 	if os.Getenv("AGONES_SDK_GRPC_PORT") != "" {
 		if game.GameServer, err = gameserver.NewAgones(); err != nil {

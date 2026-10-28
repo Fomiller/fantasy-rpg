@@ -22,6 +22,8 @@ const MARKER_DISTANCE := 22.0
 var max_speed := 220.0
 var tick_seconds := 1.0 / 20.0
 var alive := true
+# Set while a text box has the keyboard. The player stands still and does not interact.
+var input_blocked := false
 # Where attacks and abilities go. The last mouse motion or move key sets it.
 var facing := Vector2.RIGHT
 var cave: Cave
@@ -71,12 +73,12 @@ func _physics_process(delta: float) -> void:
 	_marker.rotation = facing.angle()
 	_marker.visible = alive
 
-	if Input.is_action_just_pressed("interact"):
+	if Input.is_action_just_pressed("interact") and not input_blocked:
 		interact()
 
 
 func get_move_input() -> Vector2:
-	if not alive or _rooted > 0.0:
+	if not alive or _rooted > 0.0 or input_blocked:
 		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
 

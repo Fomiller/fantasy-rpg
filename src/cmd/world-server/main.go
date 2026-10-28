@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -101,7 +102,19 @@ func run() error {
 	lobby.WorldID = worldID
 	reg.MustRegister(lobby.PendingSaves, lobby.TownTickets)
 	reg.MustRegister(lobby.Metrics.Collectors()...)
+	reg.MustRegister(lobby.ChatMetrics.Collectors()...)
 	defer lobby.Close()
+
+	chatBus, chatName, err := chat.Open(ctx, os.Getenv("NATS_URL"), os.Getenv("CHAT"), reg)
+	if err != nil {
+		return err
+	}
+	defer chatBus.Close()
+	lobby.Chat = chatBus
+	if err := lobby.StartChat(); err != nil {
+		return err
+	}
+	slog.Info("chat", "bus", chatName)
 
 	townDir, dirName := towns.Open(os.Getenv("VALKEY_ADDR"), towns.NewCaps(townMax, softPercent), reg)
 	defer townDir.Close()

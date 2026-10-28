@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -28,7 +30,7 @@ func read(t *testing.T, conn *websocket.Conn) *gamev1.ServerMessage {
 }
 
 // A join into the town comes in a set order: the body, the character, the
-// items, then a snapshot every tick.
+// items, the chat channels, then a snapshot every tick.
 func TestTownJoinOrder(t *testing.T) {
 	h := serveWorld(t)
 	conn := dial(t, h.url)
@@ -48,6 +50,9 @@ func TestTownJoinOrder(t *testing.T) {
 	}
 	if read(t, conn).GetEquipment() == nil || read(t, conn).GetInventory() == nil || read(t, conn).GetStash() == nil {
 		t.Fatal("want gear, bag and stash after Lobby")
+	}
+	if ch := read(t, conn).GetChatChannels(); !slices.Equal(ch.GetJoined(), chat.Shared) {
+		t.Fatalf("channels = %v, want all of %v", ch.GetJoined(), chat.Shared)
 	}
 	snap := read(t, conn).GetSnapshot()
 	if me := entity(snap, joined.GetPlayerId()); me == nil || me.GetHealth() != me.GetMaxHealth() || me.GetMaxSpeed() == 0 {

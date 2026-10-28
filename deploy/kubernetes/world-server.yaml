@@ -27,6 +27,9 @@ spec:
             # k3d has no database. Without this the server refuses to start.
             - name: STORE
               value: memory
+            # k3d has no NATS. Chat then reaches only players on this server.
+            - name: CHAT
+              value: local
           ports:
             - containerPort: 8080
           readinessProbe:

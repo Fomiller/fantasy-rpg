@@ -14,6 +14,7 @@ godot := "/Applications/Godot.app/Contents/MacOS/Godot"
 infraDir := "infra/live/dev"
 databaseUrl := "postgres://fantasy:fantasy@localhost:5432/fantasy?sslmode=disable"
 kafkaBrokers := "localhost:19092"
+natsUrl := "nats://localhost:4222"
 topics := "player.session instance.join instance.lifecycle run.ended inventory.applied"
 
 fetch:
@@ -43,14 +44,14 @@ fmt:
     gofmt -w src
 
 deps:
-    {{compose}} up -d --wait postgres redpanda valkey
+    {{compose}} up -d --wait postgres redpanda valkey nats
     {{compose}} exec -T redpanda rpk topic create --if-not-exists -X brokers=localhost:9092 {{topics}}
 
 dev: migrate
-    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' VALKEY_ADDR=localhost:6379 INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
+    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' NATS_URL='{{natsUrl}}' VALKEY_ADDR=localhost:6379 INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
 
 instance id port:
-    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
+    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' NATS_URL='{{natsUrl}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
 
 bots n:
     LOG_FORMAT=text go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091
@@ -156,6 +157,7 @@ client-test:
     {{godot}} --headless --path client/godot --script res://tests/debug_overlay_test.gd
     {{godot}} --headless --path client/godot --script res://tests/progression_test.gd
     {{godot}} --headless --path client/godot --script res://tests/town_test.gd
+    {{godot}} --headless --path client/godot --script res://tests/chat_test.gd
 
 net-test: build
     #!/usr/bin/env bash
@@ -167,12 +169,15 @@ net-test: build
     export LOOT_SEED="${LOOT_SEED:-$(od -An -N8 -tu8 /dev/urandom | tr -d ' ')}"
     # A throwaway Postgres, so the servers share a store and nothing from an earlier run or `just dev` leaks in.
     pg=$(docker run -d --rm -e POSTGRES_USER=fantasy -e POSTGRES_PASSWORD=fantasy -e POSTGRES_DB=fantasy -p 127.0.0.1::5432 postgres:18)
-    pids=() rp=""
-    trap 'status=$?; kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f "$pg" $rp >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
+    pids=() rp="" nt=""
+    trap 'status=$?; kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f "$pg" $rp $nt >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
     export DATABASE_URL="postgres://fantasy:fantasy@127.0.0.1:$(docker port "$pg" 5432/tcp | head -1 | cut -d: -f2)/fantasy?sslmode=disable" JOIN_TOKEN_KEY=net-test LOG_FORMAT=text
     # And a throwaway Redpanda. Its port is fixed, since the broker hands its address to clients.
     rp=$(docker run -d --rm -p 127.0.0.1:29092:29092 redpandadata/redpanda:v26.2.6 redpanda start --mode dev-container --smp 1 --kafka-addr 0.0.0.0:29092 --advertise-kafka-addr 127.0.0.1:29092)
     export KAFKA_BROKERS=127.0.0.1:29092
+    # And a throwaway NATS, so chat crosses the servers as it does in the cluster.
+    nt=$(docker run -d --rm -p 127.0.0.1:24222:4222 nats:2.15.2-alpine)
+    export NATS_URL=nats://127.0.0.1:24222
     for i in $(seq 50); do docker exec "$rp" rpk topic create --if-not-exists -X brokers=$KAFKA_BROKERS {{topics}} >/dev/null 2>&1 && break; if [ "$i" = 50 ]; then echo "Redpanda did not start." >&2; exit 1; fi; sleep 0.2; done
     ./bin/instance-server migrate
     PORT=8070 ./bin/inventory & pids+=($!)

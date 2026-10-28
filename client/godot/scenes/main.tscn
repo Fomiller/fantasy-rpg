@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
@@ -12,6 +12,7 @@
 [ext_resource type="Script" path="res://scripts/level_up_banner.gd" id="10_level_up"]
 [ext_resource type="Script" path="res://scripts/run_summary.gd" id="11_run_summary"]
 [ext_resource type="Script" path="res://scripts/stash_window.gd" id="12_stash"]
+[ext_resource type="Script" path="res://scripts/chat_box.gd" id="13_chat"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -140,6 +141,26 @@ horizontal_scroll_mode = 0
 [node name="List" type="VBoxContainer" parent="HUD/Stash/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="Chat" type="PanelContainer" parent="HUD"]
+offset_left = 12.0
+offset_top = 396.0
+offset_right = 412.0
+offset_bottom = 552.0
+self_modulate = Color(1, 1, 1, 0.55)
+script = ExtResource("13_chat")
+
+[node name="List" type="VBoxContainer" parent="HUD/Chat"]
+layout_mode = 2
+
+[node name="Log" type="RichTextLabel" parent="HUD/Chat/List"]
+layout_mode = 2
+size_flags_vertical = 3
+scroll_following = true
+
+[node name="Input" type="LineEdit" parent="HUD/Chat/List"]
+visible = false
+layout_mode = 2
 
 [node name="Toast" type="Label" parent="HUD"]
 visible = false

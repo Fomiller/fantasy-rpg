@@ -10,6 +10,7 @@ import (
 
 	eventsv1 "github.com/Fomiller/fantasy-rpg/gen/go/events/v1"
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
@@ -184,6 +185,7 @@ func (s *Lobby) enterTown(c *client, ch inventory.Character, returning bool) {
 		go s.Towns.Joined(c.name)
 	}
 	s.openLobby(c, ch)
+	s.chatEnter(c)
 }
 
 // leaveTown takes the player's body out of the town. Town run XP is always
@@ -195,6 +197,7 @@ func (s *Lobby) leaveTown(c *client) {
 	s.rules.RemovePlayer(c.id)
 	delete(s.inTown, c.id)
 	c.id = 0
+	s.chatLeave(c)
 	s.sessionEvent(c, eventsv1.PlayerSessionKind_PLAYER_SESSION_KIND_LEAVE)
 }
 
@@ -368,7 +371,7 @@ func (s *Lobby) ticket(c *client, runID string, p Placement, err error) {
 		return
 	}
 	now := time.Now()
-	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: p.ID + "@" + p.Boot, Run: runID, Bot: c.bot}, now)
+	token, err := jointoken.Sign(s.JoinKey, jointoken.Claims{Name: c.name, Class: c.class, Inst: p.ID + "@" + p.Boot, Run: runID, Bot: c.bot, ChatLeft: chat.LeftList(c.chatOff)}, now)
 	if err != nil {
 		s.log.Error("sign join token", "name", c.name, "err", err)
 		s.sendToClient(c, protocol.EnterInstanceRejected(EnterFull))

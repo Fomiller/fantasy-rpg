@@ -23,6 +23,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 	"github.com/Fomiller/fantasy-rpg/src/internal/gameserver"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -96,6 +97,7 @@ func New(world *sim.World, cave caves.Cave, loot *items.Roller, log *slog.Logger
 	}
 	s.Metrics = newMetrics("instance", "Players in the cave.")
 	s.GameServer = s.localGameServer()
+	s.roster = func() map[sim.EntityID]*client { return s.clients }
 	s.released = s.release
 	go s.sdk.run(s.done)
 	return s
@@ -260,6 +262,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	c := s.newClient(claims.Name, claims.Class, ctx, cancel)
 	c.runID = claims.Run
 	c.bot = claims.Bot
+	c.chatOff = chat.Left(claims.ChatLeft)
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		if s.draining {
@@ -403,6 +406,7 @@ func (s *Server) spawn(c *client, ch inventory.Character) {
 	character := protocol.Character(s.world.Classes().Progression, c.name, p.Class, p.Level, p.XP, p.RunXP)
 	s.sendToClient(c, protocol.Joined(id, s.cave, spawn, s.TickRate, class, character))
 	s.sendItems(id)
+	s.chatEnter(c)
 	s.log.Info("player entered the cave", "player", id, "name", c.name, "run", c.runID)
 }
 
@@ -414,6 +418,10 @@ func (s *Server) handle(c *client, msg *gamev1.ClientMessage) {
 		return
 	}
 	if c.id == 0 {
+		return
+	}
+	if line := msg.GetChat(); line != nil {
+		s.chatSend(c, line.GetText())
 		return
 	}
 	if cmd, ok := protocol.Command(msg, c.id); ok {
@@ -432,6 +440,7 @@ func (s *Server) leave(c *client) {
 		}
 		delete(s.clients, c.id)
 		c.id = 0
+		s.chatLeave(c)
 	}
 	c.writes.close()
 }
@@ -445,6 +454,7 @@ func (s *Server) finish(id sim.EntityID) {
 	}
 	delete(s.clients, id)
 	c.id = 0
+	s.chatLeave(c)
 	time.AfterFunc(s.closeGrace, func() { c.close(websocket.StatusNormalClosure, reasonRunOver) })
 }
 
