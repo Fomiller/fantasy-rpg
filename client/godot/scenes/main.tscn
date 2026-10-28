@@ -158,14 +158,18 @@ layout_mode = 2
 size_flags_vertical = 3
 scroll_following = true
 
-[node name="Row" type="HBoxContainer" parent="HUD/Chat/List"]
-layout_mode = 2
-
-[node name="Mode" type="Label" parent="HUD/Chat/List/Row"]
+[node name="Row" type="PanelContainer" parent="HUD/Chat/List"]
 visible = false
 layout_mode = 2
 
-[node name="Input" type="LineEdit" parent="HUD/Chat/List/Row"]
+[node name="Fields" type="HBoxContainer" parent="HUD/Chat/List/Row"]
+layout_mode = 2
+
+[node name="Mode" type="Label" parent="HUD/Chat/List/Row/Fields"]
+visible = false
+layout_mode = 2
+
+[node name="Input" type="LineEdit" parent="HUD/Chat/List/Row/Fields"]
 visible = false
 layout_mode = 2
 size_flags_horizontal = 3
