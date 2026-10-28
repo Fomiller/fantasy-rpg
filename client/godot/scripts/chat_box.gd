@@ -26,17 +26,17 @@ var send_chat: Callable
 
 var typing: bool:
 	get:
-		return _input.visible
+		return _line.visible
 
 @onready var _log: RichTextLabel = $List/Log
-@onready var _input: LineEdit = $List/Input
+@onready var _line: LineEdit = $List/Input
 
 
 func _ready() -> void:
-	_input.max_length = MAX_LINE
-	_input.visible = false
-	_input.text_submitted.connect(_submit)
-	_input.focus_exited.connect(close)
+	_line.max_length = MAX_LINE
+	_line.visible = false
+	_line.text_submitted.connect(_submit)
+	_line.focus_exited.connect(close)
 	_log.meta_clicked.connect(_on_name_clicked)
 
 
@@ -49,10 +49,10 @@ func _input(event: InputEvent) -> void:
 
 func open(prefill := "") -> void:
 	var was_typing := typing
-	_input.visible = true
-	_input.text = prefill
-	_input.grab_focus()
-	_input.caret_column = prefill.length()
+	_line.visible = true
+	_line.text = prefill
+	_line.grab_focus()
+	_line.caret_column = prefill.length()
 	if not was_typing:
 		typing_changed.emit(true)
 
@@ -60,9 +60,9 @@ func open(prefill := "") -> void:
 func close() -> void:
 	if not typing:
 		return
-	_input.text = ""
-	_input.visible = false
-	_input.release_focus()
+	_line.text = ""
+	_line.visible = false
+	_line.release_focus()
 	typing_changed.emit(false)
 
 

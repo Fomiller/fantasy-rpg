@@ -128,7 +128,7 @@ func _tap(action: String) -> void:
 
 func _frames(count: int) -> void:
 	for i in count:
-		await physics_frame
+		await process_frame
 
 
 func _check(ok: bool, name: String) -> void:
