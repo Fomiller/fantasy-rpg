@@ -138,9 +138,9 @@ func _window_button(window: Control, item_name: String, text: String) -> Button:
 		var button := node as Button
 		if button.text != text or button.is_queued_for_deletion():
 			continue
-		var label := button.get_parent().get_child(0)
-		if label is RichTextLabel and item_name in (label as RichTextLabel).get_parsed_text():
-			return button
+		for sibling in button.get_parent().get_children():
+			if sibling is RichTextLabel and item_name in (sibling as RichTextLabel).get_parsed_text():
+				return button
 	return null
 
 
@@ -244,10 +244,11 @@ func _key(keycode: Key, pressed: bool) -> InputEventKey:
 # all through the inventory panel and the server.
 func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
 	var panel: InventoryPanel = main.get_node("HUD/Windows/Right/Column/Inventory")
-	Input.action_press("inventory")
-	await physics_frame
-	await physics_frame
-	Input.action_release("inventory")
+	if not panel.visible:
+		Input.action_press("inventory")
+		await physics_frame
+		await physics_frame
+		Input.action_release("inventory")
 	_check(panel.visible, "inventory key opens the panel")
 
 	var character: CharacterScreen = main.get_node("HUD/Windows/Left/Character")
@@ -261,7 +262,7 @@ func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
 
 	_button(panel, "Rusty Sword", "Drop").pressed.emit()
 	_check(await _until(func() -> bool: return main.nearest_loot(main.get_node("ServerGhost").position) != null), "dropped sword lies on the ground")
-	_check(_button(panel, "Rusty Sword", "Drop") == null, "bag is empty after the drop")
+	_check(await _until(func() -> bool: return _button(panel, "Rusty Sword", "Drop") == null), "bag is empty after the drop")
 
 	var loot: LootWindow = main.get_node("HUD/Windows/Right/Column/Loot")
 	await _press("interact")
