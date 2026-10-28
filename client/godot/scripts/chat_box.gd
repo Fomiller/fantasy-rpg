@@ -18,6 +18,21 @@ const CHANNEL_NAMES := {
 	"trade": "Trade",
 	"lfg": "LookingForGroup",
 }
+const MODE_WORDS := {
+	"s": "say", "say": "say",
+	"y": "yell", "yell": "yell",
+	"1": "general", "general": "general",
+	"2": "trade", "trade": "trade",
+	"3": "lfg", "lfg": "lfg", "lookingforgroup": "lfg",
+}
+const MODE_PREFIXES := {
+	"say": "",
+	"yell": "/y ",
+	"general": "/1 ",
+	"trade": "/2 ",
+	"lfg": "/3 ",
+}
+const WHISPER_WORDS := ["w", "whisper", "t", "tell"]
 const MAX_LINES := 200
 const MAX_LINE := 300
 
@@ -28,14 +43,22 @@ var typing: bool:
 	get:
 		return _line.visible
 
+var _mode := "say"
+var _target := ""
+var _last_whisperer := ""
+
 @onready var _log: RichTextLabel = $List/Log
-@onready var _line: LineEdit = $List/Input
+@onready var _mode_label: Label = $List/Row/Mode
+@onready var _line: LineEdit = $List/Row/Input
 
 
 func _ready() -> void:
 	_line.max_length = MAX_LINE
 	_line.visible = false
+	_mode_label.visible = false
+	_refresh_mode()
 	_line.text_submitted.connect(_submit)
+	_line.text_changed.connect(_on_text_changed)
 	_line.focus_exited.connect(close)
 	_log.meta_clicked.connect(_on_name_clicked)
 
@@ -50,6 +73,7 @@ func _input(event: InputEvent) -> void:
 func open(prefill := "") -> void:
 	var was_typing := typing
 	_line.visible = true
+	_mode_label.visible = true
 	_line.text = prefill
 	_line.grab_focus()
 	_line.caret_column = prefill.length()
@@ -62,13 +86,21 @@ func close() -> void:
 		return
 	_line.text = ""
 	_line.visible = false
+	_mode_label.visible = false
 	_line.release_focus()
 	typing_changed.emit(false)
+
+
+func apply_left_channels(left: Array[String]) -> void:
+	if left.has(_mode):
+		_switch_mode("say")
 
 
 func add_message(message: GameV1.ChatMessage) -> void:
 	var channel := message.get_channel()
 	var sender := message.get_sender()
+	if channel == "whisper_from":
+		_last_whisperer = sender
 	_log.push_color(COLORS.get(channel, Color.WHITE))
 	match channel:
 		"system":
@@ -100,11 +132,68 @@ func _add_name(player: String) -> void:
 
 
 func _on_name_clicked(meta: Variant) -> void:
-	open("/w %s " % str(meta))
+	_switch_mode("whisper", str(meta))
+	open()
+
+
+func _on_text_changed(text: String) -> void:
+	if not text.begins_with("/") or not text.ends_with(" "):
+		return
+	var parts := text.strip_edges().substr(1).split(" ", false)
+	var word := parts[0].to_lower() if parts.size() > 0 else ""
+	if parts.size() == 1 and MODE_WORDS.has(word):
+		_switch_mode(MODE_WORDS[word])
+	elif parts.size() == 1 and word in ["r", "reply"] and _last_whisperer != "":
+		_switch_mode("whisper", _last_whisperer)
+	elif parts.size() == 2 and word in WHISPER_WORDS:
+		_switch_mode("whisper", parts[1])
+	else:
+		return
+	_line.text = ""
+
+
+func _switch_mode(mode: String, target := "") -> void:
+	_mode = mode
+	_target = target
+	_refresh_mode()
+
+
+func _refresh_mode() -> void:
+	var color_key := "whisper_to" if _mode == "whisper" else _mode
+	_mode_label.add_theme_color_override("font_color", COLORS[color_key])
+	if _mode == "whisper":
+		_mode_label.text = "To %s:" % _target
+	elif CHANNEL_NAMES.has(_mode):
+		_mode_label.text = "[%s]" % CHANNEL_NAMES[_mode]
+	else:
+		_mode_label.text = "%s:" % _mode.capitalize()
+
+
+func _follow_command(line: String) -> void:
+	var word := line.substr(1).get_slice(" ", 0).to_lower()
+	var rest := line.substr(1 + word.length()).strip_edges()
+	if MODE_WORDS.has(word):
+		_switch_mode(MODE_WORDS[word])
+	elif word in WHISPER_WORDS and rest != "":
+		_switch_mode("whisper", rest.get_slice(" ", 0))
+	elif word in ["r", "reply"] and _last_whisperer != "":
+		_switch_mode("whisper", _last_whisperer)
+
+
+func _prefix() -> String:
+	if _mode == "whisper":
+		return "/w %s " % _target
+	return MODE_PREFIXES[_mode]
 
 
 func _submit(text: String) -> void:
 	var line := text.strip_edges()
 	close()
-	if line != "" and send_chat.is_valid():
+	if line == "":
+		return
+	if line.begins_with("/"):
+		_follow_command(line)
+	else:
+		line = _prefix() + line
+	if send_chat.is_valid():
 		send_chat.call(line)

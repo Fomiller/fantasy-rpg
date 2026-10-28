@@ -101,6 +101,7 @@ func _ready() -> void:
 	_connection.enter_instance_rejected.connect(_on_enter_rejected)
 	_stash.send_move = _connection.send_stash_move
 	_connection.chat_received.connect(_chat.add_message)
+	_connection.chat_channels_changed.connect(_chat.apply_left_channels)
 	_chat.send_chat = _connection.send_chat
 	_chat.typing_changed.connect(_on_typing_changed)
 	_player.cave = _cave
