@@ -190,6 +190,13 @@ and up.
   once.
 - No PVC. A shard holds no data. The lobby is saved through inventory, as
   now.
+- A PDB keeps one shard up while there are two or more.
+- `terminationGracePeriodSeconds` is 45. The drain takes up to 30 s and the
+  HTTP shutdown 5 s.
+- A shard id is the pod name, like `fantasy-rpg-world-0`. It is the same
+  string in the claims, the directory and the route.
+- `world.replicas` is how many shards run. `world.maxShards` is how many
+  Services and routes the chart renders.
 
 ### Routing
 
@@ -328,7 +335,7 @@ Done in FOM-257:
   not draining. Revisions are hashes, so they do not sort.
 - `VALKEY_ADDR` turns it on. Empty means no directory, and every pick is
   this shard. `TOWN_URL` is what the shard publishes. `TOWN_REVISION` is
-  the image tag for now. `TOWN_SOFT_CAP_PERCENT` is 75.
+  the pod's `controller-revision-hash` label, from the downward API. `TOWN_SOFT_CAP_PERCENT` is 75.
 - On SIGTERM the world publishes itself as draining. FOM-258 moves its
   players off.
 - `towns_errors_total`, by `call`, counts failed Valkey calls.
@@ -627,8 +634,8 @@ In build order. Each one merges on its own and leaves the game playable.
       `/ws` redirect.
     - Godot follows `TownTicket` and falls back to `/ws`. The bot does too.
     - The drain moves players with `TownTicket`. Readiness and
-      `terminationGracePeriodSeconds: 45` are on the Deployment.
-13. **fantasy-rpg: world as a StatefulSet.**
+      `terminationGracePeriodSeconds: 45` are on the world workload.
+13. **fantasy-rpg: world as a StatefulSet.** Done, FOM-259.
     - StatefulSet, per-shard Services and routes up to `world.maxShards`,
       PDB.
     - Newest revision first, from `controller-revision-hash`. 2 replicas.

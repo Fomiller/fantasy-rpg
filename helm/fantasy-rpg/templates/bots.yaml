@@ -94,7 +94,8 @@ spec:
             - name: TARGET_CONFIGMAP
               value: {{ $target }}
             - name: PLAYER_URLS
-              value: http://{{ include "chart.fullname" . }}-world:8080,http://{{ include "chart.managerName" . }}:8080
+              {{- /* One URL per running shard, since a Service URL answers for one pod. */}}
+              value: {{ range $i := until (int .Values.world.replicas) }}http://{{ include "chart.worldShardName" (list $ $i) }}:8080,{{ end }}http://{{ include "chart.managerName" . }}:8080
             - name: DEFAULT_MODE
               value: {{ .Values.bots.mode | quote }}
             - name: DEFAULT_COUNT

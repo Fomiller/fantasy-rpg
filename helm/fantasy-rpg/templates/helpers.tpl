@@ -25,6 +25,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- /* Names of their own, not extra labels, so a Service for one kind of
        pod never picks up another. Selectors cannot change once deployed. */ -}}
+{{- define "chart.worldShardName" -}}
+{{- $root := index . 0 -}}
+{{- printf "%s-world-%d" (include "chart.fullname" $root) (index . 1 | int) -}}
+{{- end -}}
+
 {{- define "chart.worldSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "chart.name" . }}-world
 app.kubernetes.io/instance: {{ .Release.Name }}
@@ -100,10 +105,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   {{- if .Values.ingressRoute.host }}
   value: wss://{{ .Values.ingressRoute.host }}/towns/$(WORLD_ID)/ws
   {{- else }}
-  value: ws://{{ include "chart.fullname" . }}-world:8080/towns/$(WORLD_ID)/ws
+  value: ws://$(WORLD_ID):8080/towns/$(WORLD_ID)/ws
   {{- end }}
 - name: TOWN_REVISION
-  value: {{ .Values.image.tag | toString | splitList "@" | first | quote }}
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.labels['controller-revision-hash']
 {{- end -}}
 
 {{- define "chart.dbName" -}}

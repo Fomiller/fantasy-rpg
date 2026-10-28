@@ -1,9 +1,13 @@
 {{- /* The world server: join, the lobby, the stash, and tickets into an
        instance. It runs from the same image as the instance servers and has
-       the public /ws front door and /towns/{id}/ws. */ -}}
+       the public /ws front door and /towns/{id}/ws. Each pod is one town
+       shard, and its pod name is its shard id. */ -}}
 {{- if .Values.world.enabled }}
+{{- if gt (int .Values.world.replicas) (int .Values.world.maxShards) }}
+{{- fail "world.replicas cannot be more than world.maxShards" }}
+{{- end }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "chart.fullname" . }}-world
   labels:
@@ -12,11 +16,13 @@ metadata:
     {{- /* After the migrate Job (0), like the instance server. */}}
     argocd.argoproj.io/sync-wave: "1"
 spec:
-  replicas: 1
-  {{- /* One connection per name lives in one process. Two world servers at
-         once could each hold a lobby for the same player. */}}
-  strategy:
-    type: Recreate
+  replicas: {{ .Values.world.replicas }}
+  serviceName: {{ include "chart.fullname" . }}-world
+  {{- /* A shard holds no data, so no pod waits on another to start. */}}
+  podManagementPolicy: Parallel
+  {{- /* Highest ordinal first, one pod at a time. */}}
+  updateStrategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       {{- include "chart.worldSelectorLabels" . | nindent 6 }}
@@ -27,6 +33,15 @@ spec:
     spec:
       {{- /* The drain moves players for up to 30 s, then closes the rest. */}}
       terminationGracePeriodSeconds: 45
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "chart.worldSelectorLabels" . | nindent 20 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -86,4 +101,38 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+{{- range $i := until (int .Values.world.maxShards) }}
+---
+{{- /* One pod's own address, for /towns/<pod>/ws. It has no endpoints while
+       that pod is not running. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chart.worldShardName" (list $ $i) }}
+  labels:
+    {{- include "chart.worldSelectorLabels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "chart.worldSelectorLabels" $ | nindent 4 }}
+    statefulset.kubernetes.io/pod-name: {{ include "chart.worldShardName" (list $ $i) }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+{{- end }}
+{{- if gt (int .Values.world.replicas) 1 }}
+---
+{{- /* A scale-down or drain of one shard must leave another to take its
+       players. */}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "chart.fullname" . }}-world
+  labels:
+    {{- include "chart.worldSelectorLabels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chart.worldSelectorLabels" . | nindent 6 }}
+{{- end }}
 {{- end }}

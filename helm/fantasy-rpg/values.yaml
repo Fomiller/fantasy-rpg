@@ -42,6 +42,11 @@ instances:
 # default image above is http-echo, which has none of them.
 world:
   enabled: false
+  # A StatefulSet. Each pod is one town shard, world-0 up, and has its own
+  # Service and route. replicas is how many run. maxShards is how many
+  # Services and routes exist, so a scale-up needs no new route.
+  replicas: 2
+  maxShards: 4
   # Extra container env, in the same shape as env above.
   env: []
 
