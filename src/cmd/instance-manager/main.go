@@ -20,13 +20,18 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
 
+	"github.com/Fomiller/fantasy-rpg/src/internal/logging"
 	"github.com/Fomiller/fantasy-rpg/src/internal/manager"
 )
 
 const drainDelay = 5 * time.Second
 
 func main() {
+	logger := logging.New("instance-manager")
+	// client-go logs through klog, which would otherwise print its own plain lines.
+	klog.SetSlogLogger(logger)
 	if err := run(); err != nil {
 		slog.Error("instance-manager stopped", "err", err)
 		os.Exit(1)

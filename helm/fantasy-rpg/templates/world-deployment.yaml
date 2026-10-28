@@ -49,6 +49,7 @@ spec:
             {{- include "chart.joinKeyEnv" . | nindent 12 }}
             {{- end }}
             {{- include "chart.inventoryEnv" . | nindent 12 }}
+            {{- include "chart.loggingEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /healthz

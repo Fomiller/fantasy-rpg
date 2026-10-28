@@ -22,9 +22,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/bot"
+	"github.com/Fomiller/fantasy-rpg/src/internal/logging"
 )
 
 func main() {
+	logging.New("bot")
 	if err := run(); err != nil {
 		slog.Error("bot stopped", "err", err)
 		os.Exit(1)

@@ -47,13 +47,13 @@ deps:
     {{compose}} exec -T redpanda rpk topic create --if-not-exists -X brokers=localhost:9092 {{topics}}
 
 dev: migrate
-    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
+    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
 
 instance id port:
-    JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
+    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server
 
 bots n:
-    go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091
+    LOG_FORMAT=text go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091
 
 bots-set mode count='0':
     {{homelab}} -n fantasy-rpg exec deploy/fantasy-rpg-bot-director -- /bot-director set {{mode}} {{count}}
@@ -81,7 +81,7 @@ loadtest pods bots duration='10m' ramp='2' via='http://traefik.traefik.svc.clust
         patch: |
           - {op: replace, path: /spec/completions, value: {{pods}}}
           - {op: replace, path: /spec/parallelism, value: {{pods}}}
-          - {op: replace, path: /spec/template/spec/containers/0/env, value: [{name: URL, value: "wss://fantasy-rpg.fomiller.com/ws"}, {name: VIA, value: "{{via}}"}, {name: BOTS, value: "{{bots}}"}, {name: RAMP, value: "{{ramp}}"}, {name: DURATION, value: "{{duration}}"}]}
+          - {op: replace, path: /spec/template/spec/containers/0/env, value: [{name: URL, value: "wss://fantasy-rpg.fomiller.com/ws"}, {name: VIA, value: "{{via}}"}, {name: BOTS, value: "{{bots}}"}, {name: RAMP, value: "{{ramp}}"}, {name: DURATION, value: "{{duration}}"}, {name: LOG_LEVEL, value: info}, {name: LOG_FORMAT, value: json}]}
     EOF
     echo "{{pods}} pods x {{bots}} bots, image $tag, via '{{via}}', for {{duration}}"
     kubectl kustomize "$dir" | {{homelab}} apply -f -
@@ -96,10 +96,10 @@ loadtest-down:
     {{homelab}} delete -k deploy/kubernetes/loadtest --ignore-not-found
 
 inventory: migrate
-    DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' PORT=8070 go run ./src/cmd/inventory
+    LOG_FORMAT=text DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' PORT=8070 go run ./src/cmd/inventory
 
 migrate: deps
-    DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate
+    LOG_FORMAT=text DATABASE_URL='{{databaseUrl}}' go run ./src/cmd/instance-server migrate
 
 up: deps
     {{compose}} --profile full up -d --build --wait
@@ -169,7 +169,7 @@ net-test: build
     pg=$(docker run -d --rm -e POSTGRES_USER=fantasy -e POSTGRES_PASSWORD=fantasy -e POSTGRES_DB=fantasy -p 127.0.0.1::5432 postgres:18)
     pids=() rp=""
     trap 'status=$?; kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; docker rm -f "$pg" $rp >/dev/null 2>&1 || true; if [ $status -ne 0 ]; then echo "net-test failed. Replay with: LOOT_SEED=$LOOT_SEED just net-test" >&2; fi' EXIT
-    export DATABASE_URL="postgres://fantasy:fantasy@127.0.0.1:$(docker port "$pg" 5432/tcp | head -1 | cut -d: -f2)/fantasy?sslmode=disable" JOIN_TOKEN_KEY=net-test
+    export DATABASE_URL="postgres://fantasy:fantasy@127.0.0.1:$(docker port "$pg" 5432/tcp | head -1 | cut -d: -f2)/fantasy?sslmode=disable" JOIN_TOKEN_KEY=net-test LOG_FORMAT=text
     # And a throwaway Redpanda. Its port is fixed, since the broker hands its address to clients.
     rp=$(docker run -d --rm -p 127.0.0.1:29092:29092 redpandadata/redpanda:v26.2.6 redpanda start --mode dev-container --smp 1 --kafka-addr 0.0.0.0:29092 --advertise-kafka-addr 127.0.0.1:29092)
     export KAFKA_BROKERS=127.0.0.1:29092

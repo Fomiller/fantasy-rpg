@@ -75,6 +75,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.events.brokers | quote }}
 {{- end -}}
 
+{{- define "chart.loggingEnv" -}}
+- name: LOG_LEVEL
+  value: {{ .Values.logging.level | quote }}
+- name: LOG_FORMAT
+  value: {{ .Values.logging.format | quote }}
+{{- end -}}
+
 {{- define "chart.dbName" -}}
 {{- printf "%s-db" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

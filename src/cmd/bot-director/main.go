@@ -25,11 +25,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
 
 	"github.com/Fomiller/fantasy-rpg/src/internal/director"
+	"github.com/Fomiller/fantasy-rpg/src/internal/logging"
 )
 
 func main() {
+	logger := logging.New("bot-director")
+	// client-go logs through klog, which would otherwise print its own plain lines.
+	klog.SetSlogLogger(logger)
 	var err error
 	switch {
 	case len(os.Args) > 1 && os.Args[1] == "status":

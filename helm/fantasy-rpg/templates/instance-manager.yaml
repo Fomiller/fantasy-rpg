@@ -106,6 +106,7 @@ spec:
               value: {{ .Values.ingressRoute.host | quote }}
             - name: ROUTE_ENTRY_POINT
               value: {{ .Values.ingressRoute.entryPoint | quote }}
+            {{- include "chart.loggingEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /healthz

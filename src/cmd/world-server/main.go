@@ -23,12 +23,14 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
+	"github.com/Fomiller/fantasy-rpg/src/internal/logging"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
 
 func main() {
+	logging.New("world-server")
 	if err := run(); err != nil {
 		slog.Error("world-server stopped", "err", err)
 		os.Exit(1)
