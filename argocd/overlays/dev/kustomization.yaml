@@ -19,7 +19,7 @@ helmCharts:
   # Application syncs once that lands.
   - name: fantasy-rpg-chart
     repo: oci://695434033664.dkr.ecr.us-east-1.amazonaws.com
-    version: 0.18.0
+    version: 0.19.0
     releaseName: fantasy-rpg
     # Without it the chart renders .Release.Namespace as default, and the
     # manager's RoleBinding points at a ServiceAccount that is not there.
