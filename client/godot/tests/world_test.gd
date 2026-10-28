@@ -18,7 +18,7 @@ func _run() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	var connection: ServerConnection = main.get_node("ServerConnection")
-	var stash: StashWindow = main.get_node("HUD/Stash")
+	var stash: StashWindow = main.get_node("HUD/Windows/Right/Column/Stash")
 	var cave: Cave = main.get_node("Cave")
 	var latest := {"snapshot": null}
 	connection.snapshot_received.connect(func(s: GameV1.WorldSnapshot) -> void: latest.snapshot = s)
@@ -65,7 +65,7 @@ func _run() -> void:
 		return me != null and chest != null and me.get_position().get_x() > chest.get_position().get_x() - 20.0)
 	Input.action_release("move_right")
 	await _until(func() -> bool: return false, 300)
-	var loot: LootWindow = main.get_node("HUD/Loot")
+	var loot: LootWindow = main.get_node("HUD/Windows/Right/Column/Loot")
 	await _press("interact")
 	_check(await _until(func() -> bool: return loot.visible and not loot._items.is_empty()), "interact opens the chest")
 	if not loot.visible or loot._items.is_empty():
@@ -81,7 +81,7 @@ func _run() -> void:
 			break
 	_check(await _until(func() -> bool: return item_name in bag.names), "takes %s from the chest" % item_name)
 
-	var summary: RunSummaryWindow = main.get_node("HUD/RunSummary")
+	var summary: RunSummaryWindow = main.get_node("HUD/Windows/Right/Column/RunSummary")
 	Input.action_press("move_right")
 	var extracted := await _until(func() -> bool: return summary.visible, 10000)
 	Input.action_release("move_right")

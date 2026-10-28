@@ -7,6 +7,8 @@ static func make(item: GameV1.Item, actions: Dictionary) -> HBoxContainer:
 	var label := RichTextLabel.new()
 	label.bbcode_enabled = true
 	label.fit_content = true
+	label.scroll_active = false
+	label.custom_minimum_size.x = 150
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text = ItemText.line(item)
 	if item.get_quantity() > 1:

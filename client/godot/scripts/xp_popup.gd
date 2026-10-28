@@ -9,6 +9,7 @@ const SECONDS := 1.2
 static func make(amount: int) -> XpPopup:
 	var popup := XpPopup.new()
 	popup.text = "+%d XP" % amount
+	popup.theme_type_variation = &"PopupLabel"
 	return popup
 
 

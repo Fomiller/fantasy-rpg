@@ -84,7 +84,7 @@ func _run() -> void:
 # Walk left from the spawn to the stash chest, open it, stash the starter
 # sword and equip it again from the stash.
 func _test_stash(main: Node, connection: ServerConnection, latest: Dictionary) -> void:
-	var stash: StashWindow = main.get_node("HUD/Stash")
+	var stash: StashWindow = main.get_node("HUD/Windows/Right/Column/Stash")
 	var chest: Vector2 = main.get_node("Cave").stash
 	var server_pos := func() -> Vector2: return _server_pos(latest.snapshot, connection.player_id)
 	await _press("interact")
@@ -106,7 +106,7 @@ func _test_stash(main: Node, connection: ServerConnection, latest: Dictionary) -
 # From the chest, walk right under the corridor and up into the entrance.
 func _test_entrance(main: Node, connection: ServerConnection, latest: Dictionary) -> void:
 	var entrance: Rect2 = main.get_node("Cave").entrance
-	var stash: StashWindow = main.get_node("HUD/Stash")
+	var stash: StashWindow = main.get_node("HUD/Windows/Right/Column/Stash")
 	var status: Label = main.get_node("HUD/Status")
 	var server_pos := func() -> Vector2: return _server_pos(latest.snapshot, connection.player_id)
 	await _walk(main, "move_right", func() -> bool: return server_pos.call().x > entrance.get_center().x - 16.0)
@@ -197,7 +197,7 @@ func _test_chest(main: Node, connection: ServerConnection, latest: Dictionary) -
 	await _until(func() -> bool: return server_pos.call().x < 100.0, 3000)
 	Input.action_release("move_left")
 
-	var loot: LootWindow = main.get_node("HUD/Loot")
+	var loot: LootWindow = main.get_node("HUD/Windows/Right/Column/Loot")
 	await _press("interact")
 	_check(await _until(func() -> bool: return loot.visible), "interact opens the chest's loot window")
 	var bar: XpBar = main.get_node("HUD/XpBar")
@@ -240,7 +240,7 @@ func _key(keycode: Key, pressed: bool) -> InputEventKey:
 # Unequip the sword, drop it, loot it back with interact, and equip it again,
 # all through the inventory panel and the server.
 func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
-	var panel: InventoryPanel = main.get_node("HUD/Inventory")
+	var panel: InventoryPanel = main.get_node("HUD/Windows/Right/Column/Inventory")
 	Input.action_press("inventory")
 	await physics_frame
 	await physics_frame
@@ -259,7 +259,7 @@ func _test_loot_then_equip(main: Node, hud: RichTextLabel) -> void:
 	_check(await _until(func() -> bool: return main.nearest_loot(main.get_node("ServerGhost").position) != null), "dropped sword lies on the ground")
 	_check(_button(panel, "Rusty Sword", "Drop") == null, "bag is empty after the drop")
 
-	var loot: LootWindow = main.get_node("HUD/Loot")
+	var loot: LootWindow = main.get_node("HUD/Windows/Right/Column/Loot")
 	await _press("interact")
 	_check(await _until(func() -> bool: return loot.visible and _loot_rows(loot).size() == 1), "interact opens the dropped sword's loot window")
 	if _loot_rows(loot).is_empty():
