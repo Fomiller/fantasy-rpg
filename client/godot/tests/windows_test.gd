@@ -54,12 +54,9 @@ func _run() -> void:
 		stat.set_stat("stat_%d" % i)
 		stat.set_value(i)
 		stats.append(stat)
-	inventory.show_equipment(gear)
 	inventory.show_inventory(bag, 30)
 	character.show_equipment(gear)
 	character.show_stats(stats)
-	stash.show_equipment(gear)
-	stash.show_inventory(bag, 30)
 	stash.show_stash(bag, 30)
 	var run := GameV1.RunSummary.new()
 	for item in bag:
