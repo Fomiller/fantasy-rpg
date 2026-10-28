@@ -28,7 +28,8 @@ signal stash_received(items: Array[GameV1.Item], capacity: int)
 signal stash_move_rejected(event: GameV1.StashMoveRejected)
 signal enter_instance_rejected(event: GameV1.EnterInstanceRejected)
 
-# The world server. Every session starts here and comes back here after a run.
+# The world server's front door. Every session starts here and comes back here
+# after a run or a drop. It may send the player on to a shard's own path.
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 const PROTOCOL_VERSION := 1
 # Why an instance turned the player away or the run ended early, as the town
@@ -44,6 +45,8 @@ const INSTANCE_CLOSE_TEXT := {
 	"characters unavailable": "Can't load your character. Try again in a minute.",
 }
 const RETRY_SECONDS := 2.0
+# Closes from a shard's path that send the player back to the front door.
+const SHARD_TURNED_AWAY := ["town full", "wrong town"]
 
 # The server keeps items by name, so the same name gets them back on reconnect.
 # Random by default so two local windows do not fight over one name.
@@ -76,6 +79,12 @@ var _url := DEFAULT_URL
 # socket is on, or on its way to, an instance server.
 var _ticket_url := ""
 var _token := ""
+# Set from TownTicket until its socket closes. The front door and a draining
+# shard send it.
+var _town_url := ""
+# Set once a shard turned the player away, so a second time goes offline.
+# Cleared by a town join.
+var _fell_back := false
 # Set when this player's run summary came, so the close that follows is the
 # run ending, not a drop.
 var _run_over := false
@@ -226,13 +235,16 @@ func _process(delta: float) -> void:
 				_closed(_socket.get_close_code(), _socket.get_close_reason())
 			elif _token != "" and _url == _ticket_url:
 				_back_to_world("Couldn't reach the instance. Try again.")
+			elif _token == "":
+				_url = _world_url
 			_retry_in -= delta
 			if _retry_in <= 0.0:
 				_connect()
 
 
 # One socket at a time: the world closes it to send the player to the
-# ticket's instance, and the instance closes it to send them back.
+# ticket's instance or another town, and the instance closes it to send them
+# back.
 func _closed(code: int, reason: String) -> void:
 	_was_open = false
 	player_id = 0
@@ -241,8 +253,13 @@ func _closed(code: int, reason: String) -> void:
 	close_reason = reason
 	print("disconnected from %s (%d %s)" % [_url, code, reason])
 	left.emit()
-	# A token while on the world means a ticket came, whoever closed first.
-	if _token != "" and _url == _world_url:
+	if _town_url != "":
+		_url = _town_url
+		_town_url = ""
+		_retry_in = 0.0
+		return
+	# A token while in a town means a ticket came, whoever closed first.
+	if _token != "" and _url != _ticket_url:
 		_url = _ticket_url
 		_retry_in = 0.0
 		return
@@ -251,6 +268,14 @@ func _closed(code: int, reason: String) -> void:
 		_run_over = false
 		_back_to_world(why)
 		if why == "run over":
+			return
+	# A shard's path is good for one join. Any close there goes back to the
+	# front door, at once the first time the shard turned the player away.
+	if _url != _world_url:
+		_url = _world_url
+		if code == 1013 and reason in SHARD_TURNED_AWAY and not _fell_back:
+			_fell_back = true
+			_retry_in = 0.0
 			return
 	disconnected.emit()
 
@@ -305,6 +330,10 @@ func _handle(bytes: PackedByteArray) -> void:
 		stash_move_rejected.emit(msg.get_stash_move_rejected())
 	elif msg.has_enter_instance_rejected():
 		enter_instance_rejected.emit(msg.get_enter_instance_rejected())
+	elif msg.has_town_ticket():
+		# Closed here for the same reason as the instance ticket below.
+		_town_url = msg.get_town_ticket().get_url()
+		_socket.close(1000, "changing town")
 	elif msg.has_ticket():
 		# Closing the world's socket here, not waiting for the world to, keeps
 		# the ticket: a close that lands with it empties the read buffer.
@@ -316,6 +345,7 @@ func _handle(bytes: PackedByteArray) -> void:
 		in_town = accepted.get_town()
 		if in_town:
 			_returning = false
+			_fell_back = false
 		player_id = accepted.get_player_id()
 		layout = accepted.get_layout()
 		spawn = Vector2(accepted.get_spawn().get_x(), accepted.get_spawn().get_y())

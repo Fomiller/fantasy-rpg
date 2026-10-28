@@ -1,6 +1,6 @@
 {{- /* The world server: join, the lobby, the stash, and tickets into an
        instance. It runs from the same image as the instance servers and has
-       the public /ws. */ -}}
+       the public /ws front door and /towns/{id}/ws. */ -}}
 {{- if .Values.world.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -25,6 +25,8 @@ spec:
       labels:
         {{- include "chart.worldSelectorLabels" . | nindent 8 }}
     spec:
+      {{- /* The drain moves players for up to 30 s, then closes the rest. */}}
+      terminationGracePeriodSeconds: 45
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -37,6 +39,12 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            {{- /* The shard id in session claims and the directory, and its
+                   /towns/{id}/ws path. */}}
+            - name: WORLD_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             {{- with .Values.world.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -53,9 +61,10 @@ spec:
             {{- if .Values.valkey.enabled }}
             {{- include "chart.townEnv" . | nindent 12 }}
             {{- end }}
+          {{- /* /readyz fails from SIGTERM on, so /ws stops coming here. */}}
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 8080
             periodSeconds: 5
           livenessProbe:

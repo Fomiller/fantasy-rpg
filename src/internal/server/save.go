@@ -332,39 +332,6 @@ func (s *Lobby) clearRun(c *client, runID string) {
 	}})
 }
 
-// claim takes the name for sess on the connection goroutine.
-func (s *Lobby) claim(ctx context.Context, sess inventory.Session) error {
-	ctx, cancel := context.WithTimeout(ctx, storeTimeout)
-	defer cancel()
-	return s.Store.Claim(ctx, sess)
-}
-
-// release queues the claim's release behind the player's other writes.
-func (s *Lobby) release(c *client) {
-	sess := c.session
-	c.writes.push(storeWrite{op: "release session", patience: releasePatience, call: func(ctx context.Context) error {
-		return s.Store.Release(ctx, sess)
-	}})
-}
-
-// RunHeartbeat keeps this shard's session claims alive until ctx ends.
-func (s *Lobby) RunHeartbeat(ctx context.Context) {
-	tick := time.NewTicker(shardBeat)
-	defer tick.Stop()
-	for {
-		hctx, cancel := context.WithTimeout(ctx, storeTimeout)
-		if err := s.Store.Heartbeat(hctx, s.WorldID, s.boot, shardTTL); err != nil && ctx.Err() == nil {
-			s.log.Warn("shard heartbeat", "err", err)
-		}
-		cancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
-}
-
 // final errors never get better with a retry.
 func final(err error) bool {
 	return errors.Is(err, inventory.ErrInRun) || errors.Is(err, inventory.ErrRunUsed) || errors.Is(err, inventory.ErrLeaseLost) ||

@@ -24,8 +24,14 @@ in Hub town.
   32. One connection per name is a map in that process, and a session
   claim in inventory across processes. Done in FOM-256.
 - The world publishes itself to the town directory in Valkey every 2 s,
-  and remembers each player's last shard. Nothing routes on it yet. The
-  front door is FOM-258. Done in FOM-257.
+  and remembers each player's last shard. Done in FOM-257.
+- Every world pod is a front door at `/ws`. It asks the directory, then
+  seats the player or sends `TownTicket` to the shard's `/towns/{id}/ws`.
+  A shard path never forwards. Godot and the bot follow the ticket. With
+  one pod the pick is always itself. Done in FOM-258.
+- On SIGTERM the world fails `/readyz`, publishes draining, and moves its
+  players with `TownTicket`, 4 every 250 ms. It stops when empty, when the
+  directory has nowhere to send them, or at 30 s. Done in FOM-258.
 - Caves run on the Agones Fleet with a buffer FleetAutoscaler, max 8.
 - `inventory` is two pods, `RollingUpdate`, with a PDB. It owns Postgres.
   Each pod runs the outbox relay, and an advisory lock lets one send at a
@@ -323,8 +329,8 @@ Done in FOM-257:
 - `VALKEY_ADDR` turns it on. Empty means no directory, and every pick is
   this shard. `TOWN_URL` is what the shard publishes. `TOWN_REVISION` is
   the image tag for now. `TOWN_SOFT_CAP_PERCENT` is 75.
-- On SIGTERM the world publishes itself as draining once, then stops.
-  Moving players off comes with the StatefulSet.
+- On SIGTERM the world publishes itself as draining. FOM-258 moves its
+  players off.
 - `towns_errors_total`, by `call`, counts failed Valkey calls.
 - The chart's Valkey is behind `valkey.enabled`, on in dev. `just deps`
   starts one in Compose, and `just dev` uses it.
@@ -616,14 +622,17 @@ In build order. Each one merges on its own and leaves the game playable.
     - Valkey in the chart and in Compose.
     - `internal/towns`: shard heartbeat and the pick order. Fail open when
       Valkey is down.
-12. **fantasy-rpg: front door and TownTicket.**
+12. **fantasy-rpg: front door and TownTicket.** Done, FOM-258.
     - `TownTicket` in the proto. `/towns/{id}/ws` on the world server. The
       `/ws` redirect.
     - Godot follows `TownTicket` and falls back to `/ws`. The bot does too.
+    - The drain moves players with `TownTicket`. Readiness and
+      `terminationGracePeriodSeconds: 45` are on the Deployment.
 13. **fantasy-rpg: world as a StatefulSet.**
     - StatefulSet, per-shard Services and routes up to `world.maxShards`,
       PDB.
-    - Drain on SIGTERM with `TownTicket`. Newest revision first. 2 replicas.
+    - Newest revision first, from `controller-revision-hash`. 2 replicas.
+      The drain itself is in FOM-258.
     - The bot director's `PLAYER_URLS` lists each shard, since one Service
       URL answers for one pod only.
 14. **homelab: install KEDA.**

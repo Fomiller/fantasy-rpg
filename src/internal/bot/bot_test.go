@@ -7,12 +7,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
@@ -54,8 +58,12 @@ func serveGame(t *testing.T) string {
 	dir.Poll(ctx)
 	go dir.Run(ctx, 50*time.Millisecond)
 	town.Instances = dir
+	town.WorldID = "world-0"
 	loop(town.Step)
-	ws := httptest.NewServer(http.HandlerFunc(town.HandleWS))
+	wmux := http.NewServeMux()
+	wmux.HandleFunc("GET /towns/{id}/ws", town.HandleTown)
+	wmux.HandleFunc("GET /", town.HandleWS)
+	ws := httptest.NewServer(wmux)
 
 	t.Cleanup(func() {
 		ws.Close()
@@ -101,6 +109,84 @@ func TestBotPlaysTheLoop(t *testing.T) {
 	for name, c := range map[string]prometheus.Collector{"join": m.join, "ticket": m.ticket, "instance join": m.instanceJoin, "saving": m.saving} {
 		if testutil.CollectAndCount(c) == 0 {
 			t.Errorf("%s has no samples", name)
+		}
+	}
+	if n := testutil.CollectAndCount(m.errors); n != 0 {
+		t.Errorf("errors = %v, want none", errorCounts(m))
+	}
+}
+
+// frontDoor sends every join on with a TownTicket to the next of to, and
+// records each JoinRequest.
+func frontDoor(t *testing.T, to ...string) (string, chan *gamev1.JoinRequest) {
+	t.Helper()
+	joins := make(chan *gamev1.JoinRequest, 8)
+	var hits atomic.Int64
+	fd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+		_, b, err := conn.Read(r.Context())
+		if err != nil {
+			return
+		}
+		msg, err := protocol.DecodeClient(b)
+		if err != nil {
+			return
+		}
+		joins <- msg.GetJoin()
+		next := to[min(int(hits.Add(1))-1, len(to)-1)]
+		b, _ = protocol.EncodeServer(protocol.TownTicket(next))
+		conn.Write(r.Context(), websocket.MessageBinary, b)
+		for {
+			if _, _, err := conn.Read(r.Context()); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(fd.Close)
+	return wsURL(fd.URL) + "/ws", joins
+}
+
+// The bot follows a TownTicket with the same JoinRequest. A shard that turns
+// it away sends it back to the front door, which sends it on again.
+func TestBotFollowsATownTicket(t *testing.T) {
+	world := serveGame(t)
+	url, joins := frontDoor(t, world+"/towns/world-9/ws", world+"/towns/world-0/ws")
+	m := NewMetrics(prometheus.NewRegistry())
+	b := New("bot-test-1", Config{URL: url, TownTime: 100 * time.Millisecond, RunTimeout: 20 * time.Second}, m)
+	b.log = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		b.Run(ctx)
+		close(done)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	deadline := time.Now().Add(30 * time.Second)
+	for b.runs.Load() < 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("after 30s: runs %d, errors %v", b.runs.Load(), errorCounts(m))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := testutil.ToFloat64(m.townMoves.WithLabelValues("fallback")); got != 1 {
+		t.Fatalf("fallbacks = %v, want 1 for the wrong town", got)
+	}
+	if got := testutil.ToFloat64(m.townMoves.WithLabelValues("ticket")); got < 2 {
+		t.Fatalf("tickets followed = %v, want 2", got)
+	}
+	for range 2 {
+		j := <-joins
+		if j.GetName() != "bot-test-1" || !j.GetBot() || j.GetReturning() {
+			t.Fatalf("front door join = %v, want the bot's first join", j)
 		}
 	}
 	if n := testutil.CollectAndCount(m.errors); n != 0 {

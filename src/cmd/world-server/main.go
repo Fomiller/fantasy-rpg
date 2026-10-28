@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -98,26 +99,24 @@ func run() error {
 	lobby.Instances = server.NewPool(managerURL, list)
 	lobby.Events = bus
 	lobby.WorldID = worldID
-	reg.MustRegister(lobby.PendingSaves)
+	reg.MustRegister(lobby.PendingSaves, lobby.TownTickets)
 	reg.MustRegister(lobby.Metrics.Collectors()...)
 	defer lobby.Close()
 
 	townDir, dirName := towns.Open(os.Getenv("VALKEY_ADDR"), towns.NewCaps(townMax, softPercent), reg)
 	defer townDir.Close()
-	var shard *towns.Shard
-	if dirName != "off" {
-		shard = &towns.Shard{
-			Dir:      townDir,
-			ID:       worldID,
-			URL:      townURL(),
-			Revision: os.Getenv("TOWN_REVISION"),
-			Started:  time.Now(),
-			Players:  lobby.TownPlayers,
-			Log:      slog.Default(),
-		}
-		lobby.Towns = shard
+	// With the directory off, every pick is this shard and Publish does nothing.
+	shard := &towns.Shard{
+		Dir:      townDir,
+		ID:       worldID,
+		URL:      townURL(worldID),
+		Revision: os.Getenv("TOWN_REVISION"),
+		Started:  time.Now(),
+		Players:  lobby.TownPlayers,
+		Log:      slog.Default(),
 	}
-	slog.Info("town directory", "directory", dirName, "town", worldID)
+	lobby.Towns = shard
+	slog.Info("town directory", "directory", dirName, "town", worldID, "url", shard.URL)
 
 	loop := &tick.Loop{
 		Interval: time.Second / time.Duration(rate),
@@ -129,16 +128,31 @@ func run() error {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if !lobby.Ready() {
+			http.Error(w, "draining", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /ws", lobby.HandleWS)
-	// For the bot director. The public route is /ws only.
+	mux.HandleFunc("GET /towns/{id}/ws", lobby.HandleTown)
+	// For the bot director. The public routes are /ws and /towns/ only.
 	mux.HandleFunc("GET /v1/players", lobby.HandlePlayers)
+
+	// The signal starts the drain. The loop, the claims and the directory
+	// keep going through it, until the players' last writes land.
+	running, stopRunning := context.WithCancel(context.Background())
+	defer stopRunning()
+	conns, closeConns := context.WithCancel(context.Background())
+	defer closeConns()
 	srv := &http.Server{
 		Addr:    ":" + port(),
 		Handler: mux,
 		// Shutdown does not reach hijacked WebSocket connections. Tying request
-		// contexts to the signal closes them when the server stops.
-		BaseContext: func(net.Listener) context.Context { return ctx },
+		// contexts to conns closes them once the drain is over.
+		BaseContext: func(net.Listener) context.Context { return conns },
 	}
 
 	errc := make(chan error, 1)
@@ -147,11 +161,9 @@ func run() error {
 			errc <- err
 		}
 	}()
-	go func() { errc <- loop.Run(ctx) }()
-	go lobby.RunHeartbeat(ctx)
-	if shard != nil {
-		go shard.Run(ctx)
-	}
+	go func() { errc <- loop.Run(running) }()
+	go lobby.RunHeartbeat(running)
+	go shard.Run(running)
 	if busName == "kafka" {
 		applied, err := events.NewConsumer(events.ConsumerConfig{
 			Brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
@@ -161,10 +173,10 @@ func run() error {
 			return err
 		}
 		defer applied.Close()
-		go applied.Run(ctx, lobby.HandleApplied)
+		go applied.Run(running, lobby.HandleApplied)
 	}
 	if dir, ok := lobby.Instances.(*server.Directory); ok {
-		go dir.Run(ctx, pollEvery)
+		go dir.Run(running, pollEvery)
 	}
 	slog.Info("world-server listening", "addr", srv.Addr, "instances", len(list), "instance_manager", managerURL, "tick_rate", rate, "town_max_players", townMax)
 
@@ -176,13 +188,24 @@ func run() error {
 		}
 	}
 
+	// A second signal stops the server at once.
+	stop()
+	slog.Info("draining")
+	drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer cancel()
+	lobby.Drain(drainCtx)
+	// Whoever is left reconnects through /ws.
+	closeConns()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if shard != nil {
-		shard.Drain(shutdownCtx)
-	}
-	return srv.Shutdown(shutdownCtx)
+	err = srv.Shutdown(shutdownCtx)
+	lobby.WaitGone(shutdownCtx)
+	return err
 }
+
+// drainTimeout leaves room for the last writes inside the chart's
+// terminationGracePeriodSeconds of 45.
+const drainTimeout = 30 * time.Second
 
 // pollEvery is how often each instance's /status is read.
 const pollEvery = 2 * time.Second
@@ -199,12 +222,12 @@ func positive(name string, fallback int) (int, error) {
 	return n, nil
 }
 
-// townURL is where a front door sends a player to reach this shard.
-func townURL() string {
+// townURL is this shard's own path, where a front door sends a player.
+func townURL(id string) string {
 	if u := os.Getenv("TOWN_URL"); u != "" {
 		return u
 	}
-	return "ws://127.0.0.1:" + port() + "/ws"
+	return "ws://127.0.0.1:" + port() + "/towns/" + url.PathEscape(id) + "/ws"
 }
 
 func port() string {

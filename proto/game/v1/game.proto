@@ -46,6 +46,7 @@ message ServerMessage {
     StashMoveRejected stash_move_rejected = 25;
     EnterInstanceRejected enter_instance_rejected = 26;
     InstanceTicket ticket = 27;
+    TownTicket town_ticket = 28;
   }
 }
 
@@ -485,6 +486,17 @@ message InstanceTicket {
   string instance = 3;
   // How long the token is good for, from when it was sent.
   uint32 expires_in_ms = 4;
+}
+
+// TownTicket sends the player to another town shard. The front door at /ws
+// sends it when the directory picks another shard, and a draining shard
+// sends it to move its players. The server closes the socket right after
+// it, with 1000 "changing town". The client dials url and sends the same
+// JoinRequest.
+message TownTicket {
+  // The shard's WebSocket URL, like
+  // wss://fantasy-rpg.fomiller.com/towns/fantasy-rpg-world-1/ws.
+  string url = 1;
 }
 
 // InstanceJoinRequest is the first message on an instance server. It is the

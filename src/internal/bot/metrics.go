@@ -16,6 +16,7 @@ type Metrics struct {
 	runs         *prometheus.CounterVec
 	errors       *prometheus.CounterVec
 	messages     *prometheus.CounterVec
+	townMoves    *prometheus.CounterVec
 	// A worker's share from the bot director.
 	assigned         prometheus.Gauge
 	assignmentErrors prometheus.Counter
@@ -58,5 +59,8 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		messages: f.NewCounterVec(prometheus.CounterOpts{
 			Name: "bot_messages_total", Help: "Protocol messages, by where and direction.",
 		}, []string{"where", "direction"}),
+		townMoves: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "bot_town_moves_total", Help: "TownTickets followed, and shard closes that sent the bot back to the front door, by kind.",
+		}, []string{"kind"}),
 	}
 }

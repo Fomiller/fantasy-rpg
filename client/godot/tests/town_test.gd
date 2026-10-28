@@ -168,6 +168,29 @@ func _run() -> void:
 	await _frames(1)
 	_check(status.text == "offline · name already playing", "a reason with no text of its own is shown as sent (got %s)" % status.text)
 
+	# The front door sends the player to a shard's own path, with the same join.
+	var shard_url := "ws://127.0.0.1:8080/towns/world-1/ws"
+	var offline := [0]
+	connection.disconnected.connect(func() -> void: offline[0] += 1)
+	connection._returning = true
+	connection._handle(_town_ticket(shard_url))
+	connection._closed(1000, "changing town")
+	_check(connection._url == shard_url and connection._retry_in == 0.0 and connection._returning, "a TownTicket sends the client to the shard at once, still returning")
+	connection._closed(1013, "town full")
+	_check(connection._url == world_url and connection._retry_in == 0.0, "a full shard sends the client back to the front door at once")
+	_check(offline[0] == 0, "going back to the front door once is not offline")
+	connection._handle(_town_ticket(shard_url))
+	connection._closed(1000, "changing town")
+	connection._closed(1013, "town full")
+	await _frames(1)
+	_check(connection._url == world_url and status.text == "offline · The town is full. Trying again...", "a second full shard goes offline and retries the front door (got %s)" % status.text)
+	connection._handle(_town_ticket(shard_url))
+	connection._closed(1000, "changing town")
+	connection._closed(1006, "")
+	_check(connection._url == world_url, "a drop on a shard reconnects through the front door")
+	connection._handle(_joined(true, RETURN_SPAWN))
+	_check(not connection._fell_back, "a town join lets the next full shard send the client back once more")
+
 	print("town_test: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -196,6 +219,12 @@ func _ticket(url: String, token: String) -> PackedByteArray:
 	var ticket := msg.new_ticket()
 	ticket.set_url(url)
 	ticket.set_token(token)
+	return msg.to_bytes()
+
+
+func _town_ticket(url: String) -> PackedByteArray:
+	var msg := _message()
+	msg.new_town_ticket().set_url(url)
 	return msg.to_bytes()
 
 

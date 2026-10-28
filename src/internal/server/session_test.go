@@ -101,7 +101,7 @@ func (d rememberDir) Remember(_ context.Context, name, shard string) error {
 }
 
 func TestWorldJoinRemembersTheShard(t *testing.T) {
-	dir := rememberDir{got: make(chan [2]string, 1)}
+	dir := rememberDir{Off: towns.Off{Caps: towns.NewCaps(32, 75)}, got: make(chan [2]string, 1)}
 	h := serveWorld(t, asShard, func(l *Lobby) {
 		l.Towns = &towns.Shard{Dir: dir, ID: l.WorldID, Players: l.TownPlayers, Log: quiet()}
 	})
