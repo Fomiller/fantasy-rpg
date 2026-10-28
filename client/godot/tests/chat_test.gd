@@ -66,8 +66,8 @@ func _run() -> void:
 		"bob yells: over here",
 		"[General] cat: anyone",
 		"[LookingForGroup] cat: need a tank",
-		"dan whispers: psst",
-		"To eve: hi",
+		"[dan] whispers: psst",
+		"To [eve]: hi",
 		"You are chatting too fast.",
 	]:
 		_check(text.contains(expected), "the log shows '%s'" % expected)
@@ -75,7 +75,7 @@ func _run() -> void:
 	chat._on_name_clicked("dan")
 	await _frames(1)
 	_check(chat.typing and input.text == "", "clicking a name opens an empty input")
-	_check(mode_label.text == "To dan:", "clicking a name sets the whisper mode")
+	_check(mode_label.text == "To [dan]:", "clicking a name sets the whisper mode")
 	chat.close()
 
 	await _sticky_checks(chat, input, mode_label, connection)
@@ -116,7 +116,7 @@ func _sticky_checks(chat: ChatBox, input: LineEdit, mode_label: Label, connectio
 		_sent.clear()
 
 	_send(chat, input, "/w bob hey")
-	_check(mode_label.text == "To bob:" and _sent == ["/w bob hey"], "/w sets the whisper mode and sends")
+	_check(mode_label.text == "To [bob]:" and _sent == ["/w bob hey"], "/w sets the whisper mode and sends")
 	_sent.clear()
 	_send(chat, input, "again")
 	_check(_sent == ["/w bob again"], "a plain line whispers the target")
@@ -129,17 +129,17 @@ func _sticky_checks(chat: ChatBox, input: LineEdit, mode_label: Label, connectio
 	_sent.clear()
 
 	_send(chat, input, "/r hi dan")
-	_check(mode_label.text == "To dan:" and _sent == ["/r hi dan"], "/r whispers whoever whispered last")
+	_check(mode_label.text == "To [dan]:" and _sent == ["/r hi dan"], "/r whispers whoever whispered last")
 	_sent.clear()
 	chat.add_message(_chat_message("whisper_from", "zed", "psst"))
 	_send(chat, input, "/r back")
-	_check(mode_label.text == "To zed:" and _sent == ["/r back"], "/r sets the mode to the last whisperer")
+	_check(mode_label.text == "To [zed]:" and _sent == ["/r back"], "/r sets the mode to the last whisperer")
 	_sent.clear()
 
 	_send(chat, input, "/join 2")
 	_send(chat, input, "/leave 3")
 	_send(chat, input, "/bogus")
-	_check(mode_label.text == "To zed:", "join, leave and unknown commands keep the mode")
+	_check(mode_label.text == "To [zed]:", "join, leave and unknown commands keep the mode")
 	_sent.clear()
 
 	chat.open()
@@ -154,25 +154,25 @@ func _sticky_checks(chat: ChatBox, input: LineEdit, mode_label: Label, connectio
 	_check(mode_label.text == "Yell:" and input.text == "/w ", "a bare /w waits for the name")
 	input.text = "/w amy "
 	input.text_changed.emit(input.text)
-	_check(mode_label.text == "To amy:" and input.text == "", "typing /w name and a space switches at once")
+	_check(mode_label.text == "To [amy]:" and input.text == "", "typing /w name and a space switches at once")
 	input.text = "/r "
 	input.text_changed.emit(input.text)
-	_check(mode_label.text == "To zed:" and input.text == "", "typing /r and a space switches to the last whisperer")
+	_check(mode_label.text == "To [zed]:" and input.text == "", "typing /r and a space switches to the last whisperer")
 	input.text = "/1 hi"
 	input.text_changed.emit(input.text)
-	_check(mode_label.text == "To zed:" and input.text == "/1 hi", "a command with text is left alone")
+	_check(mode_label.text == "To [zed]:" and input.text == "/1 hi", "a command with text is left alone")
 	chat.close()
 
 	await _press(KEY_ENTER)
 	await _frames(1)
-	_check(chat.typing and mode_label.visible and mode_label.text == "To zed:", "enter opens in the last mode")
+	_check(chat.typing and mode_label.visible and mode_label.text == "To [zed]:", "enter opens in the last mode")
 	await _press(KEY_ESCAPE)
 	await _frames(2)
-	_check(not chat.typing and not mode_label.visible and mode_label.text == "To zed:", "escape closes without changing the mode")
+	_check(not chat.typing and not mode_label.visible and mode_label.text == "To [zed]:", "escape closes without changing the mode")
 
 	chat._on_name_clicked("kim")
 	connection._handle(_channels(["general", "trade", "lfg"]))
-	_check(mode_label.text == "To kim:", "a whisper mode survives channel updates")
+	_check(mode_label.text == "To [kim]:", "a whisper mode survives channel updates")
 	_send(chat, input, "/2 x")
 	connection._handle(_channels(["general", "lfg"]))
 	_check(mode_label.text == "Say:", "leaving the current channel falls back to Say")

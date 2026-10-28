@@ -112,12 +112,13 @@ func add_message(message: GameV1.ChatMessage) -> void:
 		"system":
 			_log.add_text(message.get_text())
 		"whisper_to":
-			_log.add_text("To ")
+			_log.add_text("To [")
 			_add_name(sender)
-			_log.add_text(": %s" % message.get_text())
+			_log.add_text("]: %s" % message.get_text())
 		"whisper_from":
+			_log.add_text("[")
 			_add_name(sender)
-			_log.add_text(" whispers: %s" % message.get_text())
+			_log.add_text("] whispers: %s" % message.get_text())
 		"say", "yell":
 			_add_name(sender)
 			_log.add_text(" %s: %s" % ["says" if channel == "say" else "yells", message.get_text()])
@@ -168,7 +169,7 @@ func _refresh_mode() -> void:
 	var color_key := "whisper_to" if _mode == "whisper" else _mode
 	_mode_label.add_theme_color_override("font_color", COLORS[color_key])
 	if _mode == "whisper":
-		_mode_label.text = "To %s:" % _target
+		_mode_label.text = "To [%s]:" % _target
 	elif CHANNEL_NAMES.has(_mode):
 		_mode_label.text = "[%s]" % CHANNEL_NAMES[_mode]
 	else:
