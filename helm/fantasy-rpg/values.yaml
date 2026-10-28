@@ -47,6 +47,20 @@ world:
   # Services and routes exist, so a scale-up needs no new route.
   replicas: 2
   maxShards: 4
+  # A KEDA ScaledObject on the StatefulSet. It owns the replicas, so the
+  # chart leaves replicas off and world.replicas is not used. Needs KEDA.
+  autoscaling:
+    enabled: false
+    prometheusAddress: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+    # Players per shard. The shard soft cap: TOWN_MAX_PLAYERS (32) times
+    # TOWN_SOFT_CAP_PERCENT (75%). Change it with them.
+    threshold: 24
+    minReplicas: 1
+    # Empty means world.maxShards. It cannot be more.
+    maxReplicas: ""
+    # A scale-down removes one shard, then waits, so a drain has room.
+    scaleDownWindow: 600
+    scaleDownPeriod: 300
   # Extra container env, in the same shape as env above.
   env: []
 
@@ -54,6 +68,19 @@ world:
 # more than one is safe. A PDB keeps one up when there are two or more.
 inventory:
   replicas: 2
+  # A KEDA ScaledObject on the Deployment, like world.autoscaling. The kafka
+  # trigger needs events.brokers. maxReplicas is at most the run.ended
+  # partition count, since more consumers than partitions sit idle.
+  autoscaling:
+    enabled: false
+    prometheusAddress: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+    minReplicas: 2
+    maxReplicas: 3
+    # Store calls per second per replica. No measurement yet, so this is a
+    # low guess. Replace it with the inventory headroom from the load test.
+    callsPerSecond: 50
+    # run.ended records behind, per replica.
+    lagThreshold: 100
 
 # instance-manager pods. They run active-active with no leader, and a PDB keeps
 # one up when there are two or more.

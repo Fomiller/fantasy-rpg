@@ -93,9 +93,19 @@ spec:
               value: {{ $workers }}
             - name: TARGET_CONFIGMAP
               value: {{ $target }}
+            {{- /* One URL per shard, since a Service URL answers for one pod. With
+                   autoscaling the count moves, so world-0 is required and the
+                   rest may be down. */}}
             - name: PLAYER_URLS
-              {{- /* One URL per running shard, since a Service URL answers for one pod. */}}
+              {{- if .Values.world.autoscaling.enabled }}
+              value: http://{{ include "chart.worldShardName" (list . 0) }}:8080,http://{{ include "chart.managerName" . }}:8080
+              {{- else }}
               value: {{ range $i := until (int .Values.world.replicas) }}http://{{ include "chart.worldShardName" (list $ $i) }}:8080,{{ end }}http://{{ include "chart.managerName" . }}:8080
+              {{- end }}
+            {{- if .Values.world.autoscaling.enabled }}
+            - name: OPTIONAL_PLAYER_URLS
+              value: {{ range $i := untilStep 1 (int .Values.world.maxShards) 1 }}{{ if gt $i 1 }},{{ end }}http://{{ include "chart.worldShardName" (list $ $i) }}:8080{{ end }}
+            {{- end }}
             - name: DEFAULT_MODE
               value: {{ .Values.bots.mode | quote }}
             - name: DEFAULT_COUNT

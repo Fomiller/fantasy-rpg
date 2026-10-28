@@ -47,3 +47,11 @@ bots:
   enabled: true
   mode: fill
   count: 6
+
+# KEDA owns the world and inventory replicas. Needs KEDA in the cluster.
+world:
+  autoscaling:
+    enabled: true
+inventory:
+  autoscaling:
+    enabled: true

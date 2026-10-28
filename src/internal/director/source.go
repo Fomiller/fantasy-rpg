@@ -23,9 +23,13 @@ type Source interface {
 // Endpoints adds up GET /v1/players from each base URL: every world server
 // and the instance manager in the cluster. Any one failing fails the count,
 // since a short count would add bots for humans who are there.
+//
+// Optional URLs are shards that may not be running. One that fails counts as
+// empty.
 type Endpoints struct {
-	URLs   []string
-	Client *http.Client
+	URLs     []string
+	Optional []string
+	Client   *http.Client
 }
 
 func NewEndpoints(urls []string) *Endpoints {
@@ -41,6 +45,12 @@ func (e *Endpoints) Players(ctx context.Context) (Players, error) {
 		}
 		sum.Humans += p.Humans
 		sum.Bots += p.Bots
+	}
+	for _, u := range e.Optional {
+		if p, err := e.get(ctx, u+"/v1/players"); err == nil {
+			sum.Humans += p.Humans
+			sum.Bots += p.Bots
+		}
 	}
 	return sum, nil
 }

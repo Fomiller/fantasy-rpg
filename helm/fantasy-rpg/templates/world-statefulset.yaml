@@ -16,7 +16,10 @@ metadata:
     {{- /* After the migrate Job (0), like the instance server. */}}
     argocd.argoproj.io/sync-wave: "1"
 spec:
+  {{- /* With autoscaling on, KEDA owns the replicas. */}}
+  {{- if not .Values.world.autoscaling.enabled }}
   replicas: {{ .Values.world.replicas }}
+  {{- end }}
   serviceName: {{ include "chart.fullname" . }}-world
   {{- /* A shard holds no data, so no pod waits on another to start. */}}
   podManagementPolicy: Parallel
@@ -119,7 +122,7 @@ spec:
     - port: 8080
       targetPort: 8080
 {{- end }}
-{{- if gt (int .Values.world.replicas) 1 }}
+{{- if or .Values.world.autoscaling.enabled (gt (int .Values.world.replicas) 1) }}
 ---
 {{- /* A scale-down or drain of one shard must leave another to take its
        players. */}}
