@@ -158,9 +158,17 @@ layout_mode = 2
 size_flags_vertical = 3
 scroll_following = true
 
-[node name="Input" type="LineEdit" parent="HUD/Chat/List"]
+[node name="Row" type="HBoxContainer" parent="HUD/Chat/List"]
+layout_mode = 2
+
+[node name="Mode" type="Label" parent="HUD/Chat/List/Row"]
 visible = false
 layout_mode = 2
+
+[node name="Input" type="LineEdit" parent="HUD/Chat/List/Row"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="Toast" type="Label" parent="HUD"]
 visible = false

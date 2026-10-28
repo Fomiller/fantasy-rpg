@@ -28,6 +28,7 @@ signal stash_received(items: Array[GameV1.Item], capacity: int)
 signal stash_move_rejected(event: GameV1.StashMoveRejected)
 signal enter_instance_rejected(event: GameV1.EnterInstanceRejected)
 signal chat_received(message: GameV1.ChatMessage)
+signal chat_channels_changed(left: Array[String])
 
 # The world server's front door. Every session starts here and comes back here
 # after a run or a drop. It may send the player on to a shard's own path.
@@ -413,6 +414,7 @@ func _handle(bytes: PackedByteArray) -> void:
 		for channel in CHAT_CHANNELS:
 			if not joined.has(channel):
 				chat_left.append(channel)
+		chat_channels_changed.emit(chat_left)
 
 
 func _end_run(summary: GameV1.RunSummary) -> void:
