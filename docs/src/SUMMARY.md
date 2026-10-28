@@ -13,5 +13,6 @@
 - [Hub town](design/hub-town.md)
 - [Instance manager](design/instance-manager.md)
 - [Scaling](design/scaling.md)
+  - [Chat](design/chat.md)
   - [Load test](design/load-test.md)
   - [Bots](design/bots.md)

@@ -136,6 +136,12 @@ joinKey:
 events:
   brokers: ""
 
+# The cluster's NATS, for chat between shards and caves. It is core NATS with
+# no auth, shared with other apps, so every subject here starts with frpg.
+# Empty leaves NATS_URL off, and the servers refuse to start without it.
+nats:
+  url: nats://nats.nats.svc:4222
+
 # One Valkey for the town directory: each town shard's URL and head count,
 # and each player's last shard. No persistence, since every key is rebuilt
 # within one heartbeat. Off, the world server runs with no directory and

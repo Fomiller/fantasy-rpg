@@ -27,6 +27,7 @@ signal run_ended(summary: GameV1.RunSummary)
 signal stash_received(items: Array[GameV1.Item], capacity: int)
 signal stash_move_rejected(event: GameV1.StashMoveRejected)
 signal enter_instance_rejected(event: GameV1.EnterInstanceRejected)
+signal chat_received(message: GameV1.ChatMessage)
 
 # The world server's front door. Every session starts here and comes back here
 # after a run or a drop. It may send the player on to a shard's own path.
@@ -44,6 +45,8 @@ const INSTANCE_CLOSE_TEXT := {
 	"wrong instance": "Couldn't join the instance. Try again.",
 	"characters unavailable": "Can't load your character. Try again in a minute.",
 }
+# The channels /join and /leave take, as the server names them.
+const CHAT_CHANNELS: Array[String] = ["general", "trade", "lfg"]
 const RETRY_SECONDS := 2.0
 # Closes from a shard's path that send the player back to the front door.
 const SHARD_TURNED_AWAY := ["town full", "wrong town"]
@@ -66,6 +69,9 @@ var in_town := false
 # The last run is not in the database yet, so the server turns away stash
 # moves and the entrance.
 var saving := false
+# The chat channels the server last said the player left. Every join sends
+# them again, so a move to another town or a cave keeps them.
+var chat_left: Array[String] = []
 # Why the server last closed the socket. Empty when it gave no reason.
 var close_reason := ""
 # Why the last trip to an instance ended early, for the town to say. Main
@@ -217,6 +223,15 @@ func send_use(item_id: String) -> void:
 	_send(msg)
 
 
+# The server reads the slash commands, so this sends the line as typed.
+func send_chat(text: String) -> void:
+	if not is_joined():
+		return
+	var msg := _new_message()
+	msg.new_chat().set_text(text)
+	_send(msg)
+
+
 func _process(delta: float) -> void:
 	_socket.poll()
 	var state := _socket.get_ready_state()
@@ -310,6 +325,8 @@ func _send_join() -> void:
 	join.set_name(player_name)
 	join.set_class_id(class_id)
 	join.set_returning(_returning)
+	for channel in chat_left:
+		join.add_chat_left(channel)
 	_send(msg)
 
 
@@ -388,6 +405,14 @@ func _handle(bytes: PackedByteArray) -> void:
 		if id == player_id and event.has_summary():
 			_end_run(event.get_summary())
 		extracted.emit(id)
+	elif msg.has_chat():
+		chat_received.emit(msg.get_chat())
+	elif msg.has_chat_channels():
+		var joined := msg.get_chat_channels().get_joined()
+		chat_left.clear()
+		for channel in CHAT_CHANNELS:
+			if not joined.has(channel):
+				chat_left.append(channel)
 
 
 func _end_run(summary: GameV1.RunSummary) -> void:

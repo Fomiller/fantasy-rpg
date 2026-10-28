@@ -80,6 +80,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.events.brokers | quote }}
 {{- end -}}
 
+{{- define "chart.natsEnv" -}}
+- name: NATS_URL
+  value: {{ .Values.nats.url | quote }}
+{{- end -}}
+
 {{- define "chart.loggingEnv" -}}
 - name: LOG_LEVEL
   value: {{ .Values.logging.level | quote }}

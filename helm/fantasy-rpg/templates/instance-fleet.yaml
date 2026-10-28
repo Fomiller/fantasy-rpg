@@ -90,6 +90,9 @@ spec:
                        each instance keeps a memory store. */}}
                 {{- if .Values.world.enabled }}
                 {{- include "chart.inventoryEnv" . | nindent 16 }}
+                {{- if .Values.nats.url }}
+                {{- include "chart.natsEnv" . | nindent 16 }}
+                {{- end }}
                 {{- end }}
               readinessProbe:
                 httpGet:

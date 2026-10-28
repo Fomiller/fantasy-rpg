@@ -47,6 +47,17 @@ services:
       interval: 2s
       retries: 15
 
+  # Core NATS for chat, as in the cluster. Nothing is saved.
+  nats:
+    image: nats:2.15.2-alpine
+    command: ["-m", "8222"]
+    ports:
+      - "4222:4222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8222/healthz"]
+      interval: 2s
+      retries: 15
+
   world-server:
     profiles: [full]
     image: fantasy-rpg/world-server:dev
@@ -62,6 +73,7 @@ services:
       LOG_FORMAT: text
       KAFKA_BROKERS: redpanda:9092
       VALKEY_ADDR: valkey:6379
+      NATS_URL: nats://nats:4222
       WORLD_ID: world-0
       TOWN_URL: ws://localhost:8080/towns/world-0/ws
       # Polled inside the network, handed to the client as localhost.
@@ -76,6 +88,8 @@ services:
       redpanda:
         condition: service_healthy
       valkey:
+        condition: service_healthy
+      nats:
         condition: service_healthy
 
   # The only service with the database.
@@ -128,6 +142,7 @@ services:
       JOIN_TOKEN_KEY: dev-only
       INSTANCE_ID: instance-0
       KAFKA_BROKERS: redpanda:9092
+      NATS_URL: nats://nats:4222
       LOG_FORMAT: text
     ports:
       - "8081:8080"
@@ -135,6 +150,8 @@ services:
       inventory:
         condition: service_started
       redpanda:
+        condition: service_healthy
+      nats:
         condition: service_healthy
 
   instance-1:

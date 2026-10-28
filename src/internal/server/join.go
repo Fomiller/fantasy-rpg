@@ -16,6 +16,7 @@ import (
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 	"github.com/Fomiller/fantasy-rpg/src/internal/caves"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 	"github.com/Fomiller/fantasy-rpg/src/internal/classes"
 	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
@@ -74,6 +75,13 @@ type Lobby struct {
 	// WorldID names this world server in player.session, and is the shard
 	// in its session claims.
 	WorldID string
+	// Chat is set before serving. The default reaches nobody, so only say and
+	// yell work.
+	Chat        chat.Bus
+	ChatMetrics *chat.Metrics
+	chatStops   []func()
+	// roster is who chat reaches. Nil means the town's players.
+	roster func() map[sim.EntityID]*client
 	// Towns is this shard in the town directory. Nil seats every player here.
 	Towns *towns.Shard
 	// townDraining is set from SIGTERM on. No one new is seated, and the
@@ -110,8 +118,12 @@ type client struct {
 	cancel context.CancelFunc
 	writes *writer
 	// session is the name's claim in the store, once the join has it.
-	session inventory.Session
-	slow    prometheus.Counter
+	session   inventory.Session
+	slow      prometheus.Counter
+	chatOff   map[string]bool
+	chatLimit chat.Limiter
+	replyTo   string
+	unlisten  func()
 	// kick closes the connection once the outbox is written.
 	kick chan closeMsg
 	// gone is set once the connection has closed.
@@ -165,6 +177,8 @@ func newShared(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 		done:           make(chan struct{}),
 		conns:          map[string]*client{},
 		Events:         events.Nop{},
+		Chat:           chat.Off{},
+		ChatMetrics:    chat.NewMetrics(),
 		boot:           bootID(),
 
 		TownTickets: newTownTickets(),
@@ -210,7 +224,12 @@ func (s *Lobby) TownPlayers() int {
 // Close stops accepting work. Call it once the loop has stopped, so
 // connections waiting on the inbox give up instead of blocking forever.
 func (s *Lobby) Close() {
-	s.stop.Do(func() { close(s.done) })
+	s.stop.Do(func() {
+		close(s.done)
+		for _, stop := range s.chatStops {
+			stop()
+		}
+	})
 }
 
 func (s *Lobby) drain() {
@@ -325,6 +344,7 @@ func (s *Lobby) serveTown(w http.ResponseWriter, r *http.Request, shardPath bool
 	}
 	c := s.newClient(name, class, ctx, cancel)
 	c.bot = join.GetBot()
+	c.chatOff = chat.Left(join.GetChatLeft())
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
@@ -447,6 +467,10 @@ func (s *Lobby) handle(c *client, msg *gamev1.ClientMessage) {
 	case *gamev1.ClientMessage_Move:
 		if cmd, ok := protocol.Command(msg, c.id); ok && c.id != 0 {
 			s.rules.Submit(cmd)
+		}
+	case *gamev1.ClientMessage_Chat:
+		if c.id != 0 {
+			s.chatSend(c, p.Chat.GetText())
 		}
 	case *gamev1.ClientMessage_StashMove:
 		s.moveItem(c, p.StashMove.GetItemId(), p.StashMove.GetTo())

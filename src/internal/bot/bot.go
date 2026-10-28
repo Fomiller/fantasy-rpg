@@ -16,6 +16,7 @@ import (
 	"github.com/coder/websocket"
 
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
+	"github.com/Fomiller/fantasy-rpg/src/internal/chat"
 )
 
 type Config struct {
@@ -213,7 +214,7 @@ func (b *Bot) townOn(ctx context.Context, url string, returning bool, start time
 	}
 	defer c.close("bot leaving")
 	if err := c.send(ctx, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{
-		Name: b.name, Returning: returning, Bot: !b.cfg.Human,
+		Name: b.name, Returning: returning, Bot: !b.cfg.Human, ChatLeft: chat.Shared,
 	}}}); err != nil {
 		return nil, "", fail("world_join", err)
 	}

@@ -34,6 +34,8 @@ in Hub town.
 - On SIGTERM the world fails `/readyz`, publishes draining, and moves its
   players with `TownTicket`, 4 every 250 ms. It stops when empty, when the
   directory has nowhere to send them, or at 30 s. Done in FOM-258.
+- Chat runs on the cluster's NATS, between every shard and cave. Done in
+  FOM-262. See [Chat](chat.md).
 - Caves run on the Agones Fleet with a buffer FleetAutoscaler, max 8.
 - `inventory` is two or three pods, `RollingUpdate`, with a PDB. KEDA
   scales it on store calls and `run.ended` lag. It owns Postgres.
@@ -350,10 +352,10 @@ state. A front door that just started must read every shard's count at
 once, not wait for the next heartbeat. NATS KV would work, but needs
 JetStream and storage on a NATS that other apps share.
 
-**Where NATS fits later:** messages, not state. Chat, party invites to a
-player on another shard, and a message to a player in a cave. Core NATS
-subjects fit that: `frpg.chat.global`, `frpg.player.<name>`. The homelab
-already runs it.
+**Where NATS fits:** messages, not state. Chat is the first use, built in
+FOM-262: see [Chat](chat.md). Party invites to a player on another shard
+would use the same `frpg.player.<name>` subject. The homelab already runs
+it, so the chart only points `NATS_URL` at it.
 
 ### Parties landing together
 
@@ -404,13 +406,20 @@ On SIGTERM a shard:
   own players.
 - `just dev` is one shard. The front door's pick is always itself.
 
-### Cross-shard chat (stretch)
+### Cross-shard chat
 
-- Each shard subscribes to `frpg.chat.global` on NATS, and to
-  `frpg.chat.party.<id>` for its parties.
-- A chat message goes to NATS, and every shard sends it to its players.
-  At most once. No history.
-- A rate limit per player, on the shard that receives it.
+Built in FOM-262. The design is on its own page, [Chat](chat.md). In short:
+
+- General, Trade and LookingForGroup are NATS subjects under
+  `frpg.chat.channel.`. Every town shard and every cave subscribes, and
+  sends what arrives to its players who joined the channel.
+- A whisper is a NATS request to `frpg.player.<name>`. No responder means
+  the player is not online.
+- Delivery is at most once. There is no history.
+- The rate limit is per player, on the server that receives the line.
+- Both servers need `NATS_URL`. Without it they refuse to start, as they
+  do without a store.
+- There is no party channel, since parties do not exist.
 
 ## 3. HA
 
@@ -568,7 +577,7 @@ Deferred. Nothing reads hot enough to need one.
 | CNPG Pooler | Connections are low | Over half of `max_connections` |
 | Stash cache | No hot reads | See Caching |
 | Towns on Agones | Towns do not end | If towns become timed sessions |
-| Parties, cross-shard chat | Features that do not exist | When parties ship |
+| Parties, party chat | Features that do not exist | When parties ship |
 
 ## 7. Operators and infra
 
@@ -577,7 +586,7 @@ Deferred. Nothing reads hot enough to need one.
 | KEDA operator | homelab | Shared operator, like CNPG and the Redpanda operator |
 | Longhorn 1-replica StorageClass | homelab | For CNPG now, Redpanda later |
 | Prometheus and Grafana values | homelab | Monitor selector and sidecar namespaces, only if the defaults block them |
-| NATS | homelab | Already installed. Used for chat later |
+| NATS | homelab | Already installed. Chat uses it, through `nats.url` in the chart |
 | Valkey | fantasy-rpg | A Deployment and Service in the chart. One pod needs no operator |
 | ScaledObjects | fantasy-rpg | In the chart |
 | PodMonitors, dashboards, PDBs | fantasy-rpg | In the chart |
@@ -662,6 +671,8 @@ In build order. Each one merges on its own and leaves the game playable.
       `OPTIONAL_PLAYER_URLS` lists the other shards up to `maxShards`, and
       a shard that does not answer counts as empty.
     - Bot run that scales shards up and back down.
-16. **fantasy-rpg: cross-shard chat on NATS (stretch).**
-    - Global and party subjects, rate limit per player.
-    - Only once chat exists in one town.
+16. **fantasy-rpg: chat on NATS (FOM-262).**
+    - Say and yell in a town or cave, General, Trade and LookingForGroup
+      across all of them, whispers by name. Rate limit per player.
+    - Built for the town and the caves together, in one change. No party
+      channel, since parties do not exist.

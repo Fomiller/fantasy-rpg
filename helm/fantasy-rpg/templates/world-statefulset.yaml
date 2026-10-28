@@ -75,6 +75,9 @@ spec:
             {{- include "chart.joinKeyEnv" . | nindent 12 }}
             {{- end }}
             {{- include "chart.inventoryEnv" . | nindent 12 }}
+            {{- if .Values.nats.url }}
+            {{- include "chart.natsEnv" . | nindent 12 }}
+            {{- end }}
             {{- include "chart.loggingEnv" . | nindent 12 }}
             {{- if .Values.valkey.enabled }}
             {{- include "chart.townEnv" . | nindent 12 }}

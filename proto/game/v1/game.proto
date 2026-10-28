@@ -22,6 +22,7 @@ message ClientMessage {
     LootCloseRequest loot_close = 19;
     StashMoveRequest stash_move = 21;
     InstanceJoinRequest instance_join = 22;
+    ChatSend chat = 23;
   }
 }
 
@@ -47,6 +48,8 @@ message ServerMessage {
     EnterInstanceRejected enter_instance_rejected = 26;
     InstanceTicket ticket = 27;
     TownTicket town_ticket = 28;
+    ChatMessage chat = 29;
+    ChatChannels chat_channels = 30;
   }
 }
 
@@ -74,6 +77,12 @@ message JoinRequest {
   // Set by the headless bot. It only keeps the player out of the human
   // count the bot director fills against, so a client gains nothing by it.
   bool bot = 4;
+  // Chat channels the player left, as the last ChatChannels showed them.
+  // General, trade and lfg are all joined when this is empty, so a new
+  // session and a client that never heard of chat get the defaults. The
+  // client sends it again on every join, so leaving a channel survives a
+  // move to another town shard and the trip back from a cave.
+  repeated string chat_left = 5;
 }
 
 // JoinAccepted is sent when the world server puts the player in the town,
@@ -503,4 +512,38 @@ message TownTicket {
 // only one an instance server takes before JoinAccepted.
 message InstanceJoinRequest {
   string token = 1;
+}
+
+// Chat
+
+// ChatSend is one line the player typed, slash command and all. The server
+// reads the command, so the client does not need to know them. It is
+// accepted in the town and in a cave.
+//
+// /s or no command says it to players nearby. /y yells to the whole town
+// shard or cave. /1, /2 and /3 speak in General, Trade and LookingForGroup,
+// to every shard and cave. /w name text whispers to one player anywhere. /r
+// text answers the last player who whispered. /join and /leave take a
+// channel name: general, trade or lfg.
+message ChatSend {
+  // At most 255 characters. The server cuts the rest, and drops the line if
+  // nothing is left once control characters are removed.
+  string text = 1;
+}
+
+// ChatMessage is one line for the chat box. The server sets sender, from
+// the connection. A message is sent once and kept nowhere.
+message ChatMessage {
+  // One of say, yell, general, trade, lfg, whisper_from, whisper_to, system.
+  string channel = 1;
+  // Who said it. For whisper_to, the player it went to. Empty for system.
+  string sender = 2;
+  string text = 3;
+}
+
+// ChatChannels is the channels the player has joined. It follows
+// JoinAccepted, and comes again after /join and /leave. Names are general,
+// trade and lfg.
+message ChatChannels {
+  repeated string joined = 1;
 }

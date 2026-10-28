@@ -286,6 +286,7 @@ type ClientMessage struct {
 	//	*ClientMessage_LootClose
 	//	*ClientMessage_StashMove
 	//	*ClientMessage_InstanceJoin
+	//	*ClientMessage_Chat
 	Payload       isClientMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -443,6 +444,15 @@ func (x *ClientMessage) GetInstanceJoin() *InstanceJoinRequest {
 	return nil
 }
 
+func (x *ClientMessage) GetChat() *ChatSend {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_Chat); ok {
+			return x.Chat
+		}
+	}
+	return nil
+}
+
 type isClientMessage_Payload interface {
 	isClientMessage_Payload()
 }
@@ -495,6 +505,10 @@ type ClientMessage_InstanceJoin struct {
 	InstanceJoin *InstanceJoinRequest `protobuf:"bytes,22,opt,name=instance_join,json=instanceJoin,proto3,oneof"`
 }
 
+type ClientMessage_Chat struct {
+	Chat *ChatSend `protobuf:"bytes,23,opt,name=chat,proto3,oneof"`
+}
+
 func (*ClientMessage_Join) isClientMessage_Payload() {}
 
 func (*ClientMessage_Move) isClientMessage_Payload() {}
@@ -518,6 +532,8 @@ func (*ClientMessage_LootClose) isClientMessage_Payload() {}
 func (*ClientMessage_StashMove) isClientMessage_Payload() {}
 
 func (*ClientMessage_InstanceJoin) isClientMessage_Payload() {}
+
+func (*ClientMessage_Chat) isClientMessage_Payload() {}
 
 type ServerMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -543,6 +559,8 @@ type ServerMessage struct {
 	//	*ServerMessage_EnterInstanceRejected
 	//	*ServerMessage_Ticket
 	//	*ServerMessage_TownTicket
+	//	*ServerMessage_Chat
+	//	*ServerMessage_ChatChannels
 	Payload       isServerMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -763,6 +781,24 @@ func (x *ServerMessage) GetTownTicket() *TownTicket {
 	return nil
 }
 
+func (x *ServerMessage) GetChat() *ChatMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_Chat); ok {
+			return x.Chat
+		}
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetChatChannels() *ChatChannels {
+	if x != nil {
+		if x, ok := x.Payload.(*ServerMessage_ChatChannels); ok {
+			return x.ChatChannels
+		}
+	}
+	return nil
+}
+
 type isServerMessage_Payload interface {
 	isServerMessage_Payload()
 }
@@ -843,6 +879,14 @@ type ServerMessage_TownTicket struct {
 	TownTicket *TownTicket `protobuf:"bytes,28,opt,name=town_ticket,json=townTicket,proto3,oneof"`
 }
 
+type ServerMessage_Chat struct {
+	Chat *ChatMessage `protobuf:"bytes,29,opt,name=chat,proto3,oneof"`
+}
+
+type ServerMessage_ChatChannels struct {
+	ChatChannels *ChatChannels `protobuf:"bytes,30,opt,name=chat_channels,json=chatChannels,proto3,oneof"`
+}
+
 func (*ServerMessage_Joined) isServerMessage_Payload() {}
 
 func (*ServerMessage_Snapshot) isServerMessage_Payload() {}
@@ -880,6 +924,10 @@ func (*ServerMessage_EnterInstanceRejected) isServerMessage_Payload() {}
 func (*ServerMessage_Ticket) isServerMessage_Payload() {}
 
 func (*ServerMessage_TownTicket) isServerMessage_Payload() {}
+
+func (*ServerMessage_Chat) isServerMessage_Payload() {}
+
+func (*ServerMessage_ChatChannels) isServerMessage_Payload() {}
 
 type Vec2 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -997,7 +1045,13 @@ type JoinRequest struct {
 	Returning bool `protobuf:"varint,3,opt,name=returning,proto3" json:"returning,omitempty"`
 	// Set by the headless bot. It only keeps the player out of the human
 	// count the bot director fills against, so a client gains nothing by it.
-	Bot           bool `protobuf:"varint,4,opt,name=bot,proto3" json:"bot,omitempty"`
+	Bot bool `protobuf:"varint,4,opt,name=bot,proto3" json:"bot,omitempty"`
+	// Chat channels the player left, as the last ChatChannels showed them.
+	// General, trade and lfg are all joined when this is empty, so a new
+	// session and a client that never heard of chat get the defaults. The
+	// client sends it again on every join, so leaving a channel survives a
+	// move to another town shard and the trip back from a cave.
+	ChatLeft      []string `protobuf:"bytes,5,rep,name=chat_left,json=chatLeft,proto3" json:"chat_left,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1058,6 +1112,13 @@ func (x *JoinRequest) GetBot() bool {
 		return x.Bot
 	}
 	return false
+}
+
+func (x *JoinRequest) GetChatLeft() []string {
+	if x != nil {
+		return x.ChatLeft
+	}
+	return nil
 }
 
 // JoinAccepted is sent when the world server puts the player in the town,
@@ -3666,11 +3727,177 @@ func (x *InstanceJoinRequest) GetToken() string {
 	return ""
 }
 
+// ChatSend is one line the player typed, slash command and all. The server
+// reads the command, so the client does not need to know them. It is
+// accepted in the town and in a cave.
+//
+// /s or no command says it to players nearby. /y yells to the whole town
+// shard or cave. /1, /2 and /3 speak in General, Trade and LookingForGroup,
+// to every shard and cave. /w name text whispers to one player anywhere. /r
+// text answers the last player who whispered. /join and /leave take a
+// channel name: general, trade or lfg.
+type ChatSend struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// At most 255 characters. The server cuts the rest, and drops the line if
+	// nothing is left once control characters are removed.
+	Text          string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatSend) Reset() {
+	*x = ChatSend{}
+	mi := &file_game_v1_game_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatSend) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatSend) ProtoMessage() {}
+
+func (x *ChatSend) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatSend.ProtoReflect.Descriptor instead.
+func (*ChatSend) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *ChatSend) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+// ChatMessage is one line for the chat box. The server sets sender, from
+// the connection. A message is sent once and kept nowhere.
+type ChatMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One of say, yell, general, trade, lfg, whisper_from, whisper_to, system.
+	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	// Who said it. For whisper_to, the player it went to. Empty for system.
+	Sender        string `protobuf:"bytes,2,opt,name=sender,proto3" json:"sender,omitempty"`
+	Text          string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatMessage) Reset() {
+	*x = ChatMessage{}
+	mi := &file_game_v1_game_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatMessage) ProtoMessage() {}
+
+func (x *ChatMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatMessage.ProtoReflect.Descriptor instead.
+func (*ChatMessage) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ChatMessage) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+func (x *ChatMessage) GetSender() string {
+	if x != nil {
+		return x.Sender
+	}
+	return ""
+}
+
+func (x *ChatMessage) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+// ChatChannels is the channels the player has joined. It follows
+// JoinAccepted, and comes again after /join and /leave. Names are general,
+// trade and lfg.
+type ChatChannels struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Joined        []string               `protobuf:"bytes,1,rep,name=joined,proto3" json:"joined,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatChannels) Reset() {
+	*x = ChatChannels{}
+	mi := &file_game_v1_game_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatChannels) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatChannels) ProtoMessage() {}
+
+func (x *ChatChannels) ProtoReflect() protoreflect.Message {
+	mi := &file_game_v1_game_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatChannels.ProtoReflect.Descriptor instead.
+func (*ChatChannels) Descriptor() ([]byte, []int) {
+	return file_game_v1_game_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ChatChannels) GetJoined() []string {
+	if x != nil {
+		return x.Joined
+	}
+	return nil
+}
+
 var File_game_v1_game_proto protoreflect.FileDescriptor
 
 const file_game_v1_game_proto_rawDesc = "" +
 	"\n" +
-	"\x12game/v1/game.proto\x12\agame.v1\"\xae\x05\n" +
+	"\x12game/v1/game.proto\x12\agame.v1\"\xd7\x05\n" +
 	"\rClientMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12*\n" +
 	"\x04join\x18\n" +
@@ -3687,8 +3914,9 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"loot_close\x18\x13 \x01(\v2\x19.game.v1.LootCloseRequestH\x00R\tlootClose\x12:\n" +
 	"\n" +
 	"stash_move\x18\x15 \x01(\v2\x19.game.v1.StashMoveRequestH\x00R\tstashMove\x12C\n" +
-	"\rinstance_join\x18\x16 \x01(\v2\x1c.game.v1.InstanceJoinRequestH\x00R\finstanceJoinB\t\n" +
-	"\apayload\"\xf7\b\n" +
+	"\rinstance_join\x18\x16 \x01(\v2\x1c.game.v1.InstanceJoinRequestH\x00R\finstanceJoin\x12'\n" +
+	"\x04chat\x18\x17 \x01(\v2\x11.game.v1.ChatSendH\x00R\x04chatB\t\n" +
+	"\apayload\"\xe1\t\n" +
 	"\rServerMessage\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12/\n" +
 	"\x06joined\x18\n" +
@@ -3711,19 +3939,22 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\x17enter_instance_rejected\x18\x1a \x01(\v2\x1e.game.v1.EnterInstanceRejectedH\x00R\x15enterInstanceRejected\x121\n" +
 	"\x06ticket\x18\x1b \x01(\v2\x17.game.v1.InstanceTicketH\x00R\x06ticket\x126\n" +
 	"\vtown_ticket\x18\x1c \x01(\v2\x13.game.v1.TownTicketH\x00R\n" +
-	"townTicketB\t\n" +
+	"townTicket\x12*\n" +
+	"\x04chat\x18\x1d \x01(\v2\x14.game.v1.ChatMessageH\x00R\x04chat\x12<\n" +
+	"\rchat_channels\x18\x1e \x01(\v2\x15.game.v1.ChatChannelsH\x00R\fchatChannelsB\t\n" +
 	"\apayload\"\"\n" +
 	"\x04Vec2\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\x02R\x01y\"H\n" +
 	"\x04Rect\x12\x1f\n" +
 	"\x03min\x18\x01 \x01(\v2\r.game.v1.Vec2R\x03min\x12\x1f\n" +
-	"\x03max\x18\x02 \x01(\v2\r.game.v1.Vec2R\x03max\"l\n" +
+	"\x03max\x18\x02 \x01(\v2\r.game.v1.Vec2R\x03max\"\x89\x01\n" +
 	"\vJoinRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bclass_id\x18\x02 \x01(\tR\aclassId\x12\x1c\n" +
 	"\treturning\x18\x03 \x01(\bR\treturning\x12\x10\n" +
-	"\x03bot\x18\x04 \x01(\bR\x03bot\"\x9b\x02\n" +
+	"\x03bot\x18\x04 \x01(\bR\x03bot\x12\x1b\n" +
+	"\tchat_left\x18\x05 \x03(\tR\bchatLeft\"\x9b\x02\n" +
 	"\fJoinAccepted\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x04R\bplayerId\x12/\n" +
 	"\x06layout\x18\x02 \x01(\v2\x17.game.v1.InstanceLayoutR\x06layout\x12#\n" +
@@ -3915,7 +4146,15 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"TownTicket\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"+\n" +
 	"\x13InstanceJoinRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token*\xa1\x01\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"\x1e\n" +
+	"\bChatSend\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\"S\n" +
+	"\vChatMessage\x12\x18\n" +
+	"\achannel\x18\x01 \x01(\tR\achannel\x12\x16\n" +
+	"\x06sender\x18\x02 \x01(\tR\x06sender\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\"&\n" +
+	"\fChatChannels\x12\x16\n" +
+	"\x06joined\x18\x01 \x03(\tR\x06joined*\xa1\x01\n" +
 	"\n" +
 	"EntityKind\x12\x1b\n" +
 	"\x17ENTITY_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -3965,7 +4204,7 @@ func file_game_v1_game_proto_rawDescGZIP() []byte {
 }
 
 var file_game_v1_game_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_game_v1_game_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_game_v1_game_proto_goTypes = []any{
 	(EntityKind)(0),               // 0: game.v1.EntityKind
 	(EnemyState)(0),               // 1: game.v1.EnemyState
@@ -4015,6 +4254,9 @@ var file_game_v1_game_proto_goTypes = []any{
 	(*InstanceTicket)(nil),        // 45: game.v1.InstanceTicket
 	(*TownTicket)(nil),            // 46: game.v1.TownTicket
 	(*InstanceJoinRequest)(nil),   // 47: game.v1.InstanceJoinRequest
+	(*ChatSend)(nil),              // 48: game.v1.ChatSend
+	(*ChatMessage)(nil),           // 49: game.v1.ChatMessage
+	(*ChatChannels)(nil),          // 50: game.v1.ChatChannels
 }
 var file_game_v1_game_proto_depIdxs = []int32{
 	8,  // 0: game.v1.ClientMessage.join:type_name -> game.v1.JoinRequest
@@ -4029,68 +4271,71 @@ var file_game_v1_game_proto_depIdxs = []int32{
 	34, // 9: game.v1.ClientMessage.loot_close:type_name -> game.v1.LootCloseRequest
 	42, // 10: game.v1.ClientMessage.stash_move:type_name -> game.v1.StashMoveRequest
 	47, // 11: game.v1.ClientMessage.instance_join:type_name -> game.v1.InstanceJoinRequest
-	9,  // 12: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
-	24, // 13: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
-	22, // 14: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
-	30, // 15: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
-	13, // 16: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
-	29, // 17: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
-	20, // 18: game.v1.ServerMessage.ability_used:type_name -> game.v1.AbilityUsed
-	21, // 19: game.v1.ServerMessage.ability_rejected:type_name -> game.v1.AbilityRejected
-	35, // 20: game.v1.ServerMessage.loot:type_name -> game.v1.LootContents
-	32, // 21: game.v1.ServerMessage.pickup_rejected:type_name -> game.v1.PickupRejected
-	16, // 22: game.v1.ServerMessage.xp_gained:type_name -> game.v1.XpGained
-	17, // 23: game.v1.ServerMessage.level_up:type_name -> game.v1.LevelUp
-	14, // 24: game.v1.ServerMessage.run_ended:type_name -> game.v1.RunEnded
-	40, // 25: game.v1.ServerMessage.lobby:type_name -> game.v1.Lobby
-	41, // 26: game.v1.ServerMessage.stash:type_name -> game.v1.StashContents
-	43, // 27: game.v1.ServerMessage.stash_move_rejected:type_name -> game.v1.StashMoveRejected
-	44, // 28: game.v1.ServerMessage.enter_instance_rejected:type_name -> game.v1.EnterInstanceRejected
-	45, // 29: game.v1.ServerMessage.ticket:type_name -> game.v1.InstanceTicket
-	46, // 30: game.v1.ServerMessage.town_ticket:type_name -> game.v1.TownTicket
-	6,  // 31: game.v1.Rect.min:type_name -> game.v1.Vec2
-	6,  // 32: game.v1.Rect.max:type_name -> game.v1.Vec2
-	25, // 33: game.v1.JoinAccepted.layout:type_name -> game.v1.InstanceLayout
-	6,  // 34: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
-	11, // 35: game.v1.JoinAccepted.class_info:type_name -> game.v1.ClassInfo
-	10, // 36: game.v1.JoinAccepted.character:type_name -> game.v1.CharacterInfo
-	12, // 37: game.v1.ClassInfo.abilities:type_name -> game.v1.AbilityInfo
-	15, // 38: game.v1.Extracted.summary:type_name -> game.v1.RunSummary
-	15, // 39: game.v1.RunEnded.summary:type_name -> game.v1.RunSummary
-	10, // 40: game.v1.RunSummary.character:type_name -> game.v1.CharacterInfo
-	26, // 41: game.v1.RunSummary.kept:type_name -> game.v1.Item
-	26, // 42: game.v1.RunSummary.overflow:type_name -> game.v1.Item
-	11, // 43: game.v1.LevelUp.class_info:type_name -> game.v1.ClassInfo
-	6,  // 44: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
-	6,  // 45: game.v1.AttackRequest.aim:type_name -> game.v1.Vec2
-	6,  // 46: game.v1.AbilityUsed.aim:type_name -> game.v1.Vec2
-	0,  // 47: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
-	6,  // 48: game.v1.EntityState.position:type_name -> game.v1.Vec2
-	6,  // 49: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
-	1,  // 50: game.v1.EntityState.enemy_state:type_name -> game.v1.EnemyState
-	6,  // 51: game.v1.EntityState.aim:type_name -> game.v1.Vec2
-	23, // 52: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
-	7,  // 53: game.v1.InstanceLayout.bounds:type_name -> game.v1.Rect
-	7,  // 54: game.v1.InstanceLayout.walls:type_name -> game.v1.Rect
-	7,  // 55: game.v1.InstanceLayout.extraction:type_name -> game.v1.Rect
-	7,  // 56: game.v1.InstanceLayout.entrance:type_name -> game.v1.Rect
-	6,  // 57: game.v1.InstanceLayout.stash:type_name -> game.v1.Vec2
-	2,  // 58: game.v1.Item.rarity:type_name -> game.v1.Rarity
-	27, // 59: game.v1.Item.base:type_name -> game.v1.ItemStat
-	28, // 60: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
-	26, // 61: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
-	27, // 62: game.v1.EquipmentUpdated.stats:type_name -> game.v1.ItemStat
-	26, // 63: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
-	26, // 64: game.v1.LootContents.items:type_name -> game.v1.Item
-	10, // 65: game.v1.Lobby.character:type_name -> game.v1.CharacterInfo
-	11, // 66: game.v1.Lobby.class_info:type_name -> game.v1.ClassInfo
-	26, // 67: game.v1.StashContents.items:type_name -> game.v1.Item
-	3,  // 68: game.v1.StashMoveRequest.to:type_name -> game.v1.ItemPlace
-	69, // [69:69] is the sub-list for method output_type
-	69, // [69:69] is the sub-list for method input_type
-	69, // [69:69] is the sub-list for extension type_name
-	69, // [69:69] is the sub-list for extension extendee
-	0,  // [0:69] is the sub-list for field type_name
+	48, // 12: game.v1.ClientMessage.chat:type_name -> game.v1.ChatSend
+	9,  // 13: game.v1.ServerMessage.joined:type_name -> game.v1.JoinAccepted
+	24, // 14: game.v1.ServerMessage.snapshot:type_name -> game.v1.WorldSnapshot
+	22, // 15: game.v1.ServerMessage.damage:type_name -> game.v1.DamageEvent
+	30, // 16: game.v1.ServerMessage.inventory:type_name -> game.v1.InventoryUpdated
+	13, // 17: game.v1.ServerMessage.extracted:type_name -> game.v1.Extracted
+	29, // 18: game.v1.ServerMessage.equipment:type_name -> game.v1.EquipmentUpdated
+	20, // 19: game.v1.ServerMessage.ability_used:type_name -> game.v1.AbilityUsed
+	21, // 20: game.v1.ServerMessage.ability_rejected:type_name -> game.v1.AbilityRejected
+	35, // 21: game.v1.ServerMessage.loot:type_name -> game.v1.LootContents
+	32, // 22: game.v1.ServerMessage.pickup_rejected:type_name -> game.v1.PickupRejected
+	16, // 23: game.v1.ServerMessage.xp_gained:type_name -> game.v1.XpGained
+	17, // 24: game.v1.ServerMessage.level_up:type_name -> game.v1.LevelUp
+	14, // 25: game.v1.ServerMessage.run_ended:type_name -> game.v1.RunEnded
+	40, // 26: game.v1.ServerMessage.lobby:type_name -> game.v1.Lobby
+	41, // 27: game.v1.ServerMessage.stash:type_name -> game.v1.StashContents
+	43, // 28: game.v1.ServerMessage.stash_move_rejected:type_name -> game.v1.StashMoveRejected
+	44, // 29: game.v1.ServerMessage.enter_instance_rejected:type_name -> game.v1.EnterInstanceRejected
+	45, // 30: game.v1.ServerMessage.ticket:type_name -> game.v1.InstanceTicket
+	46, // 31: game.v1.ServerMessage.town_ticket:type_name -> game.v1.TownTicket
+	49, // 32: game.v1.ServerMessage.chat:type_name -> game.v1.ChatMessage
+	50, // 33: game.v1.ServerMessage.chat_channels:type_name -> game.v1.ChatChannels
+	6,  // 34: game.v1.Rect.min:type_name -> game.v1.Vec2
+	6,  // 35: game.v1.Rect.max:type_name -> game.v1.Vec2
+	25, // 36: game.v1.JoinAccepted.layout:type_name -> game.v1.InstanceLayout
+	6,  // 37: game.v1.JoinAccepted.spawn:type_name -> game.v1.Vec2
+	11, // 38: game.v1.JoinAccepted.class_info:type_name -> game.v1.ClassInfo
+	10, // 39: game.v1.JoinAccepted.character:type_name -> game.v1.CharacterInfo
+	12, // 40: game.v1.ClassInfo.abilities:type_name -> game.v1.AbilityInfo
+	15, // 41: game.v1.Extracted.summary:type_name -> game.v1.RunSummary
+	15, // 42: game.v1.RunEnded.summary:type_name -> game.v1.RunSummary
+	10, // 43: game.v1.RunSummary.character:type_name -> game.v1.CharacterInfo
+	26, // 44: game.v1.RunSummary.kept:type_name -> game.v1.Item
+	26, // 45: game.v1.RunSummary.overflow:type_name -> game.v1.Item
+	11, // 46: game.v1.LevelUp.class_info:type_name -> game.v1.ClassInfo
+	6,  // 47: game.v1.MoveInput.direction:type_name -> game.v1.Vec2
+	6,  // 48: game.v1.AttackRequest.aim:type_name -> game.v1.Vec2
+	6,  // 49: game.v1.AbilityUsed.aim:type_name -> game.v1.Vec2
+	0,  // 50: game.v1.EntityState.kind:type_name -> game.v1.EntityKind
+	6,  // 51: game.v1.EntityState.position:type_name -> game.v1.Vec2
+	6,  // 52: game.v1.EntityState.velocity:type_name -> game.v1.Vec2
+	1,  // 53: game.v1.EntityState.enemy_state:type_name -> game.v1.EnemyState
+	6,  // 54: game.v1.EntityState.aim:type_name -> game.v1.Vec2
+	23, // 55: game.v1.WorldSnapshot.entities:type_name -> game.v1.EntityState
+	7,  // 56: game.v1.InstanceLayout.bounds:type_name -> game.v1.Rect
+	7,  // 57: game.v1.InstanceLayout.walls:type_name -> game.v1.Rect
+	7,  // 58: game.v1.InstanceLayout.extraction:type_name -> game.v1.Rect
+	7,  // 59: game.v1.InstanceLayout.entrance:type_name -> game.v1.Rect
+	6,  // 60: game.v1.InstanceLayout.stash:type_name -> game.v1.Vec2
+	2,  // 61: game.v1.Item.rarity:type_name -> game.v1.Rarity
+	27, // 62: game.v1.Item.base:type_name -> game.v1.ItemStat
+	28, // 63: game.v1.Item.affixes:type_name -> game.v1.ItemAffix
+	26, // 64: game.v1.EquipmentUpdated.items:type_name -> game.v1.Item
+	27, // 65: game.v1.EquipmentUpdated.stats:type_name -> game.v1.ItemStat
+	26, // 66: game.v1.InventoryUpdated.items:type_name -> game.v1.Item
+	26, // 67: game.v1.LootContents.items:type_name -> game.v1.Item
+	10, // 68: game.v1.Lobby.character:type_name -> game.v1.CharacterInfo
+	11, // 69: game.v1.Lobby.class_info:type_name -> game.v1.ClassInfo
+	26, // 70: game.v1.StashContents.items:type_name -> game.v1.Item
+	3,  // 71: game.v1.StashMoveRequest.to:type_name -> game.v1.ItemPlace
+	72, // [72:72] is the sub-list for method output_type
+	72, // [72:72] is the sub-list for method input_type
+	72, // [72:72] is the sub-list for extension type_name
+	72, // [72:72] is the sub-list for extension extendee
+	0,  // [0:72] is the sub-list for field type_name
 }
 
 func init() { file_game_v1_game_proto_init() }
@@ -4111,6 +4356,7 @@ func file_game_v1_game_proto_init() {
 		(*ClientMessage_LootClose)(nil),
 		(*ClientMessage_StashMove)(nil),
 		(*ClientMessage_InstanceJoin)(nil),
+		(*ClientMessage_Chat)(nil),
 	}
 	file_game_v1_game_proto_msgTypes[1].OneofWrappers = []any{
 		(*ServerMessage_Joined)(nil),
@@ -4132,6 +4378,8 @@ func file_game_v1_game_proto_init() {
 		(*ServerMessage_EnterInstanceRejected)(nil),
 		(*ServerMessage_Ticket)(nil),
 		(*ServerMessage_TownTicket)(nil),
+		(*ServerMessage_Chat)(nil),
+		(*ServerMessage_ChatChannels)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -4139,7 +4387,7 @@ func file_game_v1_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_v1_game_proto_rawDesc), len(file_game_v1_game_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   44,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

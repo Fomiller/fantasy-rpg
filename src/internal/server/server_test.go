@@ -112,6 +112,12 @@ func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)
 // configure runs before the servers start, so it can set what they read.
 func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.Store, configure ...func(*Server)) harness {
 	t.Helper()
+	return serveBoth(t, cave, testTown(), cfg, store, nil, configure...)
+}
+
+// serveBoth is serveWith with the town and the world server's own setup.
+func serveBoth(t *testing.T, cave, town caves.Cave, cfg sim.Config, store inventory.Store, configureWorld func(*Lobby), configure ...func(*Server)) harness {
+	t.Helper()
 	loot := items.NewRoller(items.Default(), 1)
 	world := cave.NewWorld(cfg, loot)
 	enemy := world.AddEnemy(sim.Vec2{X: 40, Y: 0}, sim.Melee)
@@ -135,11 +141,14 @@ func serveWith(t *testing.T, cave caves.Cave, cfg sim.Config, store inventory.St
 	mux.HandleFunc("GET /instances/"+srv.ID+"/ws", srv.HandleWS)
 	is := httptest.NewServer(mux)
 
-	lobby := NewLobby(testTown(), cfg, items.NewRoller(items.Default(), 2), quiet())
+	lobby := NewLobby(town, cfg, items.NewRoller(items.Default(), 2), quiet())
 	lobby.Store = store
 	lobby.JoinKey = testKey
 	lobby.leaseRetry = 20 * time.Millisecond
 	lobby.closeGrace = 10 * time.Millisecond
+	if configureWorld != nil {
+		configureWorld(lobby)
+	}
 	dir := NewDirectory([]Instance{{ID: srv.ID, Internal: is.URL, Public: wsURL(is.URL) + "/instances/" + srv.ID + "/ws"}})
 	dir.Poll(ctx)
 	lobby.Instances = dir
