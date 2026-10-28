@@ -47,6 +47,8 @@ services:
     environment:
       INVENTORY_URL: http://inventory:8080
       JOIN_TOKEN_KEY: dev-only
+      # The chart logs JSON. Text reads better in `docker compose logs`.
+      LOG_FORMAT: text
       KAFKA_BROKERS: redpanda:9092
       # Polled inside the network, handed to the client as localhost.
       INSTANCES: >-
@@ -72,6 +74,7 @@ services:
     environment:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
       KAFKA_BROKERS: redpanda:9092
+      LOG_FORMAT: text
     ports:
       - "8070:8080"
     depends_on:
@@ -91,6 +94,7 @@ services:
     command: ["migrate"]
     environment:
       DATABASE_URL: postgres://fantasy:fantasy@postgres:5432/fantasy?sslmode=disable
+      LOG_FORMAT: text
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,6 +112,7 @@ services:
       JOIN_TOKEN_KEY: dev-only
       INSTANCE_ID: instance-0
       KAFKA_BROKERS: redpanda:9092
+      LOG_FORMAT: text
     ports:
       - "8081:8080"
     depends_on:

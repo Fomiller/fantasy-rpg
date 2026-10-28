@@ -32,4 +32,5 @@ spec:
           args: [migrate]
           env:
             {{- include "chart.databaseEnv" . | nindent 12 }}
+            {{- include "chart.loggingEnv" . | nindent 12 }}
 {{- end }}

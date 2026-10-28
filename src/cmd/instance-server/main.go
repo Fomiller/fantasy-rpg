@@ -25,16 +25,18 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/jointoken"
+	"github.com/Fomiller/fantasy-rpg/src/internal/logging"
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
 )
 
 func main() {
-	cmd := run
+	cmd, service := run, "instance-server"
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
-		cmd = runMigrate
+		cmd, service = runMigrate, "migrate"
 	}
+	logging.New(service)
 	if err := cmd(); err != nil {
 		slog.Error("instance-server stopped", "err", err)
 		os.Exit(1)

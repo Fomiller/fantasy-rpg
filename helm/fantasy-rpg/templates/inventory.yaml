@@ -50,6 +50,7 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            {{- include "chart.loggingEnv" . | nindent 12 }}
             {{- if .Values.events.brokers }}
             {{- include "chart.eventsEnv" . | nindent 12 }}
             {{- end }}

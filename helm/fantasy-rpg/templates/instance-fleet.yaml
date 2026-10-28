@@ -79,6 +79,7 @@ spec:
                       fieldPath: metadata.name
                 - name: MAX_PLAYERS
                   value: {{ .Values.instances.maxPlayers | quote }}
+                {{- include "chart.loggingEnv" . | nindent 16 }}
                 {{- if .Values.events.brokers }}
                 {{- include "chart.eventsEnv" . | nindent 16 }}
                 {{- end }}

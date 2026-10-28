@@ -20,11 +20,13 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/events"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory"
 	"github.com/Fomiller/fantasy-rpg/src/internal/inventory/httpstore"
+	"github.com/Fomiller/fantasy-rpg/src/internal/logging"
 )
 
 const drainDelay = 5 * time.Second
 
 func main() {
+	logging.New("inventory")
 	if err := run(); err != nil {
 		slog.Error("inventory stopped", "err", err)
 		os.Exit(1)

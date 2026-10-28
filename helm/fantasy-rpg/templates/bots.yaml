@@ -113,6 +113,7 @@ spec:
               value: {{ .Values.bots.fill.upDelay | quote }}
             - name: FILL_DOWN_DELAY
               value: {{ .Values.bots.fill.downDelay | quote }}
+            {{- include "chart.loggingEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /healthz
@@ -189,6 +190,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            {{- include "chart.loggingEnv" . | nindent 12 }}
           ports:
             - name: http
               containerPort: 9090

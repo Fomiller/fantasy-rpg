@@ -18,6 +18,12 @@ imagePullSecrets: []
 # Plain configuration in the container env shape, e.g. TICK_RATE or LOOT_SEED.
 env: []
 
+# LOG_LEVEL and LOG_FORMAT for every Go container. level is debug, info, warn
+# or error. format is json or text.
+logging:
+  level: info
+  format: json
+
 # The instance servers: an Agones Fleet. Each GameServer's name is its
 # instance id and its route, /instances/<name>/. One instance per pod.
 instances:
