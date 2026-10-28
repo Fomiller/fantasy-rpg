@@ -10,7 +10,7 @@ const REMOTE_PLAYER_SCENE := preload("res://scenes/remote_player.tscn")
 const LOOT_SCENE := preload("res://scenes/loot.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/projectile.tscn")
 # Where +XP popups start, above the player's head.
-const POPUP_OFFSET := Vector2(-24, -56)
+const POPUP_OFFSET := Vector2(-24, -84)
 const POPUP_SPACING := 16.0
 # Slot 0 is the basic attack.
 const ABILITY_ACTIONS := ["attack", "ability_1", "ability_2", "ability_3"]
@@ -41,6 +41,7 @@ const TOAST_SECONDS := 4.0
 @onready var _abilities: AbilityBar = $HUD/Abilities
 @onready var _loot: LootWindow = $HUD/Windows/Right/Column/Loot
 @onready var _character: CharacterScreen = $HUD/Windows/Left/Character
+@onready var _settings_window: SettingsWindow = $HUD/Windows/Right/Column/Settings
 @onready var _xp_bar: XpBar = $HUD/XpBar
 @onready var _level_up: LevelUpBanner = $HUD/LevelUp
 @onready var _summary: RunSummaryWindow = $HUD/Windows/Right/Column/RunSummary
@@ -52,6 +53,7 @@ const TOAST_SECONDS := 4.0
 var send_attack: Callable
 # Shows the server ghost, the overlay and the labels with server state.
 var debug := false
+var settings := GameSettings.new()
 
 var _last_tick := 0
 var _last_snapshot_ms := 0
@@ -102,6 +104,10 @@ func _ready() -> void:
 	_connection.chat_channels_changed.connect(_chat.apply_left_channels)
 	_chat.send_chat = _connection.send_chat
 	_chat.typing_changed.connect(_on_typing_changed)
+	settings.load_file()
+	settings.changed.connect(_apply_settings)
+	_settings_window.setup(settings)
+	_apply_settings()
 	_player.cave = _cave
 	_player.send_move = _connection.send_move
 	send_attack = _connection.send_attack
@@ -128,6 +134,8 @@ func _physics_process(_delta: float) -> void:
 		_inventory.visible = not _inventory.visible
 	if Input.is_action_just_pressed("character"):
 		_character.visible = not _character.visible
+	if Input.is_action_just_pressed("settings"):
+		_settings_window.visible = not _settings_window.visible
 	if _connection.in_town:
 		if Input.is_action_just_pressed("interact") and near_stash(_ghost.position):
 			_stash.open()
@@ -192,6 +200,18 @@ func set_debug(on: bool) -> void:
 	_ghost.visible = on and _connection.is_joined()
 	for view: EntityView in _views.values():
 		view.debug = on
+
+
+func _apply_settings() -> void:
+	_style_overhead(_player.overhead)
+	for view: EntityView in _views.values():
+		if view.overhead:
+			_style_overhead(view.overhead)
+
+
+func _style_overhead(overhead: Overhead) -> void:
+	overhead.show_name = settings.show_names
+	overhead.show_bar = settings.show_bars
 
 
 func debug_text() -> String:
@@ -349,6 +369,8 @@ func _on_snapshot(snapshot: GameV1.WorldSnapshot) -> void:
 			_player.reconcile(entity.get_last_input_seq(), _ghost.position, Vector2(vel.get_x(), vel.get_y()))
 			_health = entity.get_health()
 			_max_health = entity.get_max_health()
+			_player.overhead.set_vitals(_health, _max_health)
+			_player.overhead.set_player_name(entity.get_name())
 			_extract_progress = entity.get_extract_progress()
 			_abilities.set_resource(entity.get_resource(), entity.get_max_resource())
 			_abilities.set_level(entity.get_level())
@@ -398,6 +420,8 @@ func _spawn_view(kind: int) -> EntityView:
 		view = REMOTE_PLAYER_SCENE.instantiate()
 	_entities.add_child(view)
 	view.debug = debug
+	if view.overhead:
+		_style_overhead(view.overhead)
 	return view
 
 

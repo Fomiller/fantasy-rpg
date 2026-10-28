@@ -2186,7 +2186,9 @@ type EntityState struct {
 	MaxResource int32  `protobuf:"varint,16,opt,name=max_resource,json=maxResource,proto3" json:"max_resource,omitempty"`
 	// Players only, so other players' levels can be shown too. The client
 	// compares its own to AbilityInfo.unlock_level.
-	Level         uint32 `protobuf:"varint,17,opt,name=level,proto3" json:"level,omitempty"`
+	Level uint32 `protobuf:"varint,17,opt,name=level,proto3" json:"level,omitempty"`
+	// Players only. The character name.
+	Name          string `protobuf:"bytes,18,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2338,6 +2340,13 @@ func (x *EntityState) GetLevel() uint32 {
 		return x.Level
 	}
 	return 0
+}
+
+func (x *EntityState) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 type WorldSnapshot struct {
@@ -4038,7 +4047,7 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\ttarget_id\x18\x02 \x01(\x04R\btargetId\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\x05R\x06amount\x12#\n" +
 	"\rtarget_health\x18\x04 \x01(\x05R\ftargetHealth\x12\x16\n" +
-	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xc5\x04\n" +
+	"\x06killed\x18\x05 \x01(\bR\x06killed\"\xd9\x04\n" +
 	"\vEntityState\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.game.v1.EntityKindR\x04kind\x12)\n" +
@@ -4060,7 +4069,8 @@ const file_game_v1_game_proto_rawDesc = "" +
 	"\bclass_id\x18\x0e \x01(\tR\aclassId\x12\x1a\n" +
 	"\bresource\x18\x0f \x01(\x05R\bresource\x12!\n" +
 	"\fmax_resource\x18\x10 \x01(\x05R\vmaxResource\x12\x14\n" +
-	"\x05level\x18\x11 \x01(\rR\x05level\"U\n" +
+	"\x05level\x18\x11 \x01(\rR\x05level\x12\x12\n" +
+	"\x04name\x18\x12 \x01(\tR\x04name\"U\n" +
 	"\rWorldSnapshot\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x120\n" +
 	"\bentities\x18\x02 \x03(\v2\x14.game.v1.EntityStateR\bentities\"\xef\x01\n" +

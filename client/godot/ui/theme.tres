@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=8 format=3]
+[gd_resource type="Theme" load_steps=10 format=3]
 
 [sub_resource type="StyleBoxFlat" id="panel"]
 content_margin_left = 10.0
@@ -79,6 +79,12 @@ border_color = Color(0.38, 0.38, 0.48, 1)
 [sub_resource type="StyleBoxFlat" id="scroll_grabber"]
 bg_color = Color(0.45, 0.45, 0.58, 1)
 
+[sub_resource type="StyleBoxFlat" id="bar_background"]
+bg_color = Color(0, 0, 0, 0.6)
+
+[sub_resource type="StyleBoxFlat" id="bar_fill"]
+bg_color = Color(0.3, 0.9, 0.3, 1)
+
 [resource]
 default_font_size = 18
 Button/colors/font_color = Color(0.92, 0.92, 0.95, 1)
@@ -105,6 +111,12 @@ SmallLabel/font_sizes/font_size = 13
 WarnLabel/base_type = &"Label"
 WarnLabel/colors/font_color = Color(1, 0.6, 0.5, 1)
 WarnLabel/constants/outline_size = 6
+CheckButton/colors/font_color = Color(0.92, 0.92, 0.95, 1)
+CheckButton/colors/font_hover_color = Color(1, 1, 1, 1)
+CheckButton/colors/font_pressed_color = Color(0.92, 0.92, 0.95, 1)
+HealthBar/base_type = &"ProgressBar"
+HealthBar/styles/background = SubResource("bar_background")
+HealthBar/styles/fill = SubResource("bar_fill")
 LineEdit/colors/font_color = Color(0.95, 0.95, 0.95, 1)
 LineEdit/styles/normal = SubResource("line_edit")
 LineEdit/styles/read_only = SubResource("line_edit")

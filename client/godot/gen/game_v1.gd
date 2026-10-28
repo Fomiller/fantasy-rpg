@@ -4509,6 +4509,11 @@ class EntityState:
 		service.field = __level
 		data[__level.tag] = service
 		
+		__name = PBField.new("name", PB_DATA_TYPE.STRING, PB_RULE.OPTIONAL, 18, true, DEFAULT_VALUES_3[PB_DATA_TYPE.STRING])
+		service = PBServiceField.new()
+		service.field = __name
+		data[__name.tag] = service
+		
 	var data = {}
 	
 	var __id: PBField
@@ -4734,6 +4739,19 @@ class EntityState:
 		__level.value = DEFAULT_VALUES_3[PB_DATA_TYPE.UINT32]
 	func set_level(value : int) -> void:
 		__level.value = value
+	
+	var __name: PBField
+	func has_name() -> bool:
+		if __name.value != null:
+			return true
+		return false
+	func get_name() -> String:
+		return __name.value
+	func clear_name() -> void:
+		data[18].state = PB_SERVICE_STATE.UNFILLED
+		__name.value = DEFAULT_VALUES_3[PB_DATA_TYPE.STRING]
+	func set_name(value : String) -> void:
+		__name.value = value
 	
 	func _to_string() -> String:
 		return PBPacker.message_to_string(data)

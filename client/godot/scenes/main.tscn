@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/cave.gd" id="2_cave"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/run_summary.gd" id="11_run_summary"]
 [ext_resource type="Script" path="res://scripts/stash_window.gd" id="12_stash"]
 [ext_resource type="Script" path="res://scripts/chat_box.gd" id="13_chat"]
+[ext_resource type="Script" path="res://scripts/settings_window.gd" id="14_settings"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -127,6 +128,14 @@ layout_mode = 2
 script = ExtResource("11_run_summary")
 
 [node name="List" type="VBoxContainer" parent="HUD/Windows/Right/Column/RunSummary"]
+layout_mode = 2
+
+[node name="Settings" type="PanelContainer" parent="HUD/Windows/Right/Column"]
+visible = false
+layout_mode = 2
+script = ExtResource("14_settings")
+
+[node name="List" type="VBoxContainer" parent="HUD/Windows/Right/Column/Settings"]
 layout_mode = 2
 
 [node name="Abilities" type="VBoxContainer" parent="HUD"]

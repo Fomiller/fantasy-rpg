@@ -67,7 +67,8 @@ func DefaultConfig() Config {
 }
 
 type Player struct {
-	ID EntityID
+	ID   EntityID
+	Name string
 	// Class is the class id. It is set on join and never changes.
 	Class string
 	// Level comes from XP, the banked total. RunXP is earned this run and
@@ -285,6 +286,13 @@ func (w *World) AddEnemy(pos Vec2, archetype ArchetypeID) EntityID {
 	health := w.cfg.Archetypes[archetype].Health
 	w.enemies[w.nextID] = &Enemy{ID: w.nextID, Archetype: archetype, Pos: pos, Health: health, MaxHealth: health, home: pos}
 	return w.nextID
+}
+
+// SetName sets the name the snapshot shows for a player.
+func (w *World) SetName(id EntityID, name string) {
+	if p, ok := w.players[id]; ok {
+		p.Name = name
+	}
 }
 
 // RemovePlayer takes a player out mid-run, which banks XP like a death. It

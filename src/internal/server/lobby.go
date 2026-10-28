@@ -174,6 +174,7 @@ func (s *Lobby) enterTown(c *client, ch inventory.Character, returning bool) {
 		c.close(websocket.StatusInternalError, "characters unavailable")
 		return
 	}
+	s.rules.SetName(id, c.name)
 	c.id = id
 	s.inTown[id] = c
 	p, _ := s.rules.Player(id)

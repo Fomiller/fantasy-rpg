@@ -45,6 +45,7 @@ func _run() -> void:
 	var character: CharacterScreen = main.get_node("HUD/Windows/Left/Character")
 	var stash: StashWindow = main.get_node("HUD/Windows/Right/Column/Stash")
 	var summary: RunSummaryWindow = main.get_node("HUD/Windows/Right/Column/RunSummary")
+	var settings: SettingsWindow = main.get_node("HUD/Windows/Right/Column/Settings")
 
 	var bag := _items(30)
 	var gear := _items(6)
@@ -65,9 +66,10 @@ func _run() -> void:
 	inventory.visible = true
 	character.visible = true
 	stash.visible = true
+	await _tap("settings")
 	await _frames(3)
 
-	var shown: Array[Control] = [character, inventory, stash, summary]
+	var shown: Array[Control] = [character, inventory, stash, summary, settings]
 	var overlap := false
 	for i in shown.size():
 		_check(shown[i].visible, "%s is open" % shown[i].name)

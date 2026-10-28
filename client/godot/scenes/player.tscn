@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://scenes/character_sprite.tscn" id="2_sprite"]
 [ext_resource type="Texture2D" path="res://assets/kenney_tiny_dungeon/tile_0097.png" id="3_knight"]
 [ext_resource type="Texture2D" path="res://assets/kenney_tiny_dungeon/tile_0104.png" id="4_sword"]
+[ext_resource type="PackedScene" path="res://scenes/overhead.tscn" id="5_overhead"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
 size = Vector2(32, 32)
@@ -33,3 +34,5 @@ polygon = PackedVector2Array(6, 0, -3, -5, -3, 5)
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position_smoothing_enabled = true
+
+[node name="Overhead" parent="." instance=ExtResource("5_overhead")]

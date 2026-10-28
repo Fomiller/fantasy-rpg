@@ -38,6 +38,7 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 	w := sim.NewWorld(sim.DefaultConfig(), nil)
 	enemy := w.AddEnemy(sim.Vec2{X: -149, Y: 2}, sim.Ranged)
 	player := w.AddPlayer(sim.Vec2{X: 1, Y: 2})
+	w.SetName(player, "ann")
 	w.Submit(sim.MoveCommand{Player: player, Seq: 3})
 	w.Step(0)
 
@@ -48,6 +49,9 @@ func TestSnapshotListsPlayersThenEnemies(t *testing.T) {
 	p, e := snap.GetEntities()[0], snap.GetEntities()[1]
 	if p.GetId() != uint64(player) || p.GetKind() != gamev1.EntityKind_ENTITY_KIND_PLAYER || p.GetHealth() != 120 || p.GetPosition().GetX() != 1 {
 		t.Fatalf("player entity = %v", p)
+	}
+	if p.GetName() != "ann" {
+		t.Fatalf("player name = %q", p.GetName())
 	}
 	if p.GetLastInputSeq() != 3 || p.GetMaxSpeed() != 220 {
 		t.Fatalf("player prediction fields = %v", p)
