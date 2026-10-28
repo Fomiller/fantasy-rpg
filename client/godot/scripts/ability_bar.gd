@@ -35,7 +35,7 @@ func _ready() -> void:
 	_resource_bar.custom_minimum_size = Vector2(200, 12)
 	_resource_bar.show_percentage = false
 	_resource_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_rejected.modulate = Color(1, 0.5, 0.4)
+	_rejected.theme_type_variation = &"WarnLabel"
 	_list.bbcode_enabled = true
 	_list.fit_content = true
 	_list.mouse_filter = Control.MOUSE_FILTER_IGNORE

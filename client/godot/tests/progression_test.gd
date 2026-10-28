@@ -15,7 +15,7 @@ func _run() -> void:
 	var connection: ServerConnection = main.get_node("ServerConnection")
 	var bar: XpBar = main.get_node("HUD/XpBar")
 	var banner: LevelUpBanner = main.get_node("HUD/LevelUp")
-	var summary: RunSummaryWindow = main.get_node("HUD/RunSummary")
+	var summary: RunSummaryWindow = main.get_node("HUD/Windows/Right/Column/RunSummary")
 	var abilities: AbilityBar = main.get_node("HUD/Abilities")
 	main.get_node("Player").send_move = func(_direction: Vector2) -> int: return 0
 	main.send_attack = func(_target: int, ability_id: String, _aim: Vector2) -> int:

@@ -17,14 +17,14 @@ func _run() -> void:
 	root.add_child(main)
 	await _frames(2)
 	var connection: ServerConnection = main.get_node("ServerConnection")
-	var stash: StashWindow = main.get_node("HUD/Stash")
-	var summary: RunSummaryWindow = main.get_node("HUD/RunSummary")
+	var stash: StashWindow = main.get_node("HUD/Windows/Right/Column/Stash")
+	var summary: RunSummaryWindow = main.get_node("HUD/Windows/Right/Column/RunSummary")
 	var player: Player = main.get_node("Player")
 	var ghost: Node2D = main.get_node("ServerGhost")
 	var cave: Cave = main.get_node("Cave")
 	var status: Label = main.get_node("HUD/Status")
 	var toast: Label = main.get_node("HUD/Toast")
-	var panel: InventoryPanel = main.get_node("HUD/Inventory")
+	var panel: InventoryPanel = main.get_node("HUD/Windows/Right/Column/Inventory")
 	player.send_move = func(_direction: Vector2) -> int: return 0
 	main.send_attack = func(_target: int, ability_id: String, _aim: Vector2) -> int:
 		_sent.append("attack %s" % ability_id)

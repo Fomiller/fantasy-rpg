@@ -13,7 +13,7 @@ func _run() -> void:
 	root.add_child(main)
 	await _frames(2)
 	var connection: ServerConnection = main.get_node("ServerConnection")
-	var screen: CharacterScreen = main.get_node("HUD/Character")
+	var screen: CharacterScreen = main.get_node("HUD/Windows/Left/Character")
 	connection.player_id = 1
 	main.get_node("Player").send_move = func(_direction: Vector2) -> int: return 0
 	main.get_node("HUD/Abilities").setup(_warrior())
@@ -34,7 +34,7 @@ func _run() -> void:
 	_check(_has_text(screen, "Run XP 15"), "run XP shows after an XpGained")
 	connection._handle(_run_ended(_character("ann", 4, 20, 250)))
 	_check(_has_text(screen, "ann · Warrior · level 4") and _has_text(screen, "XP 20/250 to level 5") and not _has_text(screen, "Run XP"), "a run summary moves the screen to the new level")
-	main.get_node("HUD/RunSummary").visible = false
+	main.get_node("HUD/Windows/Right/Column/RunSummary").visible = false
 	screen.show_character(_character("ann", 10, 30, 0))
 	_check(_has_text(screen, "level 10") and _has_text(screen, "max level"), "the cap shows max level")
 	_check(screen.find_children("*", "CharacterSprite", true, false).size() == 1, "screen shows the character sprite")

@@ -13,8 +13,8 @@ func _run() -> void:
 	root.add_child(main)
 	await _frames(2)
 	var connection: ServerConnection = main.get_node("ServerConnection")
-	var inventory: InventoryPanel = main.get_node("HUD/Inventory")
-	var loot: LootWindow = main.get_node("HUD/Loot")
+	var inventory: InventoryPanel = main.get_node("HUD/Windows/Right/Column/Inventory")
+	var loot: LootWindow = main.get_node("HUD/Windows/Right/Column/Loot")
 	connection.player_id = 1
 	main.get_node("Player").send_move = func(_direction: Vector2) -> int: return 0
 	main.get_node("HUD/Abilities").setup(_warrior())

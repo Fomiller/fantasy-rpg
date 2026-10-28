@@ -34,6 +34,9 @@ func _ready() -> void:
 	_sprite.position = _portrait.custom_minimum_size / 2
 	_sprite.scale = Vector2.ONE * SPRITE_SCALE
 	_portrait.add_child(_sprite)
+	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_xp.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for child: Control in [_title, _xp, _portrait, _slots, _vitals, _stats]:
 		_list.add_child(child)
 	clear()
@@ -91,7 +94,7 @@ func show_equipment(items: Array[GameV1.Item]) -> void:
 			row.add_child(empty)
 		var label := Label.new()
 		label.text = slot.capitalize()
-		label.custom_minimum_size.x = 64
+		label.custom_minimum_size.x = 80
 		row.add_child(label)
 		row.move_child(label, 0)
 		_slots.add_child(row)

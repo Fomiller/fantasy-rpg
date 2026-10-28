@@ -17,7 +17,7 @@ func _run() -> void:
 	var input: LineEdit = main.get_node("HUD/Chat/List/Row/Fields/Input")
 	var mode_label: Label = main.get_node("HUD/Chat/List/Row/Fields/Mode")
 	var chat_log: RichTextLabel = main.get_node("HUD/Chat/List/Log")
-	var inventory: InventoryPanel = main.get_node("HUD/Inventory")
+	var inventory: InventoryPanel = main.get_node("HUD/Windows/Right/Column/Inventory")
 	var player: Player = main.get_node("Player")
 	chat.send_chat = func(line: String) -> void: _sent.append(line)
 

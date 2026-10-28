@@ -25,7 +25,7 @@ var _bag_capacity := 0
 var _stash: Array[GameV1.Item] = []
 var _stash_capacity := 0
 
-@onready var _list: VBoxContainer = $Scroll/List
+@onready var _list: VBoxContainer = $List
 
 
 func _ready() -> void:
@@ -79,7 +79,7 @@ func _rebuild() -> void:
 		child.queue_free()
 
 	if message != "":
-		_label(message).modulate = Color(1, 0.6, 0.5)
+		_label(message).theme_type_variation = &"WarnLabel"
 	if saving:
 		_label("Saving...")
 

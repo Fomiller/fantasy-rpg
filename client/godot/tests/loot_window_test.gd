@@ -12,7 +12,7 @@ func _run() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await _frames(2)
-	var loot: LootWindow = main.get_node("HUD/Loot")
+	var loot: LootWindow = main.get_node("HUD/Windows/Right/Column/Loot")
 	loot.send_open = func(id: int) -> void: _sent.append("open %d" % id)
 	loot.send_close = func(id: int) -> void: _sent.append("close %d" % id)
 	loot.send_pickup = func(id: int, item_id: String) -> void: _sent.append("take %d %s" % [id, item_id])
