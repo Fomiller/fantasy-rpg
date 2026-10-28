@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coder/websocket"
+
 	gamev1 "github.com/Fomiller/fantasy-rpg/gen/go/game/v1"
 )
 
@@ -57,6 +59,7 @@ type stageError struct {
 }
 
 func (e *stageError) Error() string { return e.stage + ": " + e.err.Error() }
+func (e *stageError) Unwrap() error { return e.err }
 
 func fail(stage string, err error) error { return &stageError{stage, err} }
 
@@ -174,19 +177,45 @@ func (s *stuck) check(pos point, now time.Time) bool {
 	return false
 }
 
-// town joins the world, walks around for townTime, then walks into the
-// entrance until a ticket comes.
+// town joins through the front door and follows each TownTicket with the
+// same JoinRequest. A full or wrong shard sends it back to the front door
+// once.
 func (b *Bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket, error) {
 	start := time.Now()
-	c, err := dial(ctx, b.cfg.URL, b.cfg.Via, "town", b.m)
+	url, fellBack := b.cfg.URL, false
+	for {
+		ticket, next, err := b.townOn(ctx, url, returning, start)
+		switch {
+		case next != "":
+			b.m.townMoves.WithLabelValues("ticket").Inc()
+			url = next
+		case err != nil && url != b.cfg.URL && !fellBack && shardTurnedAway(err):
+			b.m.townMoves.WithLabelValues("fallback").Inc()
+			url, fellBack = b.cfg.URL, true
+		default:
+			return ticket, err
+		}
+	}
+}
+
+// shardTurnedAway is a shard path's close that means try the front door.
+func shardTurnedAway(err error) bool {
+	var ce websocket.CloseError
+	return errors.As(err, &ce) && ce.Code == websocket.StatusTryAgainLater && (ce.Reason == "town full" || ce.Reason == "wrong town")
+}
+
+// townOn joins the town at url, walks around for townTime, then walks into
+// the entrance until a ticket comes. A TownTicket returns its URL instead.
+func (b *Bot) townOn(ctx context.Context, url string, returning bool, start time.Time) (*gamev1.InstanceTicket, string, error) {
+	c, err := dial(ctx, url, b.cfg.Via, "town", b.m)
 	if err != nil {
-		return nil, fail("world_dial", err)
+		return nil, "", fail("world_dial", err)
 	}
 	defer c.close("bot leaving")
 	if err := c.send(ctx, &gamev1.ClientMessage{Payload: &gamev1.ClientMessage_Join{Join: &gamev1.JoinRequest{
 		Name: b.name, Returning: returning, Bot: !b.cfg.Human,
 	}}}); err != nil {
-		return nil, fail("world_join", err)
+		return nil, "", fail("world_join", err)
 	}
 
 	var p *player
@@ -204,14 +233,14 @@ func (b *Bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket,
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		case msg, ok := <-c.msgs:
 			if !ok {
 				stage := "town"
 				if p == nil {
 					stage = "world_join"
 				}
-				return nil, fail(stage, closedErr(c))
+				return nil, "", fail(stage, closedErr(c))
 			}
 			switch {
 			case msg.GetJoined() != nil:
@@ -236,11 +265,13 @@ func (b *Bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket,
 				entering, leaving = time.Time{}, true
 				route = nil
 				wanderUntil = time.Now().Add(time.Second)
+			case msg.GetTownTicket() != nil:
+				return nil, msg.GetTownTicket().GetUrl(), nil
 			case msg.GetTicket() != nil:
 				if !entering.IsZero() {
 					b.m.ticket.Observe(time.Since(entering).Seconds())
 				}
-				return msg.GetTicket(), nil
+				return msg.GetTicket(), "", nil
 			}
 		case now := <-tick.C:
 			if p == nil || !p.seen {
@@ -256,7 +287,7 @@ func (b *Bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket,
 					entering = now
 				}
 				if err := b.move(ctx, c, point{}); err != nil {
-					return nil, fail("town", err)
+					return nil, "", fail("town", err)
 				}
 				continue
 			}
@@ -269,12 +300,12 @@ func (b *Bot) town(ctx context.Context, returning bool) (*gamev1.InstanceTicket,
 				} else {
 					route = p.grid.path(p.pos, p.grid.floors(ent))
 					if route == nil {
-						return nil, fail("town", errors.New("no path to the entrance"))
+						return nil, "", fail("town", errors.New("no path to the entrance"))
 					}
 				}
 			}
 			if err := b.move(ctx, c, steer(p.pos, &route)); err != nil {
-				return nil, fail("town", err)
+				return nil, "", fail("town", err)
 			}
 		}
 	}

@@ -91,8 +91,8 @@ instance-manager /v1/players +--> bot-director --scale--> worker Deployment
   town.
 - `GET /v1/players` on instance-manager asks every Allocated GameServer's
   own `/v1/players` at once and adds them up. A Ready one is empty.
-- Both are on the internal port. The world's public route is `/ws` only,
-  and a cave's is `/instances/<name>/`.
+- Both are on the internal port. The world's public routes are `/ws` and
+  `/towns/`, and a cave's is `/instances/<name>/`.
 - The director adds the two. If either fails, fill mode holds the bot count
   it has. A short count would add bots for humans who are there.
 - Why not Prometheus: a scrape is 15 s old, and the director would depend on

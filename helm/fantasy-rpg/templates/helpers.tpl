@@ -91,16 +91,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-valkey" (include "chart.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- /* The town directory. TOWN_URL is the public /ws while there is one
-       world pod. Per-shard routes come with the StatefulSet. */ -}}
+{{- /* The town directory. TOWN_URL is this shard's own path, which a front
+       door's TownTicket sends players to. It needs WORLD_ID set before it. */ -}}
 {{- define "chart.townEnv" -}}
 - name: VALKEY_ADDR
   value: {{ include "chart.valkeyName" . }}:6379
 - name: TOWN_URL
   {{- if .Values.ingressRoute.host }}
-  value: wss://{{ .Values.ingressRoute.host }}/ws
+  value: wss://{{ .Values.ingressRoute.host }}/towns/$(WORLD_ID)/ws
   {{- else }}
-  value: ws://{{ include "chart.fullname" . }}-world:8080/ws
+  value: ws://{{ include "chart.fullname" . }}-world:8080/towns/$(WORLD_ID)/ws
   {{- end }}
 - name: TOWN_REVISION
   value: {{ .Values.image.tag | toString | splitList "@" | first | quote }}

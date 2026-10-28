@@ -34,12 +34,6 @@ const (
 	// ticket or a run's end before closing itself. Closing at once can drop
 	// that last message: Godot empties its read buffer when the close lands.
 	closeGrace = 2 * time.Second
-	// A shard's claims live for shardTTL past its last heartbeat, so a
-	// crashed shard's players can join elsewhere after that.
-	shardBeat = 5 * time.Second
-	shardTTL  = 15 * time.Second
-	// reasonPlaying is a name claimed by a session on another shard.
-	reasonPlaying = "already playing"
 )
 
 // Lobby is the world server: join, character load and create, the town,
@@ -80,8 +74,14 @@ type Lobby struct {
 	// WorldID names this world server in player.session, and is the shard
 	// in its session claims.
 	WorldID string
-	// Towns is this shard in the town directory. Nil runs with none.
+	// Towns is this shard in the town directory. Nil seats every player here.
 	Towns *towns.Shard
+	// townDraining is set from SIGTERM on. No one new is seated, and the
+	// town's players are moved to other shards.
+	townDraining atomic.Bool
+	// TownTickets counts players sent to another shard. Register it to
+	// export it.
+	TownTickets *prometheus.CounterVec
 	// townCount is len(inTown), for the directory's heartbeat goroutine.
 	townCount atomic.Int64
 	// boot is new on every start, like 3f9a1c.
@@ -167,6 +167,7 @@ func newShared(rules *sim.World, loot *items.Roller, log *slog.Logger) *Lobby {
 		Events:         events.Nop{},
 		boot:           bootID(),
 
+		TownTickets: newTownTickets(),
 		PendingSaves: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "store_pending_saves",
 			Help: "Run end saves that failed for longer than their patience and are still retrying.",
@@ -281,7 +282,10 @@ func (s *Lobby) starterKit() inventory.Loadout {
 	return l
 }
 
-func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
+// serveTown seats a player in this shard's town. On the front door, /ws, it
+// first asks the directory, and a pick of another shard gets a TownTicket.
+// A shard path never forwards.
+func (s *Lobby) serveTown(w http.ResponseWriter, r *http.Request, shardPath bool) {
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		s.log.Warn("websocket accept", "err", err)
@@ -304,11 +308,23 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if class == "" {
 		class = classes.Starter
 	}
+	if shardPath && r.PathValue("id") != s.WorldID {
+		conn.Close(websocket.StatusTryAgainLater, reasonWrongTown)
+		return
+	}
+	if !shardPath {
+		url, err := s.pick(name)
+		if errors.Is(err, towns.ErrFull) {
+			conn.Close(websocket.StatusTryAgainLater, reasonTownFull)
+			return
+		}
+		if url != "" {
+			s.frontDoorTicket(ctx, conn, url)
+			return
+		}
+	}
 	c := s.newClient(name, class, ctx, cancel)
 	c.bot = join.GetBot()
-	if s.Towns != nil {
-		go s.Towns.LogPick(name)
-	}
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and
@@ -319,6 +335,11 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, ok := s.rules.Classes().Classes[class]; !ok {
 			claimed <- fmt.Errorf("unknown class %q", class)
+			return
+		}
+		// Before the claim and the load. enterTown is still the real cap.
+		if s.townDraining.Load() || len(s.inTown) >= s.TownMaxPlayers {
+			claimed <- errTownFull
 			return
 		}
 		s.conns[name] = c
@@ -334,6 +355,10 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	case <-s.done:
 		return
 	}
+	if errors.Is(err, errTownFull) {
+		conn.Close(websocket.StatusTryAgainLater, reasonTownFull)
+		return
+	}
 	if err != nil {
 		conn.Close(websocket.StatusPolicyViolation, err.Error())
 		return
@@ -346,8 +371,8 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Claim before the load, so the load sees every write the last session made.
-	sess := inventory.Session{Name: name, ID: items.NewID(), Shard: s.WorldID, Boot: s.boot}
-	if err := s.claim(ctx, sess); err != nil {
+	sess, err := s.claim(ctx, name)
+	if err != nil {
 		if errors.Is(err, inventory.ErrPlaying) {
 			conn.Close(websocket.StatusTryAgainLater, reasonPlaying)
 			return

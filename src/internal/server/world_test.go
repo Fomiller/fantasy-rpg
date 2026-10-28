@@ -46,7 +46,10 @@ func serveWorld(t *testing.T, configure ...func(*Lobby)) worldHarness {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runTown(ctx, l)
-	hs := httptest.NewServer(http.HandlerFunc(l.HandleWS))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /towns/{id}/ws", l.HandleTown)
+	mux.HandleFunc("GET /", l.HandleWS)
+	hs := httptest.NewServer(mux)
 	t.Cleanup(func() {
 		hs.Close()
 		cancel()

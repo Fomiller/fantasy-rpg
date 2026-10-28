@@ -116,7 +116,7 @@ The game runs in the homelab cluster. The world server is public at `wss://fanta
 - Kargo picks up each new image and chart and commits the new versions into `argocd/overlays/dev`.
 - `argocd/agones` installs Agones into `agones-system`. `argocd/overlays/dev` includes it, so it syncs with the same Application.
 - `argocd/redpanda` runs a one-broker Redpanda, its topics and the Console in `fantasy-rpg`. homelab's operator reconciles them. The Console is at redpanda-frpg-dev.fomiller.com, behind Cloudflare Access.
-- The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws` to the world server. instance-manager makes a Service and an IngressRoute for each `/instances/<gameserver>/` prefix. Both are owned by the GameServer and go away with it.
+- The Cloudflare tunnel sends the hostname to Traefik. The chart's IngressRoute sends `/ws`, the front door, and `/towns/<shard>/ws` to the world server. instance-manager makes a Service and an IngressRoute for each `/instances/<gameserver>/` prefix. Both are owned by the GameServer and go away with it.
 - `inventory` owns characters, stashes and the run lease. It is the only workload with `DATABASE_URL`. The world and instance servers call it over HTTP at `INVENTORY_URL`. It produces `inventory.applied` from an outbox table.
 - `bot-director` keeps a few bots playing in dev, in fill mode. `just bots-set` and `just bots-status` change and show it. See the Bots page in the docs.
 - The world and instance servers read `JOIN_TOKEN_KEY` from the `fantasy-rpg-join-key` Secret. An ExternalSecret makes it from `dev/fomiller/fantasy-rpg-join-key` in AWS Secrets Manager, a JSON object with one key, `JOIN_TOKEN_KEY`.

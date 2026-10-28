@@ -62,7 +62,8 @@ services:
       LOG_FORMAT: text
       KAFKA_BROKERS: redpanda:9092
       VALKEY_ADDR: valkey:6379
-      TOWN_URL: ws://localhost:8080/ws
+      WORLD_ID: world-0
+      TOWN_URL: ws://localhost:8080/towns/world-0/ws
       # Polled inside the network, handed to the client as localhost.
       INSTANCES: >-
         instance-0=http://instance-0:8080=ws://localhost:8081/instances/instance-0/ws

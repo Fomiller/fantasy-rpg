@@ -20,6 +20,7 @@ const WINDOWS_GROUP := "windows"
 const CLOSE_TEXT := {
 	"characters unavailable": "Can't load your character. Try again in a minute.",
 	"town full": "The town is full. Trying again...",
+	"wrong town": "Couldn't reach your town. Trying again...",
 }
 const ENTER_REJECTED_TEXT := {
 	"saving": "Still saving your last run",

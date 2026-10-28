@@ -70,7 +70,7 @@ func (s *Shard) publish(ctx context.Context) {
 }
 
 // Drain marks the shard draining, so no front door sends anyone here, and
-// publishes it once. Call it after Run has stopped.
+// publishes it at once. Run keeps publishing it as draining.
 func (s *Shard) Drain(ctx context.Context) {
 	s.draining.Store(true)
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
@@ -89,14 +89,9 @@ func (s *Shard) Joined(name string) {
 	}
 }
 
-// LogPick logs where a front door would send name. Nothing routes on it until
-// the front door exists.
-func (s *Shard) LogPick(name string) {
+// Pick is the shard a front door sends name to.
+func (s *Shard) Pick(name string) (Town, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
-	if !s.Log.Enabled(ctx, slog.LevelDebug) {
-		return
-	}
-	t, err := s.Dir.Pick(ctx, name, s.Self())
-	s.Log.Debug("town directory pick", "name", name, "town", t.ID, "self", s.ID, "err", err)
+	return s.Dir.Pick(ctx, name, s.Self())
 }

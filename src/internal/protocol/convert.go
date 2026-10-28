@@ -294,6 +294,10 @@ func Ticket(url, token, instance string, life time.Duration) *gamev1.ServerMessa
 	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_Ticket{Ticket: &gamev1.InstanceTicket{Url: url, Token: token, Instance: instance, ExpiresInMs: uint32(life.Milliseconds())}}}
 }
 
+func TownTicket(url string) *gamev1.ServerMessage {
+	return &gamev1.ServerMessage{Payload: &gamev1.ServerMessage_TownTicket{TownTicket: &gamev1.TownTicket{Url: url}}}
+}
+
 func Items(insts []items.Instance) []*gamev1.Item {
 	var out []*gamev1.Item
 	for _, inst := range insts {
