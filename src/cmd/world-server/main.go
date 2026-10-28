@@ -27,6 +27,7 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/server"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
 	"github.com/Fomiller/fantasy-rpg/src/internal/tick"
+	"github.com/Fomiller/fantasy-rpg/src/internal/towns"
 )
 
 func main() {
@@ -46,6 +47,10 @@ func run() error {
 		return err
 	}
 	townMax, err := positive("TOWN_MAX_PLAYERS", 32)
+	if err != nil {
+		return err
+	}
+	softPercent, err := positive("TOWN_SOFT_CAP_PERCENT", 75)
 	if err != nil {
 		return err
 	}
@@ -97,6 +102,23 @@ func run() error {
 	reg.MustRegister(lobby.Metrics.Collectors()...)
 	defer lobby.Close()
 
+	townDir, dirName := towns.Open(os.Getenv("VALKEY_ADDR"), towns.NewCaps(townMax, softPercent), reg)
+	defer townDir.Close()
+	var shard *towns.Shard
+	if dirName != "off" {
+		shard = &towns.Shard{
+			Dir:      townDir,
+			ID:       worldID,
+			URL:      townURL(),
+			Revision: os.Getenv("TOWN_REVISION"),
+			Started:  time.Now(),
+			Players:  lobby.TownPlayers,
+			Log:      slog.Default(),
+		}
+		lobby.Towns = shard
+	}
+	slog.Info("town directory", "directory", dirName, "town", worldID)
+
 	loop := &tick.Loop{
 		Interval: time.Second / time.Duration(rate),
 		Metrics:  tick.NewMetrics(reg, "world-server"),
@@ -127,6 +149,9 @@ func run() error {
 	}()
 	go func() { errc <- loop.Run(ctx) }()
 	go lobby.RunHeartbeat(ctx)
+	if shard != nil {
+		go shard.Run(ctx)
+	}
 	if busName == "kafka" {
 		applied, err := events.NewConsumer(events.ConsumerConfig{
 			Brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
@@ -153,6 +178,9 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if shard != nil {
+		shard.Drain(shutdownCtx)
+	}
 	return srv.Shutdown(shutdownCtx)
 }
 
@@ -169,6 +197,14 @@ func positive(name string, fallback int) (int, error) {
 		return 0, errors.New(name + " must be a positive integer")
 	}
 	return n, nil
+}
+
+// townURL is where a front door sends a player to reach this shard.
+func townURL() string {
+	if u := os.Getenv("TOWN_URL"); u != "" {
+		return u
+	}
+	return "ws://127.0.0.1:" + port() + "/ws"
 }
 
 func port() string {

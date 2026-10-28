@@ -43,11 +43,11 @@ fmt:
     gofmt -w src
 
 deps:
-    {{compose}} up -d --wait postgres redpanda
+    {{compose}} up -d --wait postgres redpanda valkey
     {{compose}} exec -T redpanda rpk topic create --if-not-exists -X brokers=localhost:9092 {{topics}}
 
 dev: migrate
-    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
+    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' VALKEY_ADDR=localhost:6379 INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server
 
 instance id port:
     LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server

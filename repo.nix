@@ -69,12 +69,12 @@
     "plan-all:\n    doppler run --name-transformer tf-var -- \\\n    terragrunt stack run --tf-path terraform --working-dir {{infraDir}} plan"
     "apply-all:\n    doppler run --name-transformer tf-var -- \\\n    terragrunt --non-interactive stack run --tf-path terraform --working-dir {{infraDir}} apply"
     "fmt:\n    gofmt -w src"
-    "deps:\n    {{compose}} up -d --wait postgres redpanda\n    {{compose}} exec -T redpanda rpk topic create --if-not-exists -X brokers=localhost:9092 {{topics}}"
+    "deps:\n    {{compose}} up -d --wait postgres redpanda valkey\n    {{compose}} exec -T redpanda rpk topic create --if-not-exists -X brokers=localhost:9092 {{topics}}"
     # The world server on 8080, where the client connects. Run `just instance instance-0 8081`
     # and `just instance instance-1 8082` in two more terminals. All three share the Compose database.
     # To go through the inventory service instead, run `just inventory` and start the others with
     # INVENTORY_URL=http://localhost:8070 in their environment.
-    "dev: migrate\n    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server"
+    "dev: migrate\n    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' VALKEY_ADDR=localhost:6379 INSTANCES='instance-0=http://localhost:8081=ws://127.0.0.1:8081/instances/instance-0/ws instance-1=http://localhost:8082=ws://127.0.0.1:8082/instances/instance-1/ws' go run ./src/cmd/world-server"
     "instance id port:\n    LOG_FORMAT=text JOIN_TOKEN_KEY=dev-only DATABASE_URL='{{databaseUrl}}' KAFKA_BROKERS='{{kafkaBrokers}}' INSTANCE_ID={{id}} PORT={{port}} go run ./src/cmd/instance-server"
     "bots n:\n    LOG_FORMAT=text go run ./src/cmd/bot -url ws://127.0.0.1:8080/ws -n {{n}} -metrics-addr :9091"
     # The bot director in the homelab cluster. Its API is ClusterIP only, so these exec its own

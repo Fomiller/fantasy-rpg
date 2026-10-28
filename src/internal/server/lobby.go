@@ -180,6 +180,9 @@ func (s *Lobby) enterTown(c *client, ch inventory.Character, returning bool) {
 	character := protocol.Character(prog, c.name, c.class, p.Level, p.XP, 0)
 	s.sendToClient(c, protocol.Joined(id, s.town, spawn, s.TickRate, protocol.ClassInfo(s.rules.Classes(), c.class), character))
 	s.sessionEvent(c, eventsv1.PlayerSessionKind_PLAYER_SESSION_KIND_ENTER)
+	if s.Towns != nil {
+		go s.Towns.Joined(c.name)
+	}
 	s.openLobby(c, ch)
 }
 

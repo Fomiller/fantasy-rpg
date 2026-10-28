@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -21,6 +22,7 @@ import (
 	"github.com/Fomiller/fantasy-rpg/src/internal/items"
 	"github.com/Fomiller/fantasy-rpg/src/internal/protocol"
 	"github.com/Fomiller/fantasy-rpg/src/internal/sim"
+	"github.com/Fomiller/fantasy-rpg/src/internal/towns"
 )
 
 const (
@@ -78,6 +80,10 @@ type Lobby struct {
 	// WorldID names this world server in player.session, and is the shard
 	// in its session claims.
 	WorldID string
+	// Towns is this shard in the town directory. Nil runs with none.
+	Towns *towns.Shard
+	// townCount is len(inTown), for the directory's heartbeat goroutine.
+	townCount atomic.Int64
 	// boot is new on every start, like 3f9a1c.
 	boot string
 
@@ -180,6 +186,7 @@ func (s *Lobby) Step(dt time.Duration) {
 	s.checkEntrance()
 	s.Metrics.Players.Set(float64(len(s.inTown)))
 	s.Metrics.Bots.Set(float64(s.townPlayers().Bots))
+	s.townCount.Store(int64(len(s.inTown)))
 	if len(s.inTown) == 0 {
 		return
 	}
@@ -191,6 +198,12 @@ func (s *Lobby) Step(dt time.Duration) {
 	for _, c := range s.inTown {
 		c.send(b)
 	}
+}
+
+// TownPlayers is the head count in the town as of the last tick. Any
+// goroutine can call it.
+func (s *Lobby) TownPlayers() int {
+	return int(s.townCount.Load())
 }
 
 // Close stops accepting work. Call it once the loop has stopped, so
@@ -293,6 +306,9 @@ func (s *Lobby) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	c := s.newClient(name, class, ctx, cancel)
 	c.bot = join.GetBot()
+	if s.Towns != nil {
+		go s.Towns.LogPick(name)
+	}
 	claimed := make(chan error, 1)
 	ok := s.enqueue(func() {
 		// One connection per name, or two copies of a player could load and

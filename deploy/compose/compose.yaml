@@ -36,6 +36,17 @@ services:
       interval: 2s
       retries: 15
 
+  # The town directory. Nothing is saved, as in the chart.
+  valkey:
+    image: valkey/valkey:8.1.11-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--protected-mode", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      retries: 15
+
   world-server:
     profiles: [full]
     image: fantasy-rpg/world-server:dev
@@ -50,6 +61,8 @@ services:
       # The chart logs JSON. Text reads better in `docker compose logs`.
       LOG_FORMAT: text
       KAFKA_BROKERS: redpanda:9092
+      VALKEY_ADDR: valkey:6379
+      TOWN_URL: ws://localhost:8080/ws
       # Polled inside the network, handed to the client as localhost.
       INSTANCES: >-
         instance-0=http://instance-0:8080=ws://localhost:8081/instances/instance-0/ws
@@ -60,6 +73,8 @@ services:
       inventory:
         condition: service_started
       redpanda:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
 
   # The only service with the database.
